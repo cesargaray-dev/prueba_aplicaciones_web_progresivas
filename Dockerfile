@@ -27,5 +27,5 @@ COPY --from=build /app/build/libs/prueba-1.0.jar app.jar
 # Exponer el puerto (Railway lo sobreescribirá con $PORT)
 EXPOSE 8080
 
-# Arrancar la aplicación
-ENTRYPOINT ["java", "-Dserver.port=${PORT:-8080}", "-jar", "app.jar"]
+# Arrancar la aplicación con optimización de memoria para Render (512MB RAM)
+ENTRYPOINT ["java", "-XX:+UseSerialGC", "-Xss512k", "-XX:MaxRAMPercentage=75.0", "-Dserver.port=${PORT:-8080}", "-jar", "app.jar"]

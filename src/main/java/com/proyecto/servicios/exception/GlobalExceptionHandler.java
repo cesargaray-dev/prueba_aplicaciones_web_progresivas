@@ -159,6 +159,13 @@ public class GlobalExceptionHandler {
                 .body(new GenericResponse(1, "Conflicto de integridad: el registro ya existe o viola una restricción del sistema"));
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ResponseEntity<GenericResponse> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        log.warn("Recurso no encontrado: {}", ex.getResourcePath());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new GenericResponse(1, "Recurso no encontrado: " + ex.getResourcePath()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<GenericResponse> handleGeneral(Exception ex) {
         log.error("Error inesperado", ex);
