@@ -65,7 +65,23 @@ public class ClienteController {
         return ResponseEntity.ok(clienteService.actualizarCompleto(request));
     }
 
-    @PostMapping("/desactivar")
+    @PatchMapping("/actualizar")
+    @Operation(summary = "Actualizar cliente parcialmente", description = "Actualiza solo los campos enviados en el JSON. Se identifica al cliente por ID o CURP. CURP y RFC no se modifican.")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Cliente actualizado parcialmente"),
+        @ApiResponse(responseCode = "400", description = "Datos inválidos o formato incorrecto en el JSON",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "404", description = "Cliente no encontrado",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+        @ApiResponse(responseCode = "409", description = "Correo ya registrado en otro cliente",
+            content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<ClienteResponseDTO> actualizarParcial(
+            @Valid @RequestBody com.proyecto.servicios.model.clientes.ClienteActualizacionParcialRequestDTO request) {
+        return ResponseEntity.ok(clienteService.actualizarParcial(request));
+    }
+
+    @PatchMapping("/desactivar")
     @Operation(summary = "Desactivar cliente", description = "Desactiva un cliente (baja lógica) recibiendo un JSON con su ID o CURP")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Cliente desactivado exitosamente"),
@@ -79,7 +95,7 @@ public class ClienteController {
         return ResponseEntity.ok(clienteService.desactivarCliente(peticion));
     }
 
-    @PostMapping("/reactivar")
+    @PatchMapping("/reactivar")
     @Operation(summary = "Reactivar cliente", description = "Reactiva un cliente previamente desactivado recibiendo un JSON con su ID o CURP")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Cliente reactivado exitosamente"),

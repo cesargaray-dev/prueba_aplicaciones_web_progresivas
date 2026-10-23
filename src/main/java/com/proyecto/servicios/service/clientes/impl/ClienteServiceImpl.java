@@ -203,6 +203,89 @@ public class ClienteServiceImpl implements ClienteService {
 
     @Override
     @Transactional
+    public ClienteResponseDTO actualizarParcial(com.proyecto.servicios.model.clientes.ClienteActualizacionParcialRequestDTO request) {
+        Cliente cliente;
+        if (request.getId() != null) {
+            cliente = clienteRepository.findById(request.getId())
+                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con ID: " + request.getId()));
+        } else if (request.getCurp() != null && !request.getCurp().isBlank()) {
+            cliente = clienteRepository.findByCurp(request.getCurp())
+                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + request.getCurp()));
+        } else {
+            throw new ValidacionException("Debe proporcionar el ID o la CURP del cliente para actualizar");
+        }
+
+        // Datos personales
+        if (request.getNombre() != null) cliente.setNombre(request.getNombre());
+        if (request.getSegundoNombre() != null) cliente.setSegundoNombre(request.getSegundoNombre());
+        if (request.getApellidoPaterno() != null) cliente.setApellidoPaterno(request.getApellidoPaterno());
+        if (request.getApellidoMaterno() != null) cliente.setApellidoMaterno(request.getApellidoMaterno());
+        if (request.getFechaNacimiento() != null) {
+            LocalDate fechaNac = parseFecha(request.getFechaNacimiento());
+            if (fechaNac.isAfter(LocalDate.now())) {
+                throw new ValidacionException("La fecha de nacimiento no puede ser una fecha futura");
+            }
+            if (Period.between(fechaNac, LocalDate.now()).getYears() < 18) {
+                throw new ValidacionException("El cliente debe ser mayor de edad (18 años o más)");
+            }
+            cliente.setFechaNacimiento(fechaNac);
+        }
+        if (request.getSexo() != null) cliente.setSexo(request.getSexo());
+        if (request.getNacionalidadId() != null) {
+            String descNacionalidad = catalogoRepository.findById(request.getNacionalidadId())
+                    .filter(c -> "NACIONALIDAD".equals(c.getTipo()) && Boolean.TRUE.equals(c.getActivo()))
+                    .map(cat -> cat.getDescripcion())
+                    .orElseThrow(() -> new ValidacionException(
+                            "La nacionalidad con ID " + request.getNacionalidadId() + " no existe en el catálogo"));
+            cliente.setNacionalidad(descNacionalidad);
+        }
+        if (request.getEstadoCivil() != null) cliente.setEstadoCivil(request.getEstadoCivil());
+
+        // Contacto
+        if (request.getCorreo() != null && !request.getCorreo().equals(cliente.getCorreo())) {
+            if (clienteRepository.existsByCorreo(request.getCorreo())) {
+                throw new CorreoDuplicadoException("El correo ya está registrado en otra cuenta");
+            }
+            cliente.setCorreo(request.getCorreo());
+        }
+        if (request.getTelefonoMovil() != null) cliente.setTelefonoMovil(request.getTelefonoMovil());
+        if (request.getTelefonoAlternativo() != null) cliente.setTelefonoAlternativo(request.getTelefonoAlternativo());
+
+        // Laborales
+        if (request.getOcupacion() != null) cliente.setOcupacion(request.getOcupacion());
+        if (request.getEmpresa() != null) cliente.setEmpresa(request.getEmpresa());
+        if (request.getIngresoMensual() != null) cliente.setIngresoMensual(request.getIngresoMensual());
+
+        // Domicilio
+        Domicilio d = cliente.getDomicilio();
+        if (d != null) {
+            if (request.getEstado() != null) {
+                boolean estadoValido = catalogoRepository.existsByTipoAndDescripcionIgnoreCaseAndActivoTrue("ESTADO", request.getEstado().trim())
+                        || catalogoRepository.existsByTipoAndClaveIgnoreCaseAndActivoTrue("ESTADO", request.getEstado().trim());
+                if (!estadoValido) {
+                    throw new ValidacionException("El estado '" + request.getEstado() + "' no es válido o no existe en el catálogo oficial de entidades federativas.");
+                }
+                d.setEstado(request.getEstado());
+            }
+            if (request.getCalle() != null) d.setCalle(request.getCalle());
+            if (request.getNumeroExterior() != null) d.setNumeroExterior(request.getNumeroExterior());
+            if (request.getNumeroInterior() != null) d.setNumeroInterior(request.getNumeroInterior());
+            if (request.getColonia() != null) d.setColonia(request.getColonia());
+            if (request.getMunicipio() != null) d.setMunicipio(request.getMunicipio());
+            if (request.getCodigoPostal() != null) d.setCodigoPostal(request.getCodigoPostal());
+            if (request.getPais() != null) d.setPais(request.getPais());
+        }
+
+        cliente = clienteRepository.save(cliente);
+        log.info("Cliente {} actualizado parcialmente", cliente.getCurp());
+        ClienteResponseDTO response = mapToResponse(cliente);
+        response.setCodigo(0);
+        response.setMensaje("Datos actualizados parcialmente de forma correcta");
+        return response;
+    }
+
+    @Override
+    @Transactional
     public com.proyecto.servicios.model.clientes.ClienteResponse actualizarCompleto(com.proyecto.servicios.model.clientes.ClienteRegistroRequest request) {
         ClienteResponseDTO dto = actualizarCompleto((ClienteRequestDTO) request);
         com.proyecto.servicios.model.clientes.ClienteResponse response = new com.proyecto.servicios.model.clientes.ClienteResponse();

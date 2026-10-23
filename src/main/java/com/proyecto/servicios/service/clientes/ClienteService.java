@@ -27,6 +27,8 @@ public interface ClienteService {
 
     ClienteResponseDTO actualizarCompleto(ClienteRequestDTO request);
 
+    ClienteResponseDTO actualizarParcial(com.proyecto.servicios.model.clientes.ClienteActualizacionParcialRequestDTO request);
+
     com.proyecto.servicios.model.clientes.ClienteResponse actualizarCompleto(com.proyecto.servicios.model.clientes.ClienteRegistroRequest request);
 
     void desactivarCliente(String curp);
