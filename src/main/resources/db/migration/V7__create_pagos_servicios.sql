@@ -2,6 +2,11 @@
 -- V7: Tabla de auditoría y registro de Pagos de Servicios (GestoPago / PuntoRed)
 -- ============================================================
 
+-- Ajustar cuentas existentes a 16 dígitos numéricos en caso de que tuvieran longitud menor
+UPDATE cuentas
+SET numero_cuenta = RPAD(numero_cuenta, 16, '0')
+WHERE LENGTH(numero_cuenta) < 16;
+
 CREATE TABLE IF NOT EXISTS pagos_servicios (
     id                  BIGSERIAL       PRIMARY KEY,
     cuenta_id           BIGINT          NOT NULL,

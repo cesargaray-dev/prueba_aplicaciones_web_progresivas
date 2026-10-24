@@ -59,7 +59,7 @@ class PagoServicioServiceImplTest {
 
     private static final String SECRET_KEY = "HPo7OLqB4Fkk4E2yGOtwqw8H5fHR9kNx67OR4g4UdlA=";
     private static final String IV = "p5ldmBPdd/9pjC0bDC/nSg==";
-    private static final String NUMERO_CUENTA = "1234567890";
+    private static final String NUMERO_CUENTA = "1234567890123456";
 
     private Cliente clienteActivo;
     private Cuenta cuentaActiva;

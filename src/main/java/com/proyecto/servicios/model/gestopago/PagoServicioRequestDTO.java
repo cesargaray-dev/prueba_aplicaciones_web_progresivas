@@ -26,7 +26,7 @@ import java.math.BigDecimal;
 public class PagoServicioRequestDTO {
 
     @NotBlank(message = "El número de cuenta es obligatorio")
-    @Pattern(regexp = "^\\d{10}$", message = "El número de cuenta debe contener exactamente 10 dígitos numéricos")
+    @Pattern(regexp = "^\\d{16}$", message = "El número de cuenta debe contener exactamente 16 dígitos numéricos")
     private String numeroCuenta;
 
     @NotNull(message = "El idServicio es obligatorio")

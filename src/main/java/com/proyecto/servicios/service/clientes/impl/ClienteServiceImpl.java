@@ -537,9 +537,13 @@ public class ClienteServiceImpl implements ClienteService {
         Random random = new Random();
         String numero;
         do {
-            // Generar 10 dígitos aleatorios
-            long randNum = (long) (random.nextDouble() * 9_000_000_000L) + 1_000_000_000L;
-            numero = String.valueOf(randNum);
+            // Generar 16 dígitos aleatorios
+            StringBuilder sb = new StringBuilder(16);
+            sb.append(random.nextInt(9) + 1);
+            for (int i = 1; i < 16; i++) {
+                sb.append(random.nextInt(10));
+            }
+            numero = sb.toString();
         } while (cuentaRepository.existsByNumeroCuenta(numero));
         return numero;
     }

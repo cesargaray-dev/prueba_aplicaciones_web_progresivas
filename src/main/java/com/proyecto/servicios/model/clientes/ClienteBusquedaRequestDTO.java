@@ -15,7 +15,7 @@ public class ClienteBusquedaRequestDTO {
     @Pattern(regexp = "^$|^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,6}$", message = "El formato del correo es inválido")
     private String correo;
 
-    @Pattern(regexp = "^$|^\\d{10}$", message = "El número de cuenta debe tener exactamente 10 dígitos numéricos")
+    @Pattern(regexp = "^$|^\\d{16}$", message = "El número de cuenta debe tener exactamente 16 dígitos numéricos")
     private String numeroCuenta;
 
     private Long id;

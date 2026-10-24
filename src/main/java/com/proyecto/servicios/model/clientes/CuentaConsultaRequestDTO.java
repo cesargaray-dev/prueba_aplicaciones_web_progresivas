@@ -10,7 +10,7 @@ import lombok.Data;
 public class CuentaConsultaRequestDTO {
 
     @NotBlank(message = "El número de cuenta es obligatorio")
-    @Pattern(regexp = "^\\d{10}$", message = "El número de cuenta debe tener exactamente 10 dígitos numéricos")
-    @Schema(description = "Número de cuenta de 10 dígitos", example = "1234567890")
+    @Pattern(regexp = "^\\d{16}$", message = "El número de cuenta debe tener exactamente 16 dígitos numéricos")
+    @Schema(description = "Número de cuenta de 16 dígitos", example = "1234567890123456")
     private String numeroCuenta;
 }

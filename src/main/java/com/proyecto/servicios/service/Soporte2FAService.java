@@ -39,7 +39,7 @@ public abstract class Soporte2FAService {
      * Genera un nuevo código 2FA numérico de 6 dígitos y lo propaga temporalmente
      * para la cuenta indicada.
      *
-     * @param numeroCuenta Número de cuenta bancaria de 10 dígitos.
+     * @param numeroCuenta Número de cuenta bancaria de 16 dígitos.
      * @return Objeto {@link CodigoTemporal2FA} con el código generado y su fecha de expiración.
      */
     protected CodigoTemporal2FA generarYPropagarCodigo2FA(String numeroCuenta) {
@@ -82,7 +82,7 @@ public abstract class Soporte2FAService {
      * Valida que el código 2FA proporcionado coincida con el código temporal activo
      * de la cuenta bancaria. Si no existe, expiró o no coincide, lanza {@link Autenticacion2FAException}.
      *
-     * @param numeroCuenta   Número de cuenta de 10 dígitos.
+     * @param numeroCuenta   Número de cuenta de 16 dígitos.
      * @param codigoRecibido Código 2FA de 6 dígitos enviado en la petición de pago.
      */
     protected void validarCodigo2FA(String numeroCuenta, String codigoRecibido) {
