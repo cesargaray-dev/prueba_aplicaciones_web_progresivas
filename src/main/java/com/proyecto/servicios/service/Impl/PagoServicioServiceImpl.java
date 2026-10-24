@@ -57,6 +57,7 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
     private final AesGestoPagoUtil aesGestoPagoUtil;
     private final ObjectMapper objectMapper;
     private final XmlMapper xmlMapper;
+    private final com.proyecto.servicios.service.ComprobanteEmailService comprobanteEmailService;
 
     @Value("${gestopago.api.secret-key:HPo7OLqB4Fkk4E2yGOtwqw8H5fHR9kNx67OR4g4UdlA=}")
     private String secretKey;
@@ -86,7 +87,8 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
             GestoPagoTxClient gestoPagoTxClient,
             AesGestoPagoUtil aesGestoPagoUtil,
             ObjectMapper objectMapper,
-            @Autowired(required = false) RedisTemplate<String, String> redisTemplate) {
+            @Autowired(required = false) RedisTemplate<String, String> redisTemplate,
+            @Autowired(required = false) com.proyecto.servicios.service.ComprobanteEmailService comprobanteEmailService) {
         super(redisTemplate);
         this.cuentaRepository = cuentaRepository;
         this.saldoRepository = saldoRepository;
@@ -97,6 +99,7 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
         this.aesGestoPagoUtil = aesGestoPagoUtil;
         this.objectMapper = objectMapper;
         this.xmlMapper = new XmlMapper();
+        this.comprobanteEmailService = comprobanteEmailService;
     }
 
     @Override
@@ -262,6 +265,11 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
 
         // Consumir el código 2FA temporal tras operación exitosa
         consumirCodigo2FA(request.getNumeroCuenta());
+
+        // Enviar comprobante oficial por correo electrónico vía Brevo (asíncrono/fail-safe)
+        if (comprobanteEmailService != null) {
+            comprobanteEmailService.enviarComprobantePago(cuenta, cuenta.getCliente(), pagoServicio);
+        }
 
         log.info("Pago de servicio exitoso. Cuenta={}, ID_TX={}, Autorización={}, Folio={}, SaldoRestante={}",
                 cuenta.getNumeroCuenta(), idTx, numAutorizacion, folioTicket, nuevoSaldo);

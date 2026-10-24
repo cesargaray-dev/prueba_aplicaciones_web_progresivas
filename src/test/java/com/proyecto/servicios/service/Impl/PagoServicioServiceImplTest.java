@@ -53,6 +53,9 @@ class PagoServicioServiceImplTest {
     @Mock
     private GestoPagoTxClient gestoPagoTxClient;
 
+    @Mock
+    private com.proyecto.servicios.service.ComprobanteEmailService comprobanteEmailService;
+
     private AesGestoPagoUtil aesGestoPagoUtil;
     private ObjectMapper objectMapper;
     private PagoServicioServiceImpl pagoServicioService;
@@ -82,7 +85,8 @@ class PagoServicioServiceImplTest {
                 gestoPagoTxClient,
                 aesGestoPagoUtil,
                 objectMapper,
-                null
+                null,
+                comprobanteEmailService
         );
 
         ReflectionTestUtils.setField(pagoServicioService, "secretKey", SECRET_KEY);
