@@ -60,6 +60,56 @@ public class GlobalExceptionHandler {
                 .body(new GenericResponse(1, ex.getMessage()));
     }
 
+    @ExceptionHandler(ClienteInactivoException.class)
+    public ResponseEntity<GenericResponse> handleClienteInactivo(ClienteInactivoException ex) {
+        log.error("Cliente inactivo", ex);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new GenericResponse(1, ex.getMessage()));
+    }
+
+    @ExceptionHandler(CuentaInactivaException.class)
+    public ResponseEntity<GenericResponse> handleCuentaInactiva(CuentaInactivaException ex) {
+        log.error("Cuenta inactiva", ex);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new GenericResponse(1, ex.getMessage()));
+    }
+
+    @ExceptionHandler(Autenticacion2FAException.class)
+    public ResponseEntity<GenericResponse> handleAutenticacion2FA(Autenticacion2FAException ex) {
+        log.error("Fallo de autenticación 2FA", ex);
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new GenericResponse(1, ex.getMessage()));
+    }
+
+    @ExceptionHandler(SaldoInsuficienteException.class)
+    public ResponseEntity<GenericResponse> handleSaldoInsuficiente(SaldoInsuficienteException ex) {
+        log.error("Saldo insuficiente en cuenta", ex);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new GenericResponse(1, ex.getMessage()));
+    }
+
+    @ExceptionHandler(PagoServicioProveedorException.class)
+    public ResponseEntity<GenericResponse> handlePagoServicioProveedor(PagoServicioProveedorException ex) {
+        log.error("Error devuelto por el proveedor de pago de servicios (código: {})", ex.getCodigoProveedor(), ex);
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode());
+        if (status == null) {
+            status = HttpStatus.BAD_REQUEST;
+        }
+        return ResponseEntity.status(status)
+                .body(new GenericResponse(1, ex.getMessage()));
+    }
+
+    @ExceptionHandler(GestoPagoException.class)
+    public ResponseEntity<GenericResponse> handleGestoPagoException(GestoPagoException ex) {
+        log.error("Error de comunicación con GestoPago", ex);
+        HttpStatus status = HttpStatus.resolve(ex.getStatusCode());
+        if (status == null) {
+            status = HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        return ResponseEntity.status(status)
+                .body(new GenericResponse(1, ex.getMessage()));
+    }
+
     @ExceptionHandler(ValidacionException.class)
     public ResponseEntity<GenericResponse> handleValidacion(ValidacionException ex) {
         log.error("Error de validación", ex);

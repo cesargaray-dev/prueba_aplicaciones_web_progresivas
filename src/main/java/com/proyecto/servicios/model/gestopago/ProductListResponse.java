@@ -1,6 +1,12 @@
 package com.proyecto.servicios.model.gestopago;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
@@ -10,6 +16,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -37,6 +44,8 @@ public class ProductListResponse {
 
     /** Mensaje de respuesta del servidor (elemento XML: MENSAJE) */
     @JacksonXmlProperty(localName = "MENSAJE")
+    @JsonAlias({"message", "MENSAJE"})
+    @JsonDeserialize(using = MensajeFlexibleDeserializer.class)
     private String message;
 
     private Integer codigoCache;
@@ -45,6 +54,7 @@ public class ProductListResponse {
     /** Lista de productos (elemento contenedor: PRODUCTOS, elementos hijos: producto) */
     @JacksonXmlElementWrapper(localName = "PRODUCTOS")
     @JacksonXmlProperty(localName = "producto")
+    @JsonAlias({"data", "PRODUCTOS"})
     private List<ProductDTO> data;
 
     /**
@@ -71,6 +81,23 @@ public class ProductListResponse {
         if (origen != null) {
             this.codigoCache = origen.getCodigo();
             this.origenCache = origen.getDescripcion();
+        }
+    }
+
+    public static class MensajeFlexibleDeserializer extends JsonDeserializer<String> {
+        @Override
+        public String deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            JsonNode node = p.getCodec().readTree(p);
+            if (node == null || node.isNull()) {
+                return null;
+            }
+            if (node.isTextual()) {
+                return node.asText();
+            }
+            if (node.isObject() && node.has("TEXTO")) {
+                return node.get("TEXTO").asText();
+            }
+            return node.asText();
         }
     }
 }
