@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -448,5 +449,57 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
                     + AesGestoPagoUtil.generarCadenaAlfanumerica(4).toUpperCase();
         } while (pagoServicioRepository.existsByFolioTicket(folio));
         return folio;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HistorialPagosResponseDTO consultarHistorial(HistorialPagosRequestDTO request) {
+        log.info("Consultando historial de pagos para cuenta={}", request.getNumeroCuenta());
+
+        // 1. Validar existencia de la cuenta bancaria
+        Cuenta cuenta = cuentaRepository.findByNumeroCuenta(request.getNumeroCuenta())
+                .orElseThrow(() -> new CuentaNoEncontradaException(request.getNumeroCuenta()));
+
+        // 2. Obtener lista de pagos ordenados descendente por fecha
+        List<PagoServicio> lista = pagoServicioRepository.findByNumeroCuentaOrderByFechaOperacionDesc(cuenta.getNumeroCuenta());
+
+        // 3. Mapear entidades a ItemHistorialPagoDTO
+        List<ItemHistorialPagoDTO> items = lista.stream()
+                .map(this::mapToItemHistorialDTO)
+                .toList();
+
+        // 4. Construir respuesta
+        HistorialPagosResponseDTO response = HistorialPagosResponseDTO.builder()
+                .numeroCuenta(cuenta.getNumeroCuenta())
+                .totalMovimientos(items.size())
+                .pagos(items)
+                .build();
+        response.setCodigo(0);
+        response.setMensaje(items.isEmpty()
+                ? "No se encontraron movimientos de pago de servicios para la cuenta indicada"
+                : "Historial de pagos consultado exitosamente");
+
+        return response;
+    }
+
+    private ItemHistorialPagoDTO mapToItemHistorialDTO(PagoServicio p) {
+        return ItemHistorialPagoDTO.builder()
+                .idPago(p.getId())
+                .folioTicket(p.getFolioTicket())
+                .numeroAutorizacion(p.getNumAutorizacion())
+                .idTxGestopago(p.getIdTxGestopago())
+                .idServicio(p.getIdServicio())
+                .servicio(p.getNombreServicio())
+                .idProducto(p.getIdProducto())
+                .producto(p.getNombreProducto())
+                .telefono(p.getTelefono())
+                .referencia(p.getReferencia())
+                .monto(p.getMontoPagado())
+                .comision(p.getComision())
+                .saldoAnterior(p.getSaldoAnterior())
+                .saldoRestante(p.getSaldoRestante())
+                .concepto(p.getConcepto())
+                .fechaOperacion(p.getFechaOperacion())
+                .build();
     }
 }

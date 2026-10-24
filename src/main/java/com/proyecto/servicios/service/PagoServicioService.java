@@ -27,4 +27,14 @@ public interface PagoServicioService {
      * @return Comprobante de la operación con el saldo restante y folios de autorización.
      */
     PagoServicioResponseDTO procesarPagoServicio(PagoServicioRequestDTO request);
+
+    /**
+     * Consulta el historial de pagos de servicios y recargas de una cuenta bancaria,
+     * ordenados cronológicamente del más reciente al más antiguo.
+     *
+     * @param request DTO con el número de cuenta bancaria de 16 dígitos.
+     * @return Historial completo de operaciones registradas.
+     */
+    com.proyecto.servicios.model.gestopago.HistorialPagosResponseDTO consultarHistorial(
+            com.proyecto.servicios.model.gestopago.HistorialPagosRequestDTO request);
 }

@@ -412,4 +412,79 @@ class PagoServicioServiceImplTest {
                 () -> pagoServicioService.procesarPagoServicio(request));
         verifyNoInteractions(gestoPagoTxClient);
     }
+
+    @Test
+    void consultarHistorial_cuentaExisteConPagos_retornaHistorialExitoso() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+
+        PagoServicio p1 = new PagoServicio();
+        p1.setId(10L);
+        p1.setCuenta(cuentaActiva);
+        p1.setNumeroCuenta(NUMERO_CUENTA);
+        p1.setIdServicio(76);
+        p1.setIdProducto(205);
+        p1.setNombreServicio("TELCEL");
+        p1.setNombreProducto("PAQUETE 20");
+        p1.setTelefono("5512345678");
+        p1.setReferencia("");
+        p1.setMontoPagado(new BigDecimal("20.00"));
+        p1.setComision(BigDecimal.ZERO);
+        p1.setSaldoAnterior(new BigDecimal("100.00"));
+        p1.setSaldoRestante(new BigDecimal("80.00"));
+        p1.setIdTxGestopago(998877L);
+        p1.setNumAutorizacion("AUTH123");
+        p1.setFolioTicket("FT-20261023-ABCD");
+        p1.setUpc("083");
+        p1.setCodigoRespuesta("01");
+        p1.setMensajeRespuesta("Exitoso");
+        p1.setConcepto("RECARGA TELCEL");
+        p1.setFechaOperacion(java.time.LocalDateTime.now());
+
+        when(pagoServicioRepository.findByNumeroCuentaOrderByFechaOperacionDesc(NUMERO_CUENTA))
+                .thenReturn(List.of(p1));
+
+        HistorialPagosRequestDTO req = HistorialPagosRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .build();
+
+        HistorialPagosResponseDTO response = pagoServicioService.consultarHistorial(req);
+
+        assertNotNull(response);
+        assertEquals(0, response.getCodigo());
+        assertEquals(1, response.getTotalMovimientos());
+        assertEquals(NUMERO_CUENTA, response.getNumeroCuenta());
+        assertEquals("FT-20261023-ABCD", response.getPagos().get(0).getFolioTicket());
+        assertEquals("AUTH123", response.getPagos().get(0).getNumeroAutorizacion());
+        assertEquals(new BigDecimal("20.00"), response.getPagos().get(0).getMonto());
+    }
+
+    @Test
+    void consultarHistorial_cuentaExisteSinPagos_retornaListaVacia() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+        when(pagoServicioRepository.findByNumeroCuentaOrderByFechaOperacionDesc(NUMERO_CUENTA))
+                .thenReturn(List.of());
+
+        HistorialPagosRequestDTO req = HistorialPagosRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .build();
+
+        HistorialPagosResponseDTO response = pagoServicioService.consultarHistorial(req);
+
+        assertNotNull(response);
+        assertEquals(0, response.getCodigo());
+        assertEquals(0, response.getTotalMovimientos());
+        assertTrue(response.getPagos().isEmpty());
+    }
+
+    @Test
+    void consultarHistorial_cuentaNoExiste_lanzaCuentaNoEncontradaException() {
+        when(cuentaRepository.findByNumeroCuenta("9999999999999999")).thenReturn(Optional.empty());
+
+        HistorialPagosRequestDTO req = HistorialPagosRequestDTO.builder()
+                .numeroCuenta("9999999999999999")
+                .build();
+
+        assertThrows(CuentaNoEncontradaException.class,
+                () -> pagoServicioService.consultarHistorial(req));
+    }
 }

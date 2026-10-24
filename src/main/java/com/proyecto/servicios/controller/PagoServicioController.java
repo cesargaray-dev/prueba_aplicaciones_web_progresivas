@@ -3,6 +3,8 @@ package com.proyecto.servicios.controller;
 import com.proyecto.servicios.exception.GlobalExceptionHandler.ErrorResponse;
 import com.proyecto.servicios.model.gestopago.GenerarCodigo2FARequestDTO;
 import com.proyecto.servicios.model.gestopago.GenerarCodigo2FAResponseDTO;
+import com.proyecto.servicios.model.gestopago.HistorialPagosRequestDTO;
+import com.proyecto.servicios.model.gestopago.HistorialPagosResponseDTO;
 import com.proyecto.servicios.model.gestopago.PagoServicioRequestDTO;
 import com.proyecto.servicios.model.gestopago.PagoServicioResponseDTO;
 import com.proyecto.servicios.service.PagoServicioService;
@@ -74,5 +76,23 @@ public class PagoServicioController {
             @Valid @RequestBody PagoServicioRequestDTO request) {
         log.info("REST request para procesar pago de servicio con cuenta: {}", request.getNumeroCuenta());
         return ResponseEntity.ok(pagoServicioService.procesarPagoServicio(request));
+    }
+
+    @PostMapping("/historial")
+    @Operation(
+            summary = "Consultar historial de pagos de servicios y recargas",
+            description = "Consulta todos los pagos de servicios y recargas efectuadas con una cuenta bancaria mediante JSON @RequestBody, ordenados cronológicamente del más reciente al más antiguo."
+    )
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Historial consultado exitosamente"),
+            @ApiResponse(responseCode = "400", description = "Número de cuenta inválido (debe contener 16 dígitos numéricos)",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "404", description = "Cuenta bancaria no encontrada",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE, schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<HistorialPagosResponseDTO> consultarHistorial(
+            @Valid @RequestBody HistorialPagosRequestDTO request) {
+        log.info("REST request para consultar historial de pagos para cuenta: {}", request.getNumeroCuenta());
+        return ResponseEntity.ok(pagoServicioService.consultarHistorial(request));
     }
 }
