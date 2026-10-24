@@ -1,32 +1,162 @@
-# API de Gestión de Clientes
+# 🏦 Sistema Bancario de Pago de Servicios & Recargas
 
-Esta aplicación es una API RESTful construida con Spring Boot para la gestión de clientes, integrando validaciones estrictas y conexión a bases de datos en la nube.
+API RESTful bancaria empresarial desarrollada con **Spring Boot 3**, **Java 21**, **PostgreSQL (Neon Cloud)** y desplegada en **Render**. Integra el módulo transaccional de pagos de servicios y tiempo aire con **GestoPago (PuntoRed)**, autenticación de dos factores (**2FA OTP**), cifrado **AES-256-CBC**, validación de saldos y emisión automática de comprobantes digitales vía **Brevo (Sendinblue)**.
 
-## 🛠️ Integración del Módulo de Clientes
+---
 
-Durante la implementación del módulo de clientes se desarrollaron las siguientes características clave para asegurar la integridad de los datos y cumplir con los requerimientos de QA:
+## 🌐 Enlaces del Proyecto
 
-### 1. Migración y Base de Datos (Neon Postgres)
-*   Se configuró una base de datos **PostgreSQL** alojada en la nube (Neon).
-*   Se implementó **Flyway** para el control de versiones de la base de datos, creando tablas para clientes, domicilios, cuentas, saldos, logins, datos biométricos y catálogos.
-*   El catálogo de `NACIONALIDADES` se inserta automáticamente al levantar la aplicación mediante el script `V5__insert_nacionalidades.sql`.
+* **API en Producción (Render Swagger UI):** [https://prueba-aplicaciones-web-progresivas.onrender.com/swagger-ui/index.html](https://prueba-aplicaciones-web-progresivas.onrender.com/swagger-ui/index.html)
+* **Repositorio GitHub:** [https://github.com/cesargaray-dev/prueba_aplicaciones_web_progresivas](https://github.com/cesargaray-dev/prueba_aplicaciones_web_progresivas)
+* **Rama de Producción:** `dev`
+* **Rama de Desarrollo:** `feature/pago-servicios`
 
-### 2. Catálogos Dinámicos
-*   Se desarrolló un `CatalogoController` (`/api/v1/catalogos/{tipo}`) que permite al frontend consultar los IDs válidos para campos que dependen de catálogos (ej. Nacionalidades). 
-*   Esto asegura que el usuario (o el frontend) nunca tenga que "adivinar" el ID correcto.
+---
 
-### 3. Validaciones Estrictas (QA Proof)
-*   **A nivel JSON (Jackson):** Se configuró una directiva estricta (`CoercionAction.Fail`) para evitar que campos numéricos (como `ingresoMensual`) se envíen entre comillas como texto, devolviendo un error 400 específico indicando que no debe ir entre comillas.
-*   **Formato de Fechas:** Se estandarizó y validó el formato estricto `yyyy-MM-dd` para campos como `fechaNacimiento`, controlando cualquier desviación.
-*   **Validaciones de Query Params y Path Variables:** Todos los endpoints de búsqueda (`/buscar/curp`, `/buscar/rfc`, etc.) y operaciones CRUD (`PUT /{curp}`, `DELETE /{curp}`) validan mediante expresiones regulares (`@Pattern`), `@NotBlank` y `@NotNull` que los datos ingresados tengan el formato exacto de CURP, RFC, Correo o Cuenta, previniendo el envío de datos en blanco o maliciosos.
-*   **Identificadores Naturales (Security/UX):** Se eliminó la dependencia del `ID` interno de la base de datos en las URLs públicas. Las operaciones de actualización, búsqueda y eliminación ahora se realizan utilizando la **CURP**, ya que es el identificador natural que el usuario conoce, cumpliendo con la regla de diseño de no exponer IDs de base de datos.
-*   **Campos Vacíos:** Se implementó una respuesta genérica y clara `[campo: mensaje]` cuando campos requeridos se dejan en blanco o rompen alguna regla de negocio.
+## 🚀 Características y Reglas de Negocio Implementadas
 
-### 4. Manejo Global de Excepciones
-*   Un `GlobalExceptionHandler` unifica todas las respuestas de error.
-*   Toda excepción (Validaciones Jakarta, errores de formato JSON, violaciones de constraints en parámetros) se intercepta y devuelve un objeto estandarizado con `status: 400`, un mensaje humano legible que identifica el campo exacto que falló, y un `timestamp`.
+### 1. Pagos de Servicios y Recargas con GestoPago (`sendTx.do`)
+* **Diferenciación de flujo (`tipoFront`):**
+  * `tipoFront = 1` (Recargas de Tiempo Aire): Requiere número telefónico de 10 dígitos.
+  * `tipoFront = 2` (Servicios con Recibo - CFE, Izzi, Telmex, etc.): Requiere número de referencia del recibo.
+* **Cifrado AES-256-CBC:**
+  * Generación de cadena alfanumérica aleatoria única de 10 caracteres (`random10`).
+  * Encriptación simétrica AES-256 con padding PKCS5, vector de inicialización (`IV`) y clave secreta compartida con PuntoRed.
+  * Codificación en Base64 para el parámetro `signed`.
 
-### 5. Despliegue Automatizado en Railway
-*   Se incluyó un `Dockerfile` multi-etapa para construir el ejecutable localmente sin dependencia de la versión de Gradle de Railway (solucionando el error de `Unsupported Gradle version 9`).
-*   Configuración automática de puertos inyectada por Railway mediante `railway.toml`.
-*   La aplicación está expuesta públicamente con la documentación interactiva Swagger disponible.
+### 2. Autenticación de Dos Factores (2FA OTP)
+* **Generación de Códigos Temporales:** Genera un código numérico aleatorio de 6 dígitos mediante `POST /api/v1/pagos/2fa/generar`.
+* **Vigencia:** 5 minutos (300 segundos). Soporta almacenamiento en memoria y en caché distribuida con **Redis**.
+* **Protección contra Doble Uso (*Single-Use*):** El código 2FA se destruye e invalida inmediatamente tras el primer pago exitoso (`consumirCodigo2FA`), impidiendo cobros duplicados por reintento.
+
+### 3. Regla Crítica de Deducción Segura del Dinero
+* **Integridad Transaccional (`@Transactional`):** El saldo de la cuenta bancaria **ÚNICAMENTE se descuenta** si el proveedor GestoPago confirma la transacción con el código de éxito:
+  $$\text{CODIGO} = \mathbf{01}$$
+* Si el proveedor responde con cualquier otro código (ej. `02` Saldo insuficiente en bolsa, `06` Transacción duplicada, `82` Timeout):
+  * **No se resta dinero de la cuenta.**
+  * Se cancela la operación y se informa el motivo exacto devuelto por GestoPago.
+
+### 4. Control Estricto de Saldo Insuficiente
+* Antes de conectar con el proveedor externo, el sistema valida que el saldo disponible sea mayor o igual al monto a pagar:
+  $$\text{Saldo Disponible} \ge \text{Monto a Pagar}$$
+* Si la cuenta no tiene fondos suficientes, se rechaza de inmediato con `HTTP 400 Bad Request` indicando el saldo disponible y el monto solicitado.
+
+### 5. Cuentas Bancarias de 16 Dígitos
+* Estandarización a **16 dígitos numéricos** en la generación de cuentas (`ClienteServiceImpl`) y en todas las validaciones de entrada (`@Pattern(regexp = "^\\d{16}$")`).
+
+### 6. Historial Cronológico de Pagos (`POST /api/v1/pagos/historial`)
+* Permite auditar y consultar todas las transacciones realizadas por una cuenta bancaria, ordenadas cronológicamente de la más reciente a la más antigua con folio de ticket, autorización, servicio, montos y saldos restantes.
+
+### 7. Emisión de Comprobantes Digitales con Brevo
+* Notificación automática por correo electrónico al cliente titular en cuanto un pago resulta exitoso.
+* Plantilla HTML bancaria responsive que cumple con los requerimientos solicitados:
+  1. **Logotipo corporativo** institucional.
+  2. **Número de Autorización** del proveedor.
+  3. **Servicio y Producto** (ej. IZZI Telecom).
+  4. **Teléfono** (si fue recarga).
+  5. **Referencia de Pago** (si fue servicio con recibo).
+  6. **Monto debitado y Comisión**.
+  7. **Fecha y Hora** de la operación.
+  8. **Leyenda oficial para aclaraciones** con números de contacto y plazos legales.
+
+---
+
+## 📸 Evidencias de Funcionamiento
+
+### 1. Comprobante Digital Recibido por Correo (Brevo)
+
+| Encabezado y Detalles del Pago | Leyenda Oficial de Aclaraciones |
+| :---: | :---: |
+| <img src="docs/images/comprobante_email_parte1.png" alt="Comprobante Digital Recibido por Correo" width="340"/> | <img src="docs/images/comprobante_email_parte2.png" alt="Leyenda de Aclaraciones en el Correo" width="340"/> |
+
+> **Leyenda incluida en el correo:**
+> *"Conserve este comprobante digital como constancia oficial de pago. Para cualquier duda, aclaración, reporte de saldo o reclamación relacionada con esta transacción o la aplicación del servicio por parte del proveedor, comuníquese a nuestra Línea de Aclaraciones al 800-226-2600 (sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com dentro de los 30 días naturales posteriores a la fecha de operación. Favor de mencionar el Número de Autorización y su Folio de Ticket."*
+
+---
+
+### 2. Validación de Saldo Insuficiente (Swagger UI)
+
+Cuando una cuenta con saldo menor al monto intenta realizar un pago, la solicitud es rechazada de inmediato y el dinero no se debita:
+
+![Validación de Saldo Insuficiente](docs/images/swagger_saldo_insuficiente.png)
+
+```json
+{
+  "codigo": 1,
+  "mensaje": "Saldo insuficiente en la cuenta. Saldo disponible: $80.00, Monto a pagar: $500.00"
+}
+```
+
+---
+
+### 3. Consulta de Historial de Transacciones (Swagger UI)
+
+El endpoint `POST /api/v1/pagos/historial` devuelve la lista cronológica completa de movimientos:
+
+![Historial de Pagos de Servicios](docs/images/swagger_historial_pagos.png)
+
+---
+
+## 🧪 Cuentas de Prueba Disponibles para Evaluación
+
+Las siguientes cuentas están activas y listas en la base de datos de producción:
+
+| Número de Cuenta (16 dígitos) | Titular | Saldo Disponible | Correo de Notificación |
+| :---: | :---: | :---: | :---: |
+| `5225253189113705` | Cesar Enrique Garay Garcia | **$60.00 MXN** | `cesarenriquegaraygarcia@gmail.com` |
+| `8906887292154504` | Carlos Sánchez | **$60.00 MXN** | `cesarenriquegaraygarcia50@gmail.com` |
+
+---
+
+## 🛠️ Guía Rápida de Prueba en Swagger
+
+Para probar la API en [Render Swagger UI](https://prueba-aplicaciones-web-progresivas.onrender.com/swagger-ui/index.html):
+
+### Paso 1: Generar código 2FA
+* **Endpoint:** `POST /api/v1/pagos/2fa/generar`
+* **Body:**
+  ```json
+  {
+    "numeroCuenta": "5225253189113705"
+  }
+  ```
+* Copia el `codigo2FA` devuelto (vigencia de 5 minutos).
+
+### Paso 2: Realizar Pago de Servicio
+* **Endpoint:** `POST /api/v1/pagos/servicios`
+* **Body:**
+  ```json
+  {
+    "numeroCuenta": "5225253189113705",
+    "idServicio": 76,
+    "idProducto": 205,
+    "monto": 20.00,
+    "referencia": "25720401",
+    "codigo2FA": "TU_CODIGO_2FA_GENERADO"
+  }
+  ```
+* **Respuesta esperada:** HTTP 200 OK con folio de ticket, número de autorización y saldo restante actualizado.
+* El correo llegará inmediatamente a la bandeja asociada.
+
+### Paso 3: Consultar Historial
+* **Endpoint:** `POST /api/v1/pagos/historial`
+* **Body:**
+  ```json
+  {
+    "numeroCuenta": "5225253189113705"
+  }
+  ```
+
+---
+
+## 📦 Stack Tecnológico
+
+* **Lenguaje:** Java 21 (LTS)
+* **Framework:** Spring Boot 3.3.6 (Web, Data JPA, OpenFeign, Validation)
+* **Base de Datos:** PostgreSQL 16/18 en Neon Cloud
+* **Migraciones:** Flyway Database Migrations
+* **Caché:** Redis / Spring Data Redis
+* **Integración Externa:** PuntoRed / GestoPago (`sendTx.do`) con Cifrado AES-256
+* **Email Service:** Brevo REST API v3 (Sendinblue)
+* **Documentación:** SpringDoc OpenAPI 3.0 / Swagger UI
+* **Despliegue:** Render Cloud Platform
