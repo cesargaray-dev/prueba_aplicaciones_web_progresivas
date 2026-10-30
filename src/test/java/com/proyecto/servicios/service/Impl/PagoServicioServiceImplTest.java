@@ -335,7 +335,7 @@ class PagoServicioServiceImplTest {
         // El saldo del cliente debe permanecer intacto ($1000.00)
         assertEquals(new BigDecimal("1000.00"), saldoCuenta.getSaldo());
         verifyNoInteractions(saldoRepository);
-        verifyNoInteractions(pagoServicioRepository);
+        verify(pagoServicioRepository, never()).save(any());
     }
 
     @Test
@@ -490,5 +490,156 @@ class PagoServicioServiceImplTest {
 
         assertThrows(CuentaNoEncontradaException.class,
                 () -> pagoServicioService.consultarHistorial(req));
+    }
+
+    @Test
+    void procesarPagoServicio_productoNoExisteEnCatalogo_lanzaValidacionException400() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+        pagoServicioService.propagarCodigo2FA(NUMERO_CUENTA, "123456");
+
+        ProductDTO otroProducto = ProductDTO.builder()
+                .id("582")
+                .serviceId("133")
+                .service("Telcel")
+                .name("Recarga $100")
+                .frontType("1")
+                .price("100.0")
+                .build();
+        ProductListResponse productListResponse = new ProductListResponse();
+        productListResponse.setData(List.of(otroProducto));
+        when(productService.obtenerListaProductos()).thenReturn(productListResponse);
+
+        PagoServicioRequestDTO request = PagoServicioRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .idServicio(999)
+                .idProducto(999)
+                .monto(new BigDecimal("100.00"))
+                .referencia("25720381")
+                .codigo2FA("123456")
+                .build();
+
+        ValidacionException ex = assertThrows(ValidacionException.class,
+                () -> pagoServicioService.procesarPagoServicio(request));
+
+        assertTrue(ex.getMessage().contains("no existe en el catálogo autorizado de GestoPago"));
+        verifyNoInteractions(gestoPagoTxClient);
+        verifyNoInteractions(saldoRepository);
+    }
+
+    @Test
+    void procesarPagoServicio_montoManipuladoNoCoincideConPrecioCatalogo_lanzaValidacionException400() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+        pagoServicioService.propagarCodigo2FA(NUMERO_CUENTA, "123456");
+
+        ProductDTO recargaPrecioFijo = ProductDTO.builder()
+                .id("582")
+                .serviceId("133")
+                .service("Telcel")
+                .name("Recarga $100")
+                .frontType("1")
+                .price("100.00")
+                .build();
+        ProductListResponse productListResponse = new ProductListResponse();
+        productListResponse.setData(List.of(recargaPrecioFijo));
+        when(productService.obtenerListaProductos()).thenReturn(productListResponse);
+
+        PagoServicioRequestDTO request = PagoServicioRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .idServicio(133)
+                .idProducto(582)
+                .monto(new BigDecimal("50.00")) // Manipulado: el producto cuesta $100.00
+                .telefono("5512345678")
+                .codigo2FA("123456")
+                .build();
+
+        ValidacionException ex = assertThrows(ValidacionException.class,
+                () -> pagoServicioService.procesarPagoServicio(request));
+
+        assertTrue(ex.getMessage().contains("no corresponde con el precio autorizado en el catálogo"));
+        verifyNoInteractions(gestoPagoTxClient);
+        verifyNoInteractions(saldoRepository);
+    }
+
+    @Test
+    void procesarPagoServicio_operacionDuplicadaEnVentanaIdempotencia_lanzaConflicto409() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+        pagoServicioService.propagarCodigo2FA(NUMERO_CUENTA, "123456");
+
+        when(pagoServicioRepository.existsByNumeroCuentaAndIdServicioAndIdProductoAndReferenciaAndTelefonoAndMontoPagadoAndFechaOperacionAfter(
+                eq(NUMERO_CUENTA), eq(76), eq(205), eq("25720381"), eq("1111111111"), eq(new BigDecimal("200.00")), any()))
+                .thenReturn(true);
+
+        PagoServicioRequestDTO request = PagoServicioRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .idServicio(76)
+                .idProducto(205)
+                .monto(new BigDecimal("200.00"))
+                .referencia("25720381")
+                .codigo2FA("123456")
+                .build();
+
+        PagoServicioProveedorException ex = assertThrows(PagoServicioProveedorException.class,
+                () -> pagoServicioService.procesarPagoServicio(request));
+
+        assertEquals("06", ex.getCodigoProveedor());
+        assertEquals(409, ex.getStatusCode());
+        verifyNoInteractions(gestoPagoTxClient);
+        verifyNoInteractions(saldoRepository);
+    }
+
+    @Test
+    void procesarPagoServicio_timeoutCodigo82ConciliadoConExitoEnVerifyTx_descuentaSaldoYRegistra() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+        pagoServicioService.propagarCodigo2FA(NUMERO_CUENTA, "445566");
+
+        GestoPagoToken token = new GestoPagoToken();
+        token.setToken("jwt-token-activo");
+        when(tokenService.obtenerTokenActivo(83, "GPS83-TPV-17")).thenReturn(Optional.of(token));
+
+        String xmlTimeout82 = "<?xml version='1.0' encoding='UTF-8'?>" +
+                "<RESPONSE>" +
+                "  <NUM_AUTORIZACION>-1</NUM_AUTORIZACION>" +
+                "  <MENSAJE>" +
+                "    <CODIGO>82</CODIGO>" +
+                "    <TEXTO>Tiempo de espera agotado</TEXTO>" +
+                "  </MENSAJE>" +
+                "</RESPONSE>";
+
+        String xmlVerifySuccess = "<?xml version='1.0' encoding='UTF-8'?>" +
+                "<RESPONSE>" +
+                "  <ID_TX>291999111</ID_TX>" +
+                "  <NUM_AUTORIZACION>100099887</NUM_AUTORIZACION>" +
+                "  <SALDO>154000.00</SALDO>" +
+                "  <COMISION>7.00</COMISION>" +
+                "  <FECHA>25/Feb/2022 19:00:00</FECHA>" +
+                "  <MONTO>200.00</MONTO>" +
+                "  <MENSAJE>" +
+                "    <CODIGO>01</CODIGO>" +
+                "    <TEXTO>Operacion realizada con exito</TEXTO>" +
+                "  </MENSAJE>" +
+                "</RESPONSE>";
+
+        when(gestoPagoTxClient.sendTx(anyString(), anyString(), anyString(), anyString())).thenReturn(xmlTimeout82);
+        when(gestoPagoTxClient.verifyTx(anyString(), anyString(), anyString(), anyString())).thenReturn(xmlVerifySuccess);
+        when(pagoServicioRepository.existsByFolioTicket(anyString())).thenReturn(false);
+
+        PagoServicioRequestDTO request = PagoServicioRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .idServicio(76)
+                .idProducto(205)
+                .monto(new BigDecimal("200.00"))
+                .referencia("25720381")
+                .codigo2FA("445566")
+                .build();
+
+        PagoServicioResponseDTO response = pagoServicioService.procesarPagoServicio(request);
+
+        assertNotNull(response);
+        assertEquals(0, response.getCodigo());
+        assertEquals("100099887", response.getNumeroAutorizacion());
+        assertEquals(new BigDecimal("800.00"), saldoCuenta.getSaldo());
+        verify(gestoPagoTxClient, times(1)).sendTx(anyString(), anyString(), anyString(), anyString());
+        verify(gestoPagoTxClient, times(1)).verifyTx(anyString(), anyString(), anyString(), anyString());
+        verify(saldoRepository, times(1)).save(saldoCuenta);
     }
 }

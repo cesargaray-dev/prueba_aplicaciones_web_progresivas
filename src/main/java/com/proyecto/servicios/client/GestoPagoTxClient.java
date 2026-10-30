@@ -9,7 +9,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 /**
- * Cliente Feign para ejecutar transacciones de pago de servicios (sendTx.do) en GestoPago (PuntoRed).
+ * Cliente Feign para ejecutar y conciliar transacciones de pago de servicios (sendTx.do / verifyTx.do)
+ * en GestoPago (PuntoRed).
  */
 @FeignClient(name = "gestoPagoTxClient", url = "${gestopago.api.url}")
 public interface GestoPagoTxClient {
@@ -39,5 +40,33 @@ public interface GestoPagoTxClient {
         formData.add("random", random);
         formData.add("signed", signed);
         return sendTxForm(formData, token, apiKey);
+    }
+
+    @PostMapping(
+            value = "/sistema/service/verifyTx.do",
+            consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
+            produces = "*/*"
+    )
+    String verifyTxForm(
+            @RequestBody MultiValueMap<String, String> formParams,
+            @RequestHeader("Authorization") String token,
+            @RequestHeader("X-API-Key") String apiKey
+    );
+
+    /**
+     * Consulta/concilia el estado de una transacción en GestoPago mediante su UPC cuando ocurre un timeout
+     * o respuesta indeterminada en sendTx.do, evitando reintentos ciegos y cargos duplicados.
+     *
+     * @param random Cadena alfanumérica aleatoria de 10 caracteres.
+     * @param signed Payload JSON cifrado con AES-256-CBC en Base64 (conteniendo el UPC a conciliar).
+     * @param token  Header Authorization ("Bearer <JWT>").
+     * @param apiKey Header X-API-Key.
+     * @return Respuesta XML cruda devuelta por GestoPago con el estado real de la transacción.
+     */
+    default String verifyTx(String random, String signed, String token, String apiKey) {
+        MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+        formData.add("random", random);
+        formData.add("signed", signed);
+        return verifyTxForm(formData, token, apiKey);
     }
 }

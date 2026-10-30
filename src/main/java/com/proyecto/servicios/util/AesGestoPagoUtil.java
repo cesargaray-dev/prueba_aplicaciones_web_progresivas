@@ -28,14 +28,14 @@ public class AesGestoPagoUtil {
     private static final int DEFAULT_UPC_LENGTH = 12;
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
-    @Value("${gestopago.api.secret-key:HPo7OLqB4Fkk4E2yGOtwqw8H5fHR9kNx67OR4g4UdlA=}")
+    @Value("${gestopago.api.secret-key:}")
     private String defaultSecretKey;
 
-    @Value("${gestopago.api.iv:p5ldmBPdd/9pjC0bDC/nSg==}")
+    @Value("${gestopago.api.iv:}")
     private String defaultIv;
 
     /**
-     * Cifra el payload JSON utilizando la llave secreta e IV configurados en application.properties.
+     * Cifra el payload JSON utilizando la llave secreta e IV configurados mediante variables de entorno.
      *
      * @param plainJson Cadena JSON en texto plano.
      * @return Cadena cifrada codificada en Base64 para el campo 'signed'.
@@ -45,7 +45,7 @@ public class AesGestoPagoUtil {
     }
 
     /**
-     * Descifra una cadena Base64 utilizando la llave secreta e IV configurados en application.properties.
+     * Descifra una cadena Base64 utilizando la llave secreta e IV configurados mediante variables de entorno.
      *
      * @param encryptedBase64 Texto cifrado en Base64.
      * @return Texto plano original.
@@ -79,7 +79,7 @@ public class AesGestoPagoUtil {
             byte[] encryptedBytes = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(encryptedBytes);
         } catch (Exception e) {
-            log.error("Error al cifrar payload con AES-256-CBC para GestoPago", e);
+            log.error("Error al cifrar payload con AES-256-CBC para GestoPago");
             throw new GestoPagoException("Error al cifrar la petición para el proveedor de pagos", e, 500);
         }
     }
@@ -110,7 +110,7 @@ public class AesGestoPagoUtil {
             byte[] decryptedBytes = cipher.doFinal(decodedBytes);
             return new String(decryptedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            log.error("Error al descifrar payload con AES-256-CBC de GestoPago", e);
+            log.error("Error al descifrar payload con AES-256-CBC de GestoPago");
             throw new GestoPagoException("Error al descifrar los datos de GestoPago", e, 500);
         }
     }

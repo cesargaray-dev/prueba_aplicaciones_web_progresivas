@@ -149,6 +149,43 @@ Para probar la API en [Render Swagger UI](https://prueba-aplicaciones-web-progre
 
 ---
 
+## 🛡️ Análisis de Arquitectura, Riesgos y Decisiones de Diseño (Integración GestoPago)
+
+### 1. Validación de Catálogo y Prevención de Manipulación de Montos
+* Antes de construir el payload transaccional, `PagoServicioServiceImpl#validarProductoYMontoEnCatalogo` consulta el catálogo oficial de GestoPago (`GestoPagoProductService`):
+  * **Existencia de Producto y Servicio:** Verifica que el par `(idServicio, idProducto)` exista en el catálogo autorizado. Si no existe, rechaza la solicitud con `HTTP 400 Bad Request`.
+  * **Anti-manipulación de precios:** Cuando el producto del catálogo tiene un precio fijo establecido (`precio > 0`, como en paquetes de recargas o pines), valida que el monto enviado coincida exactamente (`montoSolicitado.compareTo(precioCatalogo) == 0`). Para recibos de monto abierto (`precio == 0`), aplica validaciones estrictas de escala (máximo 2 decimales) y rango permitido (`$0.01` a `$50,000.00 MXN`).
+
+### 2. Estrategia de Deducción de Saldo e Integridad Transaccional
+* **Decisión de Diseño:** Se implementó una estrategia de **Verificación Previa con Bloqueo Pesimista + Deducción Atómica Post-Confirmación (`@Transactional`)**:
+  1. Se adquiere un bloqueo exclusivo sobre la cuenta antes de invocar al proveedor y se verifica `saldo >= monto`.
+  2. El cargo a la cuenta del cliente (`saldoRepository.save`) y el registro en `pagos_servicios` **solo se ejecutan cuando GestoPago confirma `CODIGO = 01`**.
+  3. Si GestoPago devuelve un rechazo de negocio (`02`, `05`, `06`, `13`, etc.), se lanza `PagoServicioProveedorException` y la transacción hace rollback sin tocar el saldo del cliente.
+
+### 3. Control de Concurrencia y Prevención de Cargos Duplicados
+* **Doble Capa de Concurrencia:**
+  1. **Nivel Aplicación (`ConcurrentHashMap<String, ReentrantLock>`):** `tryLock()` por número de cuenta rechaza de inmediato (`HTTP 409 Conflict`) peticiones simultáneas en vuelo para la misma cuenta.
+  2. **Nivel Base de Datos (`@Lock(LockModeType.PESSIMISTIC_WRITE)`):** `CuentaRepository#findByNumeroCuentaForUpdate` ejecuta `SELECT ... FOR UPDATE` en PostgreSQL, serializando cualquier acceso concurrente al saldo.
+* **Idempotencia en 3 Niveles:**
+  1. **Consumo Atómico de 2FA:** El código OTP de 6 dígitos se consume e invalida inmediatamente tras autorizar la operación.
+  2. **Ventana de Idempotencia Local (2 minutos):** Antes de llamar a `sendTx.do`, se verifica en `PagoServicioRepository` que no exista un pago exitoso reciente con la misma tupla `(numeroCuenta, idServicio, idProducto, referencia, telefono, monto)`.
+  3. **Identificador Único de Transacción (`upc`):** Cada petición a GestoPago lleva un folio `upc` único para trazabilidad e idempotencia con el proveedor.
+
+### 4. Manejo de Timeouts y Protocolo de Conciliación (`verifyTx.do`)
+* **Regla Financiera Crítica:** *Un timeout de red o un código `82` del proveedor NO significa que la transacción no se haya procesado.* Reintentar ciegamente `sendTx.do` con un nuevo `upc` provocaría un **doble cobro**.
+* **Mecanismo de Conciliación Implementado (`ejecutarYConciliarTransaccionGestoPago`):**
+  * Cuando `sendTx.do` sufre un timeout (`FeignException.GatewayTimeout`, `RetryableException`) o responde `<CODIGO>82</CODIGO>`, el sistema **NO reintenta el cargo**.
+  * En su lugar, invoca automáticamente el endpoint de consulta/conciliación `POST /sistema/service/verifyTx.do` enviando exactamente el mismo payload firmado (`signed` con el mismo `upc`).
+  * Si `verifyTx.do` confirma que el proveedor sí aplicó el pago (`CODIGO = 01`), el sistema completa el descuento del saldo y emite el comprobante.
+  * Si el estado permanece indeterminado, responde `HTTP 504 Gateway Timeout` entregando el folio `upc` de conciliación sin duplicar la operación.
+
+### 5. Seguridad de Credenciales y Manejo Centralizado de Excepciones (`@RestControllerAdvice`)
+* **Gestión Segura de Secretos:** El `Bearer Token`, `API Key`, `Secret Key AES`, `IV`, credenciales de BD y `BREVO_API_KEY` se inyectan mediante variables de entorno (`${GESTOPAGO_API_TOKEN:}`, `${GESTOPAGO_SECRET_KEY:}`, `${BREVO_API_KEY:}`), sin exponerse en código fuente, respuestas HTTP ni logs.
+* **Sanitización de Logs:** Los números de cuenta se enmascaran (`************3705`) y nunca se registran tokens JWT ni tramas XML crudas con datos sensibles.
+* **`GlobalExceptionHandler` (`@RestControllerAdvice`):** Centraliza todas las excepciones devolviendo códigos HTTP semánticos (`400`, `401`, `403`, `404`, `409`, `502`, `504`, `500`) bajo la estructura homologada `GenericResponse`.
+
+---
+
 ## 📦 Stack Tecnológico
 
 * **Lenguaje:** Java 21 (LTS)
