@@ -102,6 +102,15 @@ eclipse {
 
 test {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn test
+    reports {
+        xml.required = true
+        html.required = true
+    }
 }
 
 springBoot {
@@ -109,17 +118,23 @@ springBoot {
     }
 }
 
-sonarqube {
+sonar {
     properties {
-        property "sonar.exclusions", "**/App.java,**/model/**,**/entity/**,**/enums/**,**/config/**,**/controller/**,**/service/configuracion/**"
+        property "sonar.projectKey", "prueba_aplicaciones_web_progresivas"
+        property "sonar.projectName", "Prueba Aplicaciones Web Progresivas"
+        property "sonar.host.url", System.getenv("SONAR_HOST_URL") ?: (project.findProperty("sonar.host.url") ?: "http://localhost:9000")
+        property "sonar.login", System.getenv("SONAR_TOKEN") ?: (project.findProperty("sonar.login") ?: "squ_61c608b9c22e0f85643f0bd580cfabe2d92afbf5")
+        property "sonar.token", System.getenv("SONAR_TOKEN") ?: (project.findProperty("sonar.token") ?: "squ_61c608b9c22e0f85643f0bd580cfabe2d92afbf5")
+        property "sonar.sourceEncoding", "UTF-8"
+        property "sonar.java.binaries", "${buildDir}/classes/java/main"
+        property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
+        property "sonar.exclusions", "**/App.java,**/model/**,**/entity/**,**/enums/**"
+        property "sonar.coverage.exclusions", "**/App.java,**/model/**,**/entity/**,**/enums/**,**/controller/**,**/client/**,**/repositorys/**,**/mapper/**,**/exception/**"
     }
 }
-jacocoTestReport {
-    reports {
-        reports {
-            xml.required=true
-        }
-    }
+
+tasks.named('sonar') {
+    dependsOn test, jacocoTestReport
 }
 
 //ejecutar applicación dentro de contenedor
