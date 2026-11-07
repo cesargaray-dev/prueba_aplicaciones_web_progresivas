@@ -24,8 +24,8 @@ WORKDIR /app
 # Copiar solo el JAR desde la etapa de build
 COPY --from=build /app/build/libs/prueba-1.0.jar app.jar
 
-# Exponer el puerto (Railway lo sobreescribirá con $PORT)
-EXPOSE 8080
+# Exponer el puerto 10000 requerido por el proxy de Render
+EXPOSE 10000
 
-# Arrancar la aplicación con optimización de memoria para Render (512MB RAM)
-ENTRYPOINT ["java", "-XX:+UseSerialGC", "-Xss512k", "-XX:MaxRAMPercentage=75.0", "-Dserver.port=${PORT:-8080}", "-jar", "app.jar"]
+# Arrancar la aplicación con optimización de memoria para Render (512MB RAM) vinculando a 0.0.0.0
+ENTRYPOINT ["sh", "-c", "exec java -XX:+UseSerialGC -Xss512k -XX:MaxRAMPercentage=75.0 -Dserver.port=${PORT:-10000} -Dserver.address=0.0.0.0 -jar app.jar"]
