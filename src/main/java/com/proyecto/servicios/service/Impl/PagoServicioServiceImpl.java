@@ -334,11 +334,13 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
             log.info("Pago de servicio exitoso. Cuenta={}, ID_TX={}, Autorización={}, Folio={}, SaldoRestante={}",
                     cuentaMask, idTx, numAutorizacion, folioTicket, nuevoSaldo);
 
-            // 4. Retornar respuesta exitosa con codigo=0
+            // 4. Retornar respuesta exitosa con codigo=0 y comprobantes oficiales de GestoPago
             PagoServicioResponseDTO response = PagoServicioResponseDTO.builder()
                     .idTransaccion(idTx)
                     .numeroAutorizacion(numAutorizacion)
                     .folioTicket(folioTicket)
+                    .upc(upc)
+                    .codigoProveedor(codigoProveedor)
                     .montoPagado(request.getMonto())
                     .comision(comision)
                     .saldoRestanteCuenta(nuevoSaldo)

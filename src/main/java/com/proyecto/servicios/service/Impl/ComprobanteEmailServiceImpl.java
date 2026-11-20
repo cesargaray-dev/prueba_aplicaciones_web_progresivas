@@ -313,6 +313,10 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
         BigDecimal monto = (pago != null && pago.getMontoPagado() != null) ? pago.getMontoPagado() : BigDecimal.ZERO;
         BigDecimal comision = (pago != null && pago.getComision() != null) ? pago.getComision() : BigDecimal.ZERO;
         BigDecimal saldoRestante = (pago != null && pago.getSaldoRestante() != null) ? pago.getSaldoRestante() : BigDecimal.ZERO;
+        String idTxGestoPago = (pago != null && pago.getIdTxGestopago() != null)
+                ? String.valueOf(pago.getIdTxGestopago()) : "N/A";
+        String upc = (pago != null && pago.getUpc() != null && !pago.getUpc().isBlank())
+                ? pago.getUpc() : "N/A";
         String numAuth = (pago != null && pago.getNumAutorizacion() != null) ? pago.getNumAutorizacion() : "N/A";
         String folio = (pago != null && pago.getFolioTicket() != null) ? pago.getFolioTicket() : "N/A";
         String servicio = (pago != null && pago.getNombreServicio() != null) ? pago.getNombreServicio() : "N/A";
@@ -362,7 +366,9 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
                     </div>
                     <p style="font-size: 14px; margin-bottom: 18px;">Estimado(a) <strong>%s</strong>, tu pago ha sido procesado y registrado con éxito con el proveedor del servicio.</p>
                     <table class="table-receipt">
-                      <tr><td class="label">Número de Autorización:</td><td class="value highlight-val">%s</td></tr>
+                      <tr><td class="label">ID Transacción GestoPago (ID_TX):</td><td class="value highlight-val">%s</td></tr>
+                      <tr><td class="label">Número de Autorización GestoPago:</td><td class="value highlight-val">%s</td></tr>
+                      <tr><td class="label">Folio UPC GestoPago:</td><td class="value highlight-val">%s</td></tr>
                       <tr><td class="label">Folio de Ticket:</td><td class="value highlight-val">%s</td></tr>
                       <tr><td class="label">Servicio:</td><td class="value">%s</td></tr>
                       <tr><td class="label">Producto:</td><td class="value">%s</td></tr>
@@ -389,7 +395,9 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
             """.formatted(
                 monto.toPlainString(),
                 esc(nombreCliente),
+                esc(idTxGestoPago),
                 esc(numAuth),
+                esc(upc),
                 esc(folio),
                 esc(servicio),
                 esc(producto),

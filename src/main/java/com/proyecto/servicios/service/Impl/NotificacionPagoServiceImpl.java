@@ -202,7 +202,10 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
     public byte[] generarComprobantePdf(String folioTicket) {
         PagoServicio pago = obtenerPagoPorFolio(folioTicket);
         String folio = sanitizePdfText(pago.getFolioTicket());
+        String idTxGestoPago = pago.getIdTxGestopago() != null ? String.valueOf(pago.getIdTxGestopago()) : "N/A";
         String auth = sanitizePdfText(pago.getNumAutorizacion());
+        String upcVal = sanitizePdfText(pago.getUpc());
+        String codProv = sanitizePdfText(pago.getCodigoRespuesta());
         String servicio = sanitizePdfText(pago.getNombreServicio());
         String producto = sanitizePdfText(pago.getNombreProducto());
         String monto = pago.getMontoPagado() != null ? pago.getMontoPagado().toPlainString() : "0.00";
@@ -218,14 +221,18 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
                 "BT",
                 "/F1 16 Tf",
                 "50 760 Td",
-                "(BANCO DIGITAL - COMPROBANTE OFICIAL DE PAGO) Tj",
+                "(BANCO DIGITAL - COMPROBANTE OFICIAL GESTOPAGO) Tj",
                 "/F1 11 Tf",
                 "0 -28 Td",
-                "(Estado de la Operacion: EXITOSA) Tj",
+                "(Estado de la Operacion: EXITOSA - Codigo GestoPago: " + codProv + ") Tj",
                 "0 -20 Td",
-                "(Folio de Ticket: " + folio + ") Tj",
+                "(ID Transaccion GestoPago (ID_TX): " + idTxGestoPago + ") Tj",
                 "0 -18 Td",
-                "(Numero de Autorizacion: " + auth + ") Tj",
+                "(Numero de Autorizacion GestoPago: " + auth + ") Tj",
+                "0 -18 Td",
+                "(Folio UPC GestoPago: " + upcVal + ") Tj",
+                "0 -18 Td",
+                "(Folio de Ticket: " + folio + ") Tj",
                 "0 -18 Td",
                 "(Proveedor / Servicio: " + servicio + ") Tj",
                 "0 -18 Td",

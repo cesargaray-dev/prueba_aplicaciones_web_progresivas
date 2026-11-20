@@ -125,10 +125,12 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
 
   const handleCopy = async () => {
     const summary =
-      `COMPROBANTE DE PAGO - BANCO DIGITAL (${resultState})\n` +
+      `COMPROBANTE DE PAGO GESTOPAGO - BANCO DIGITAL (${resultState})\n` +
       `Servicio: ${receipt.servicio || product?.service || 'N/A'} - ${receipt.producto || product?.name || ''}\n` +
+      `ID Transacción GestoPago (ID_TX): ${receipt.idTransaccion ?? 'N/A'}\n` +
+      `No. Autorización GestoPago: ${receipt.numeroAutorizacion || 'N/A'}\n` +
+      `Folio UPC GestoPago: ${receipt.upc || 'N/A'}\n` +
       `Folio Ticket: ${receipt.folioTicket || 'N/A'}\n` +
-      `No. Autorización: ${receipt.numeroAutorizacion || 'N/A'}\n` +
       `Referencia: ${referencia}\n` +
       `Monto: ${formatCurrency(receipt.montoPagado)}\n` +
       `Fecha: ${receipt.fechaHoraOperacion || fallbackDate}`;
@@ -319,7 +321,56 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
             </div>
           )}
 
+          {/* Official GestoPago Proof of Purchase Banner */}
+          {isSuccess && (receipt.idTransaccion || receipt.numeroAutorizacion || receipt.upc) && (
+            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-950 via-slate-900 to-indigo-950 text-white border border-blue-400/30 shadow-md space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-300">
+                  ✓ Compra Confirmada por GestoPago
+                </span>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono text-[10px] font-bold">
+                  COD {receipt.codigoProveedor || '01'}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-1.5 text-xs">
+                {receipt.idTransaccion !== undefined && receipt.idTransaccion !== null && (
+                  <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                    <span className="text-blue-200 font-semibold">ID Transacción GestoPago:</span>
+                    <span className="font-mono font-black text-amber-200 text-sm tracking-wider">
+                      #{receipt.idTransaccion}
+                    </span>
+                  </div>
+                )}
+                {receipt.numeroAutorizacion && (
+                  <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                    <span className="text-blue-200 font-semibold">No. Autorización GestoPago:</span>
+                    <span className="font-mono font-black text-white text-sm tracking-wider break-all">
+                      {receipt.numeroAutorizacion}
+                    </span>
+                  </div>
+                )}
+                {receipt.upc && (
+                  <div className="flex items-center justify-between gap-2 bg-white/5 rounded-xl px-3 py-1">
+                    <span className="text-blue-200/85 font-medium">Folio UPC GestoPago:</span>
+                    <span className="font-mono font-bold text-sky-200 break-all">
+                      {receipt.upc}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2.5 text-xs">
+            {receipt.idTransaccion !== undefined && receipt.idTransaccion !== null && (
+              <div className="flex justify-between items-center gap-3 py-1 border-b border-slate-50">
+                <span className="text-slate-500 font-medium">ID TX GestoPago:</span>
+                <span className="font-mono font-black text-blue-900 bg-blue-50 px-2 py-0.5 rounded">
+                  {receipt.idTransaccion}
+                </span>
+              </div>
+            )}
+
             {receipt.numeroAutorizacion && (
               <div className="flex justify-between items-center gap-3 py-1 border-b border-slate-50">
                 <span className="text-slate-500 font-medium">No. Autorización Proveedor:</span>

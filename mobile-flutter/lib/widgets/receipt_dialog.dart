@@ -317,13 +317,139 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                 const SizedBox(height: 14),
               ],
 
+              if (r.isSuccess && (r.idTransaccion != null || r.numeroAutorizacion.isNotEmpty)) ...[
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF040914), Color(0xFF0C1E4A), Color(0xFF1E3A8A)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFFDE68A).withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            '✓ COMPRA VERIFICADA GESTOPAGO',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              color: Color(0xFFFDE68A),
+                              letterSpacing: 0.9,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'COD ${r.codigoProveedor ?? '01'}',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                                color: Color(0xFF6EE7B7),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      if (r.idTransaccion != null)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'ID TX GestoPago:',
+                              style: TextStyle(fontSize: 12, color: Colors.white70),
+                            ),
+                            Text(
+                              '#${r.idTransaccion}',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
+                                fontFamily: 'monospace',
+                                color: Color(0xFFFDE68A),
+                              ),
+                            ),
+                          ],
+                        ),
+                      if (r.numeroAutorizacion.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'No. Autorización:',
+                              style: TextStyle(fontSize: 12, color: Colors.white70),
+                            ),
+                            Flexible(
+                              child: Text(
+                                r.numeroAutorizacion,
+                                textAlign: TextAlign.end,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'monospace',
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (r.upc != null && r.upc!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Folio UPC:',
+                              style: TextStyle(fontSize: 11.5, color: Colors.white70),
+                            ),
+                            Flexible(
+                              child: Text(
+                                r.upc!,
+                                textAlign: TextAlign.end,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: 'monospace',
+                                  color: Color(0xFF93C5FD),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+
+              if (r.idTransaccion != null) ...[
+                _buildDetailRow('ID TX GestoPago', '#${r.idTransaccion}', isMonospace: true, isBold: true),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
+              ],
               if (r.folioTicket.isNotEmpty) ...[
                 _buildDetailRow('Folio Ticket', r.folioTicket, isMonospace: true),
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
               ],
               if (r.numeroAutorizacion.isNotEmpty) ...[
-                _buildDetailRow('No. Autorización', r.numeroAutorizacion, isMonospace: true),
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                _buildDetailRow('No. Autorización GestoPago', r.numeroAutorizacion, isMonospace: true),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
               ],
               if (r.upc != null && r.upc!.isNotEmpty) ...[
                 _buildDetailRow('Folio UPC', r.upc!, isMonospace: true),
@@ -457,9 +583,11 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                                 ? 'Operación Pendiente - ${widget.product.name}\n'
                                     'Folio: ${r.folioTicket}\n'
                                     'UPC: ${r.upc ?? 'N/A'}'
-                                : 'Comprobante Banco Digital - ${widget.product.name}\n'
-                                    'Folio: ${r.folioTicket}\n'
-                                    'Autorización: ${r.numeroAutorizacion}\n'
+                                : 'Comprobante GestoPago - ${widget.product.name}\n'
+                                    'ID TX GestoPago: ${r.idTransaccion ?? 'N/A'}\n'
+                                    'Autorización GestoPago: ${r.numeroAutorizacion}\n'
+                                    'Folio UPC: ${r.upc ?? 'N/A'}\n'
+                                    'Folio Ticket: ${r.folioTicket}\n'
                                     'Monto: ${currencyFormatter.format(r.montoPagado)}');
                         Clipboard.setData(ClipboardData(text: text));
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -519,7 +647,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+        Text(label, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context))),
         const SizedBox(width: 12),
         Flexible(
           child: Text(
@@ -528,7 +656,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: valueColor ?? AppTheme.textDark,
+              color: valueColor ?? AppTheme.textPrimary(context),
               fontFamily: isMonospace ? 'monospace' : null,
             ),
           ),

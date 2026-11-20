@@ -231,8 +231,17 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
               </span>
             </div>
 
+            {item.idTxGestopago !== undefined && item.idTxGestopago !== null && (
+              <div className="flex justify-between gap-3 py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">ID Transacción GestoPago:</span>
+                <span className="font-mono font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded break-all">
+                  #{item.idTxGestopago}
+                </span>
+              </div>
+            )}
+
             <div className="flex justify-between gap-3 py-1 border-b border-slate-100">
-              <span className="text-slate-500 font-medium">No. Autorización:</span>
+              <span className="text-slate-500 font-medium">No. Autorización GestoPago:</span>
               <span className="font-mono font-bold text-blue-900 bg-blue-50 px-2 py-0.5 rounded break-all">
                 {item.numeroAutorizacion || 'N/A'}
               </span>

@@ -129,9 +129,9 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520),
         child: Container(
-          decoration: const BoxDecoration(
-            color: AppTheme.surfaceWhite,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: AppTheme.cardBg(context),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: EdgeInsets.fromLTRB(
             24,
@@ -248,10 +248,14 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
 
                 const SizedBox(height: 18),
 
+                if (item.idTxGestopago > 0) ...[
+                  _buildRow('ID TX GestoPago', '#${item.idTxGestopago}', isMonospace: true, isBold: true),
+                  Divider(height: 16, color: AppTheme.borderCol(context)),
+                ],
+                _buildRow('No. Autorización GestoPago', item.numeroAutorizacion, isMonospace: true),
+                Divider(height: 16, color: AppTheme.borderCol(context)),
                 _buildRow('Folio Ticket', item.folioTicket, isMonospace: true),
-                const Divider(height: 16, color: AppTheme.borderSlate),
-                _buildRow('No. Autorización', item.numeroAutorizacion, isMonospace: true),
-                const Divider(height: 16, color: AppTheme.borderSlate),
+                Divider(height: 16, color: AppTheme.borderCol(context)),
                 if (item.isRecarga) ...[
                   _buildRow('Teléfono Recargado', item.telefono),
                   const Divider(height: 16, color: AppTheme.borderSlate),
@@ -388,7 +392,7 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, color: AppTheme.textMuted)),
+        Text(label, style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context))),
         const SizedBox(width: 12),
         Flexible(
           child: Text(
@@ -397,7 +401,7 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: AppTheme.textDark,
+              color: AppTheme.textPrimary(context),
               fontFamily: isMonospace ? 'monospace' : null,
             ),
           ),
