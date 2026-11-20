@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Landmark,
   LogOut,
@@ -9,6 +9,8 @@ import {
   Wallet,
   UserCog,
   ShieldCheck,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { ProfileModal } from './ProfileModal';
@@ -23,6 +25,15 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
   const { user, secondsRemaining, logout, refreshBalance } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    const saved = window.localStorage.getItem('theme_mode');
+    return saved ? saved === 'dark' : document.documentElement.classList.contains('dark');
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+    window.localStorage.setItem('theme_mode', isDark ? 'dark' : 'light');
+  }, [isDark]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -184,6 +195,21 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
                   )}
                 </button>
               )}
+
+              {/* Theme Mode Toggle (Light / Dark) */}
+              <button
+                type="button"
+                onClick={() => setIsDark((prev) => !prev)}
+                title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+                aria-label="Cambiar tema"
+                className="p-2 rounded-xl bg-slate-100 hover:bg-blue-50 border border-slate-200 text-slate-700 transition-colors"
+              >
+                {isDark ? (
+                  <Sun className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <Moon className="w-4 h-4 text-blue-900" />
+                )}
+              </button>
 
               {/* Logout Button */}
               <button

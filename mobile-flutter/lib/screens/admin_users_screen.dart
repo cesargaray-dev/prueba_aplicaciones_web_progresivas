@@ -182,7 +182,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.cardBg(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -511,10 +511,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                       Expanded(
                                         child: Text(
                                           (u['nombreCompleto'] ?? '').toString(),
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 14,
-                                            color: AppTheme.primaryNavy,
+                                            color: AppTheme.textPrimary(context),
                                           ),
                                         ),
                                       ),
@@ -569,10 +569,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                       ),
                                       Text(
                                         '${_currency.format(saldo)} MXN',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontWeight: FontWeight.w900,
                                           fontSize: 14,
-                                          color: AppTheme.primaryNavy,
+                                          color: AppTheme.brandAccent(context),
                                         ),
                                       ),
                                     ],

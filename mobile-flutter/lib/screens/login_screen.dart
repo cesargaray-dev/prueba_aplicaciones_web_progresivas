@@ -224,12 +224,15 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    final isDark = AppTheme.isDark(context);
 
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
-            colors: [Color(0xFFF8FAFC), Color(0xFFEFF6FF), Color(0xFFF8FAFC)],
+            colors: isDark
+                ? const [Color(0xFF040914), Color(0xFF0A1838), Color(0xFF060B16)]
+                : const [Color(0xFFF8FAFC), Color(0xFFEFF6FF), Color(0xFFF8FAFC)],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
           ),
@@ -243,13 +246,26 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Align(
-                      alignment: Alignment.topRight,
-                      child: IconButton(
-                        onPressed: _showApiConfigDialog,
-                        icon: const Icon(Icons.settings_ethernet_rounded, color: AppTheme.textMuted),
-                        tooltip: 'Configurar URL de API',
-                      ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        IconButton(
+                          onPressed: () => AppTheme.toggleTheme(),
+                          icon: Icon(
+                            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                            color: isDark ? const Color(0xFFFDE68A) : AppTheme.textMuted,
+                          ),
+                          tooltip: isDark ? 'Modo Claro' : 'Modo Oscuro',
+                        ),
+                        IconButton(
+                          onPressed: _showApiConfigDialog,
+                          icon: Icon(
+                            Icons.settings_ethernet_rounded,
+                            color: AppTheme.textSecondary(context),
+                          ),
+                          tooltip: 'Configurar URL de API',
+                        ),
+                      ],
                     ),
 
                     Center(
@@ -277,21 +293,21 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     const SizedBox(height: 16),
 
-                    const Text(
+                    Text(
                       'Banco Digital',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 27,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryNavy,
+                        color: AppTheme.textPrimary(context),
                         letterSpacing: -0.5,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
+                    Text(
                       'Portal Comercial de Pagos y Recargas GestoPago',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                      style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
                     ),
 
                     const SizedBox(height: 22),

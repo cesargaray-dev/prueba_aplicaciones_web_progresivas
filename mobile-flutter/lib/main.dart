@@ -18,8 +18,9 @@ class _AppScrollBehavior extends MaterialScrollBehavior {
   Set<PointerDeviceKind> get dragDevices => PointerDeviceKind.values.toSet();
 }
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppTheme.loadSavedTheme();
   runApp(const BancoDigitalApp());
 }
 
@@ -44,13 +45,20 @@ class BancoDigitalApp extends StatelessWidget {
           ),
         ),
       ],
-      child: MaterialApp(
-        navigatorKey: appNavigatorKey,
-        title: 'Banco Digital - Pagos y Recargas',
-        debugShowCheckedModeBanner: false,
-        scrollBehavior: const _AppScrollBehavior(),
-        theme: AppTheme.lightTheme,
-        home: const AuthGate(),
+      child: ValueListenableBuilder<ThemeMode>(
+        valueListenable: AppTheme.themeModeNotifier,
+        builder: (context, currentThemeMode, _) {
+          return MaterialApp(
+            navigatorKey: appNavigatorKey,
+            title: 'Banco Digital - Pagos y Recargas',
+            debugShowCheckedModeBanner: false,
+            scrollBehavior: const _AppScrollBehavior(),
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: currentThemeMode,
+            home: const AuthGate(),
+          );
+        },
       ),
     );
   }

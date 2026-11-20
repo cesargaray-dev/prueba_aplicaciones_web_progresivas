@@ -146,7 +146,7 @@ class _HomeScreenState extends State<HomeScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.cardBg(context),
       constraints: const BoxConstraints(maxWidth: 520),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -202,11 +202,13 @@ class _HomeScreenState extends State<HomeScreen> {
     final catalog = Provider.of<CatalogProvider>(context);
     final session = auth.session;
 
+    final isDark = AppTheme.isDark(context);
+
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (_) => auth.resetInactivityTimer(),
       child: Scaffold(
-        backgroundColor: AppTheme.backgroundSlate,
+        backgroundColor: AppTheme.scaffoldBg(context),
         appBar: AppBar(
           title: Row(
             children: [
@@ -233,6 +235,14 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
           actions: [
+            IconButton(
+              icon: Icon(
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                color: isDark ? const Color(0xFFFDE68A) : Colors.white,
+              ),
+              tooltip: isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro',
+              onPressed: () => AppTheme.toggleTheme(),
+            ),
             if (_currentTabIndex == 1 && session != null)
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
@@ -317,8 +327,8 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedIndex: (_currentTabIndex == 2 && (session == null || !session.isAdmin))
               ? 0
               : _currentTabIndex,
-          backgroundColor: AppTheme.surfaceWhite,
-          indicatorColor: AppTheme.secondaryBlue.withValues(alpha: 0.14),
+          backgroundColor: AppTheme.cardBg(context),
+          indicatorColor: AppTheme.secondaryBlue.withValues(alpha: isDark ? 0.28 : 0.14),
           onDestinationSelected: (index) {
             setState(() {
               _currentTabIndex = index;
@@ -410,16 +420,18 @@ class _HomeScreenState extends State<HomeScreen> {
                       catalog.searchQuery.trim().toLowerCase() == brand.toLowerCase();
                   return ActionChip(
                     visualDensity: VisualDensity.compact,
-                    backgroundColor: selected ? AppTheme.primaryNavy : Colors.white,
+                    backgroundColor:
+                        selected ? AppTheme.secondaryBlue : AppTheme.cardBg(context),
                     side: BorderSide(
-                      color: selected ? AppTheme.primaryNavy : AppTheme.borderSlate,
+                      color:
+                          selected ? AppTheme.secondaryBlue : AppTheme.borderCol(context),
                     ),
                     label: Text(
                       brand,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: selected ? Colors.white : AppTheme.textDark,
+                        color: selected ? Colors.white : AppTheme.textPrimary(context),
                       ),
                     ),
                     onPressed: () {

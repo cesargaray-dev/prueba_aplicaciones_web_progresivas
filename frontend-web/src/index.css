@@ -7,12 +7,145 @@
   color-scheme: light;
 }
 
+html.dark {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
   background-color: #f8fafc;
   color: #0f172a;
+  transition: background-color 220ms ease, color 220ms ease;
+}
+
+html.dark body,
+html.dark .bg-slate-50 {
+  background-color: #060b16 !important;
+  background-image: radial-gradient(ellipse at 50% 0%, rgba(29, 78, 216, 0.16), transparent 65%);
+  color: #f8fafc;
+}
+
+html.dark .bg-white {
+  background-color: #0f172a !important;
+  color: #f8fafc;
+  box-shadow: 0 14px 32px -10px rgba(2, 6, 23, 0.72), 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+html.dark .bg-white\/90 {
+  background-color: rgba(9, 16, 34, 0.88) !important;
+}
+
+html.dark .bg-slate-100,
+html.dark .bg-slate-200\/70,
+html.dark .bg-slate-50\/80,
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-slate-50\/80:hover {
+  background-color: #16223b !important;
+}
+
+html.dark .border-slate-200,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-200\/70,
+html.dark .border-slate-100,
+html.dark .border-slate-300 {
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(148, 163, 184, 0.14) !important;
+}
+
+html.dark .text-slate-900,
+html.dark .text-slate-800 {
+  color: #f8fafc !important;
+}
+
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #cbd5e1 !important;
+}
+
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+html.dark .text-blue-950:not(.bg-white):not(.bg-amber-400),
+html.dark .text-blue-900,
+html.dark .text-blue-800,
+html.dark .text-blue-700 {
+  color: #60a5fa !important;
+}
+
+html.dark .bg-blue-50 {
+  background-color: rgba(37, 99, 235, 0.18) !important;
+  border-color: rgba(96, 165, 250, 0.32) !important;
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-emerald-100 {
+  background-color: rgba(16, 185, 129, 0.16) !important;
+  border-color: rgba(52, 211, 153, 0.32) !important;
+}
+
+html.dark .text-emerald-800,
+html.dark .text-emerald-700,
+html.dark .text-emerald-900 {
+  color: #6ee7b7 !important;
+}
+
+html.dark .bg-amber-50,
+html.dark .bg-amber-100 {
+  background-color: rgba(245, 158, 11, 0.16) !important;
+  border-color: rgba(251, 191, 36, 0.35) !important;
+}
+
+html.dark .text-amber-900,
+html.dark .text-amber-800,
+html.dark .text-amber-700 {
+  color: #fde68a !important;
+}
+
+html.dark .bg-red-50,
+html.dark .bg-red-100 {
+  background-color: rgba(239, 68, 68, 0.16) !important;
+  border-color: rgba(248, 113, 113, 0.35) !important;
+}
+
+html.dark .text-red-900,
+html.dark .text-red-800,
+html.dark .text-red-700 {
+  color: #fca5a5 !important;
+}
+
+html.dark .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.18) !important;
+  border-color: rgba(129, 140, 248, 0.35) !important;
+}
+
+html.dark .text-indigo-700 {
+  color: #a5b4fc !important;
+}
+
+html.dark input:not(.bg-transparent):not([type="checkbox"]),
+html.dark select,
+html.dark textarea {
+  background-color: #091122 !important;
+  color: #f8fafc !important;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+}
+
+html.dark input:not(.bg-transparent)::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark input:disabled {
+  background-color: #131c31 !important;
+  color: #64748b !important;
 }
 
 .scrollbar-none::-webkit-scrollbar {

@@ -29,6 +29,12 @@ describe('Navbar Component', () => {
     await user.click(screen.getByRole('button', { name: /Panel Admin/i }));
     expect(setActiveTab).toHaveBeenCalledWith('admin');
 
+    // Toggle Dark / Light Mode
+    await user.click(screen.getByLabelText('Cambiar tema'));
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
+    await user.click(screen.getByLabelText('Cambiar tema'));
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+
     // Refresh balance
     await user.click(screen.getByTitle('Actualizar saldo'));
     expect(ctx.refreshBalance).toHaveBeenCalled();

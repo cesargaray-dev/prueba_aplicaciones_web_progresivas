@@ -71,13 +71,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
 
     return ColoredBox(
-      color: AppTheme.backgroundSlate,
+      color: AppTheme.scaffoldBg(context),
       child: Column(
         children: [
           // Account & KPI Summary Header
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            color: AppTheme.surfaceWhite,
+            color: AppTheme.cardBg(context),
             child: Row(
               children: [
                 Expanded(
@@ -96,11 +96,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       const SizedBox(height: 2),
                       Text(
                         session?.maskedAccount ?? '**** **** **** ****',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
                           fontFamily: 'monospace',
-                          color: AppTheme.primaryNavy,
+                          color: AppTheme.brandAccent(context),
                         ),
                       ),
                     ],
@@ -116,10 +116,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         alignment: Alignment.centerRight,
                         child: Text(
                           currencyFormatter.format(totalPagado),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.textDark,
+                            color: AppTheme.textPrimary(context),
                           ),
                         ),
                       ),
@@ -127,10 +127,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         '${history.filteredItems.length} movimientos',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textMuted,
+                          color: AppTheme.textSecondary(context),
                         ),
                       ),
                     ],
@@ -140,7 +140,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             ),
           ),
 
-          const Divider(height: 1, color: AppTheme.borderSlate),
+          Divider(height: 1, color: AppTheme.borderCol(context)),
 
           // Search bar
           Padding(
@@ -175,18 +175,21 @@ class _HistoryScreenState extends State<HistoryScreen> {
             child: Row(
               children: [
                 _buildFilterChip(
+                  context: context,
                   label: 'Todos',
                   isSelected: history.typeFilter == 'ALL',
                   onTap: () => history.setTypeFilter('ALL'),
                 ),
                 const SizedBox(width: 8),
                 _buildFilterChip(
+                  context: context,
                   label: 'Recargas',
                   isSelected: history.typeFilter == 'RECARGAS',
                   onTap: () => history.setTypeFilter('RECARGAS'),
                 ),
                 const SizedBox(width: 8),
                 _buildFilterChip(
+                  context: context,
                   label: 'Servicios',
                   isSelected: history.typeFilter == 'SERVICIOS',
                   onTap: () => history.setTypeFilter('SERVICIOS'),
@@ -359,10 +362,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                             children: [
                                               Text(
                                                 currencyFormatter.format(item.monto),
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                   fontSize: 14,
                                                   fontWeight: FontWeight.bold,
-                                                  color: AppTheme.primaryNavy,
+                                                  color: AppTheme.brandAccent(context),
                                                 ),
                                               ),
                                               const SizedBox(height: 2),
@@ -388,6 +391,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _buildFilterChip({
+    required BuildContext context,
     required String label,
     required bool isSelected,
     required VoidCallback onTap,
@@ -400,10 +404,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isSelected ? AppTheme.primaryNavy : AppTheme.surfaceWhite,
+            color: isSelected ? AppTheme.secondaryBlue : AppTheme.cardBg(context),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected ? AppTheme.primaryNavy : AppTheme.borderSlate,
+              color: isSelected ? AppTheme.secondaryBlue : AppTheme.borderCol(context),
             ),
           ),
           child: Text(
@@ -411,7 +415,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-              color: isSelected ? Colors.white : AppTheme.textMuted,
+              color: isSelected ? Colors.white : AppTheme.textSecondary(context),
             ),
           ),
         ),

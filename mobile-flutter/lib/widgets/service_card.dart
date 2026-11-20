@@ -90,10 +90,10 @@ class ServiceCard extends StatelessWidget {
                           product.service,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.textDark,
+                            color: AppTheme.textPrimary(context),
                           ),
                         ),
 
@@ -101,9 +101,9 @@ class ServiceCard extends StatelessWidget {
                           product.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.textMuted,
+                            color: AppTheme.textSecondary(context),
                           ),
                         ),
 
@@ -136,7 +136,9 @@ class ServiceCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
-                          color: product.price > 0 ? AppTheme.primaryNavy : AppTheme.accentEmerald,
+                          color: product.price > 0
+                              ? AppTheme.brandAccent(context)
+                              : AppTheme.lightEmerald,
                         ),
                       ),
                       const SizedBox(height: 6),

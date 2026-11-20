@@ -45,12 +45,14 @@ class CategoryChips extends StatelessWidget {
           child: Row(
             children: [
               _buildTypeChip(
+                context: context,
                 label: 'Todos',
                 isSelected: catalog.selectedFrontType == 'ALL',
                 onTap: () => catalog.setFrontType('ALL'),
               ),
               const SizedBox(width: 8),
               _buildTypeChip(
+                context: context,
                 label: 'Recargas',
                 isSelected: catalog.selectedFrontType == '1',
                 badgeColor: AppTheme.secondaryBlue,
@@ -58,6 +60,7 @@ class CategoryChips extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               _buildTypeChip(
+                context: context,
                 label: 'Pago de Servicios',
                 isSelected: catalog.selectedFrontType == '2',
                 badgeColor: AppTheme.accentEmerald,
@@ -80,21 +83,21 @@ class CategoryChips extends StatelessWidget {
                 avatar: Icon(
                   _getCategoryIcon(cat),
                   size: 16,
-                  color: isSelected ? Colors.white : AppTheme.primaryNavy,
+                  color: isSelected ? Colors.white : AppTheme.brandAccent(context),
                 ),
                 label: Text('$cat ($count)'),
                 labelStyle: TextStyle(
                   fontSize: 13,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                  color: isSelected ? Colors.white : AppTheme.textDark,
+                  color: isSelected ? Colors.white : AppTheme.textPrimary(context),
                 ),
                 selected: isSelected,
-                selectedColor: AppTheme.primaryNavy,
-                backgroundColor: AppTheme.surfaceWhite,
+                selectedColor: AppTheme.secondaryBlue,
+                backgroundColor: AppTheme.cardBg(context),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
                   side: BorderSide(
-                    color: isSelected ? AppTheme.primaryNavy : AppTheme.borderSlate,
+                    color: isSelected ? AppTheme.secondaryBlue : AppTheme.borderCol(context),
                     width: 1,
                   ),
                 ),
@@ -134,6 +137,7 @@ class CategoryChips extends StatelessWidget {
   }
 
   Widget _buildTypeChip({
+    required BuildContext context,
     required String label,
     required bool isSelected,
     Color? badgeColor,
@@ -148,13 +152,13 @@ class CategoryChips extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: isSelected
-                ? (badgeColor ?? AppTheme.primaryNavy)
-                : AppTheme.surfaceWhite,
+                ? (badgeColor ?? AppTheme.secondaryBlue)
+                : AppTheme.cardBg(context),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isSelected
-                  ? (badgeColor ?? AppTheme.primaryNavy)
-                  : AppTheme.borderSlate,
+                  ? (badgeColor ?? AppTheme.secondaryBlue)
+                  : AppTheme.borderCol(context),
               width: 1,
             ),
           ),
@@ -165,7 +169,7 @@ class CategoryChips extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-              color: isSelected ? Colors.white : AppTheme.textMuted,
+              color: isSelected ? Colors.white : AppTheme.textSecondary(context),
             ),
           ),
         ),
