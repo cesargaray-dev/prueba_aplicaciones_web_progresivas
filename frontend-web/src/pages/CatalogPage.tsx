@@ -9,6 +9,8 @@ import type { CategoryFilterType } from '../components/CategoryChips';
 import { ReferenceModal } from '../components/ReferenceModal';
 import { Payment2FAModal } from '../components/Payment2FAModal';
 import { ReceiptModal } from '../components/ReceiptModal';
+import { ProfileModal } from '../components/ProfileModal';
+import { useAuth } from '../context/useAuth';
 import {
   Search,
   AlertCircle,
@@ -19,6 +21,10 @@ import {
   Smartphone,
   ReceiptText,
   Layers,
+  Landmark,
+  Wifi,
+  PlusCircle,
+  ShieldCheck,
 } from 'lucide-react';
 
 const PAGE_SIZE = 24;
@@ -101,6 +107,10 @@ const matchesCategory = (p: ProductDTO, cat: CategoryFilterType): boolean => {
 };
 
 export const CatalogPage: React.FC<CatalogPageProps> = ({ onGoToHistory }) => {
+  const { user, refreshBalance } = useAuth();
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -272,76 +282,219 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onGoToHistory }) => {
   const hasActiveFilters =
     searchQuery.trim() !== '' || selectedCategory !== 'ALL' || selectedFrontType !== 'ALL';
 
+  const maskedAccount = user?.numeroCuenta
+    ? `**** **** **** ${user.numeroCuenta.slice(-4)}`
+    : '**** **** **** 0000';
+
+  const formattedBalance = new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+  }).format(user?.saldo ?? 0);
+
+  const handleCardRefreshBalance = async () => {
+    setIsRefreshingBalance(true);
+    try {
+      await refreshBalance();
+    } finally {
+      setTimeout(() => setIsRefreshingBalance(false), 450);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* Top Hero Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-white/10 space-y-5">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold backdrop-blur-sm border border-white/20">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Catálogo Oficial Directo de GestoPago</span>
+      {/* Top Hero Section: Luxury Banking Card + Catalog Search Banner */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        {/* Super-Premium 3D Digital Banking Card */}
+        {user && (
+          <div className="lg:col-span-5 relative group">
+            {/* Ambient multi-layer 3D outer glow */}
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600/40 via-amber-400/30 to-indigo-600/40 rounded-[28px] blur-xl opacity-75 group-hover:opacity-100 transition duration-500 pointer-events-none" />
+
+            <div className="relative h-full overflow-hidden rounded-[26px] bg-gradient-to-br from-[#040914] via-[#0C1E4A] to-[#0A1128] p-6 text-white shadow-[0_24px_48px_-12px_rgba(4,9,20,0.82),0_10px_24px_-6px_rgba(29,78,216,0.42)] border border-white/25 flex flex-col justify-between transition-transform duration-300 group-hover:-translate-y-0.5">
+              {/* Ambient radial light orbs & glass reflection */}
+              <div className="pointer-events-none absolute -top-16 -right-12 w-52 h-52 rounded-full bg-blue-500/25 blur-2xl" />
+              <div className="pointer-events-none absolute -bottom-20 -left-12 w-48 h-48 rounded-full bg-amber-500/20 blur-2xl" />
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(255,255,255,0.12),_transparent_60%)]" />
+              <div className="pointer-events-none absolute -top-24 left-20 w-28 h-80 -rotate-45 bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+              {/* Card Header: Brand Emblem + Platinum 2FA + Contactless */}
+              <div className="relative z-10 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 rounded-xl bg-gradient-to-br from-white/25 to-white/5 border border-amber-200/45 shadow-md shrink-0">
+                    <Landmark className="w-4 h-4 text-amber-200" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-black tracking-[0.16em] text-white uppercase truncate">
+                      BANCO DIGITAL
+                    </p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_8px_#fbbf24]" />
+                      <span className="text-[9px] font-extrabold tracking-[0.14em] text-amber-200 uppercase">
+                        PLATINUM • 2FA VERIFIED
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/35 border border-white/15 text-[10px] font-bold text-emerald-300">
+                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                    Activa
+                  </span>
+                  <Wifi className="w-5 h-5 text-white/75 rotate-90" />
+                </div>
+              </div>
+
+              {/* Card Middle: Metallic Gold EMV Chip + Balance & Quick Actions */}
+              <div className="relative z-10 my-5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  {/* Metallic Gold EMV Chip */}
+                  <div className="w-11 h-8 rounded-lg bg-gradient-to-br from-yellow-200 via-amber-400 to-amber-700 border border-yellow-100/80 shadow-[0_4px_10px_rgba(0,0,0,0.45)] relative flex items-center justify-center shrink-0">
+                    <div className="w-5 h-4 rounded-[3px] border border-amber-950/45" />
+                    <div className="absolute left-0 w-2.5 h-[1px] bg-amber-950/45" />
+                    <div className="absolute right-0 w-2.5 h-[1px] bg-amber-950/45" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                      <span className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-blue-100/80">
+                        SALDO DISPONIBLE
+                      </span>
+                    </div>
+                    <p className="text-2xl sm:text-[28px] font-black tracking-tight text-white drop-shadow-[0_3px_10px_rgba(0,0,0,0.5)] leading-tight truncate">
+                      {formattedBalance} <span className="text-xs font-extrabold text-amber-200/90">MXN</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setIsProfileModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 border border-amber-200/50 text-white text-xs font-extrabold shadow-md transition-all active:scale-95"
+                    title="Abonar fondos a tu cuenta"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5 text-amber-200" />
+                    <span>Abonar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleCardRefreshBalance}
+                    aria-label="Sincronizar saldo de tarjeta"
+                    title="Sincronizar saldo"
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-blue-100 hover:text-white transition-colors"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingBalance ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Metallic Gradient Divider */}
+              <div className="relative z-10 h-px w-full bg-gradient-to-r from-white/5 via-amber-200/40 to-white/5" />
+
+              {/* Card Footer: Cardholder Name, Embossed Account Number & Network Emblem */}
+              <div className="relative z-10 pt-3.5 flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-blue-200/65">
+                    TITULAR DE LA CUENTA
+                  </p>
+                  <p className="text-sm font-extrabold uppercase tracking-wider text-white truncate drop-shadow-sm mt-0.5">
+                    {user.nombreCompleto}
+                  </p>
+                  <p className="text-xs sm:text-[13px] font-mono font-bold tracking-[0.22em] text-amber-200 mt-1">
+                    {maskedAccount}
+                  </p>
+                </div>
+
+                {/* Dual-Circle Metallic Network Emblem */}
+                <div className="flex flex-col items-end shrink-0">
+                  <div className="flex items-center -space-x-2.5">
+                    <span className="w-6 h-6 rounded-full bg-amber-500/85 border border-white/40 shadow-sm" />
+                    <span className="w-6 h-6 rounded-full bg-sky-400/80 border border-white/40 shadow-sm" />
+                  </div>
+                  <span className="text-[8px] font-extrabold tracking-[0.14em] text-blue-100/70 mt-1">
+                    DIGITAL INFINITE
+                  </span>
+                </div>
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
-              Paga tus Servicios y Recarga Tiempo Aire
-            </h1>
-            <p className="text-xs sm:text-sm text-blue-100/90 max-w-xl">
-              Selecciona tu proveedor, valida tu referencia al instante y autoriza cada pago con código 2FA enviado a tu correo.
-            </p>
+          </div>
+        )}
+
+        {/* Catalog Search & Popular Providers Hero Banner */}
+        <div
+          className={`${
+            user ? 'lg:col-span-7' : 'lg:col-span-12'
+          } bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-900 rounded-[26px] p-6 sm:p-8 text-white shadow-[0_20px_40px_-15px_rgba(15,23,42,0.65)] border border-white/15 flex flex-col justify-between space-y-5`}
+        >
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 text-xs font-semibold backdrop-blur-sm border border-white/20">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Catálogo Oficial Directo de GestoPago</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight">
+                Paga tus Servicios y Recarga Tiempo Aire
+              </h1>
+              <p className="text-xs sm:text-sm text-blue-100/90 max-w-xl">
+                Selecciona tu proveedor, valida tu referencia al instante y autoriza cada pago con código 2FA enviado a tu correo.
+              </p>
+            </div>
+
+            {/* Search bar inside banner */}
+            <div className="w-full md:w-72 shrink-0">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-2.5 flex items-center gap-2 shadow-inner focus-within:bg-white/15 focus-within:border-blue-300/50 transition-all">
+                <Search className="w-5 h-5 text-blue-200 pl-1 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Buscar servicio, categoría o ID..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="bg-transparent text-white placeholder-blue-200/70 text-xs sm:text-sm w-full outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => handleSearchChange('')}
+                    aria-label="Limpiar búsqueda"
+                    className="text-xs text-blue-200 hover:text-white font-bold px-1.5"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Search bar inside banner */}
-          <div className="w-full md:w-80">
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 p-2.5 flex items-center gap-2 shadow-inner focus-within:bg-white/15 focus-within:border-blue-300/50 transition-all">
-              <Search className="w-5 h-5 text-blue-200 pl-1 shrink-0" />
-              <input
-                type="text"
-                placeholder="Buscar servicio, categoría o ID..."
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="bg-transparent text-white placeholder-blue-200/70 text-xs sm:text-sm w-full outline-none"
-              />
-              {searchQuery && (
+          {/* Popular Providers Quick Access */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-200/90 whitespace-nowrap mr-1">
+              <Flame className="w-3.5 h-3.5 text-amber-300" />
+              Populares:
+            </span>
+            {POPULAR_PROVIDERS.map((brand) => {
+              const active = searchQuery.toLowerCase() === brand.toLowerCase();
+              return (
                 <button
+                  key={brand}
                   type="button"
-                  onClick={() => handleSearchChange('')}
-                  aria-label="Limpiar búsqueda"
-                  className="text-xs text-blue-200 hover:text-white font-bold px-1.5"
+                  onClick={() => {
+                    setSelectedFrontType('ALL');
+                    setSelectedCategory('ALL');
+                    handleSearchChange(active ? '' : brand);
+                  }}
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${
+                    active
+                      ? 'bg-white text-blue-950 border-white shadow-sm'
+                      : 'bg-white/10 text-blue-100 border-white/15 hover:bg-white/20'
+                  }`}
                 >
-                  ✕
+                  {brand}
                 </button>
-              )}
-            </div>
+              );
+            })}
           </div>
-        </div>
-
-        {/* Popular Providers Quick Access */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-200/90 whitespace-nowrap mr-1">
-            <Flame className="w-3.5 h-3.5 text-amber-300" />
-            Populares:
-          </span>
-          {POPULAR_PROVIDERS.map((brand) => {
-            const active = searchQuery.toLowerCase() === brand.toLowerCase();
-            return (
-              <button
-                key={brand}
-                type="button"
-                onClick={() => {
-                  setSelectedFrontType('ALL');
-                  setSelectedCategory('ALL');
-                  handleSearchChange(active ? '' : brand);
-                }}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold whitespace-nowrap transition-all border ${
-                  active
-                    ? 'bg-white text-blue-950 border-white shadow-sm'
-                    : 'bg-white/10 text-blue-100 border-white/15 hover:bg-white/20'
-                }`}
-              >
-                {brand}
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -528,6 +681,12 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onGoToHistory }) => {
         product={receiptData?.product || null}
         referencia={receiptData?.referencia || ''}
         onGoToHistory={onGoToHistory}
+      />
+
+      {/* Quick Profile / Fund Account Modal from Banking Card */}
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
       />
     </div>
   );

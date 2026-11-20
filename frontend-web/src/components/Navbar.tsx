@@ -102,14 +102,16 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
             <div className="flex items-center gap-2 sm:gap-3">
               {/* Available Balance Pill */}
               {user && (
-                <div className="hidden sm:flex items-center gap-2.5 bg-blue-950 text-white px-4 py-2 rounded-2xl shadow-sm border border-blue-900">
-                  <div className="flex items-center gap-1.5">
-                    <Wallet className="w-4 h-4 text-blue-300" />
+                <div className="hidden sm:flex items-center gap-2.5 bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-950 text-white px-4 py-2 rounded-2xl shadow-[0_8px_20px_-4px_rgba(15,23,42,0.55),0_0_15px_-3px_rgba(37,99,235,0.35)] border border-amber-300/30 ring-1 ring-white/10">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-xl bg-gradient-to-br from-amber-300/25 to-amber-500/10 border border-amber-300/40">
+                      <Wallet className="w-3.5 h-3.5 text-amber-300" />
+                    </div>
                     <div className="text-right">
-                      <span className="text-[10px] text-blue-300 block leading-none font-medium">
+                      <span className="text-[10px] text-amber-200/90 block leading-none font-bold tracking-wide">
                         Saldo Cuenta {user.numeroCuenta ? `••${user.numeroCuenta.slice(-4)}` : ''}
                       </span>
-                      <span className="text-sm font-extrabold tracking-tight">
+                      <span className="text-sm font-black tracking-tight text-white drop-shadow-sm">
                         {formatCurrency(user.saldo)}
                       </span>
                     </div>
@@ -118,7 +120,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
                     type="button"
                     onClick={handleRefresh}
                     title="Actualizar saldo"
-                    className="p-1 hover:bg-white/10 rounded-full transition-colors text-blue-200 hover:text-white"
+                    className="p-1.5 hover:bg-white/15 rounded-full transition-colors text-blue-200 hover:text-white"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
                   </button>

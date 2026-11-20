@@ -185,6 +185,7 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       mockTelcelProduct,
       mockCfeProduct,
       {
+        ...mockCfeProduct,
         id: '301',
         name: 'Agua SIAPA',
         service: 'SIAPA',
@@ -194,6 +195,7 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         categoryId: '15',
       },
       {
+        ...mockCfeProduct,
         id: '302',
         name: 'Internet IZZI',
         service: 'IZZI',
@@ -203,6 +205,7 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         categoryId: '4',
       },
       {
+        ...mockTelcelProduct,
         id: '303',
         name: 'Recarga PASE',
         service: 'PASE',
@@ -212,6 +215,7 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         categoryId: '18',
       },
       {
+        ...mockCfeProduct,
         id: '304',
         name: 'Pago Infonavit',
         service: 'INFONAVIT',
@@ -221,6 +225,7 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         categoryId: '8',
       },
       {
+        ...mockTelcelProduct,
         id: '305',
         name: 'Tarjeta Netflix',
         service: 'NETFLIX',
@@ -244,6 +249,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await waitFor(() =>
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
+
+      // Verify Premium Banking Card renders and its refresh button works
+      expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
+      await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
 
       // Filter by frontType Recargas and Pago de Servicios
       await user.click(screen.getByRole('button', { name: /^Recargas$/i }));
@@ -307,6 +316,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await waitFor(() =>
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
+
+      // Verify Premium Banking Card renders and its refresh button works
+      expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
+      await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
 
       const loadMoreBtn = screen.getByRole('button', { name: /Mostrar .* más/i });
       await user.click(loadMoreBtn);
@@ -437,6 +450,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
 
+      // Verify Premium Banking Card renders and its refresh button works
+      expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
+      await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
+
       await user.click(screen.getByRole('button', { name: /Historial de Pagos/i }));
       await waitFor(() =>
         expect(screen.getByText(/Aún no registras operaciones/i)).toBeInTheDocument()
@@ -447,6 +464,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await waitFor(() =>
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
+
+      // Verify Premium Banking Card renders and its refresh button works
+      expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
+      await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
     });
   });
 });
