@@ -165,10 +165,98 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
     @Transactional(readOnly = true)
     public List<AdminUsuarioDTO> listarTodosLosUsuarios(String adminAutenticado) {
         ownershipValidator.validarPrivilegiosAdmin(adminAutenticado);
+        List<Object[]> rows = clienteRepo.findAllResumenAdminRaw();
+        if (rows != null && !rows.isEmpty()) {
+            return rows.stream()
+                    .map(this::mapRawRowToDto)
+                    .collect(Collectors.toList());
+        }
         return clienteRepo.findAll(Sort.by(Sort.Direction.DESC, "id"))
                 .stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
+    }
+
+    private AdminUsuarioDTO mapRawRowToDto(Object[] row) {
+        Long id = row[0] != null ? ((Number) row[0]).longValue() : null;
+        String usr = row[1] != null ? row[1].toString() : null;
+        String nombre = row[2] != null ? row[2].toString() : "";
+        String segundo = row[3] != null ? row[3].toString() : null;
+        String pat = row[4] != null ? row[4].toString() : "";
+        String mat = row[5] != null ? row[5].toString() : "";
+
+        LocalDate fechaNac = null;
+        if (row[6] instanceof LocalDate ld) {
+            fechaNac = ld;
+        } else if (row[6] instanceof java.sql.Date sd) {
+            fechaNac = sd.toLocalDate();
+        } else if (row[6] != null) {
+            try {
+                fechaNac = LocalDate.parse(row[6].toString());
+            } catch (Exception ignored) {
+            }
+        }
+
+        String sexo = row[7] != null ? row[7].toString() : null;
+        String curp = row[8] != null ? row[8].toString() : null;
+        String rfc = row[9] != null ? row[9].toString() : null;
+        String correo = row[10] != null ? row[10].toString() : "";
+        String tel = row[11] != null ? row[11].toString() : "";
+        String numCuenta = row[12] != null ? row[12].toString() : null;
+        String estatusCuenta = row[13] != null ? row[13].toString() : "SIN_CUENTA";
+        BigDecimal saldo = BigDecimal.ZERO;
+        if (row[14] instanceof BigDecimal bd) {
+            saldo = bd;
+        } else if (row[14] instanceof Number n) {
+            saldo = BigDecimal.valueOf(n.doubleValue());
+        }
+        boolean activo = row[15] instanceof Boolean b ? b : Boolean.parseBoolean(String.valueOf(row[15]));
+        boolean bloqueado = row[16] instanceof Boolean b ? b : Boolean.parseBoolean(String.valueOf(row[16]));
+        int intentos = row[17] instanceof Number n ? n.intValue() : 0;
+        boolean huella = row[18] instanceof Boolean b ? b : Boolean.parseBoolean(String.valueOf(row[18]));
+        LocalDateTime ultimoAcceso = toLocalDateTime(row[19]);
+        LocalDateTime fechaRegistro = toLocalDateTime(row[20]);
+
+        boolean admin = AuthServiceImpl.esUsuarioAdmin(usr);
+        StringBuilder full = new StringBuilder();
+        if (!nombre.isBlank()) full.append(nombre.trim());
+        if (segundo != null && !segundo.isBlank()) full.append(" ").append(segundo.trim());
+        if (!pat.isBlank()) full.append(" ").append(pat.trim());
+        if (!mat.isBlank()) full.append(" ").append(mat.trim());
+
+        return AdminUsuarioDTO.builder()
+                .clienteId(id)
+                .usuario(usr)
+                .rol(admin ? "ADMIN" : "CLIENTE")
+                .esAdmin(admin)
+                .nombre(nombre)
+                .segundoNombre(segundo)
+                .apellidoPaterno(pat)
+                .apellidoMaterno(mat)
+                .nombreCompleto(full.toString().trim())
+                .fechaNacimiento(fechaNac)
+                .sexo(sexo)
+                .curp(curp)
+                .rfc(rfc)
+                .correo(correo)
+                .telefonoMovil(tel)
+                .numeroCuenta(numCuenta)
+                .estatusCuenta(estatusCuenta)
+                .saldo(saldo)
+                .activo(activo)
+                .bloqueado(bloqueado)
+                .intentosFallidos(intentos)
+                .biometriaActiva(huella)
+                .ultimoAcceso(ultimoAcceso)
+                .fechaRegistro(fechaRegistro)
+                .build();
+    }
+
+    private LocalDateTime toLocalDateTime(Object value) {
+        if (value == null) return null;
+        if (value instanceof LocalDateTime ldt) return ldt;
+        if (value instanceof java.sql.Timestamp ts) return ts.toLocalDateTime();
+        return null;
     }
 
     @Override

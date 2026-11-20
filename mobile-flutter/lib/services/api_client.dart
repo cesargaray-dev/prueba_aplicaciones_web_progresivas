@@ -180,7 +180,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .get(uri, headers: _buildHeaders())
-          .timeout(const Duration(seconds: 15));
+          .timeout(const Duration(seconds: 45));
 
       return _processResponse(response, path: path);
     } catch (e) {
@@ -231,7 +231,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .post(uri, headers: _buildHeaders(), body: payload)
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 45));
 
       final parsed = _processResponse(response, path: path);
       return (statusCode: response.statusCode, body: parsed);
@@ -256,7 +256,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .put(uri, headers: _buildHeaders(), body: payload)
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 45));
 
       return _processResponse(response, path: path);
     } catch (e) {
@@ -277,7 +277,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .delete(uri, headers: _buildHeaders())
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 45));
 
       return _processResponse(response, path: path);
     } catch (e) {

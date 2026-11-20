@@ -164,8 +164,46 @@ class _LoginScreenState extends State<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'URL base del backend Spring Boot. En tu celular conectado al mismo Wi-Fi usa la IP local de tu PC (ej. http://192.168.1.50:10000) o https:// si está en la nube.',
+                'Elige un servidor rápido o escribe la URL del backend Spring Boot:',
                 style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    label: const Text('Nube (Render)', style: TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      setDialogState(() {
+                        _apiUrlController.text =
+                            'https://prueba-aplicaciones-web-progresivas.onrender.com';
+                        inlineError = null;
+                      });
+                    },
+                  ),
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    label: const Text('USB Local', style: TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      setDialogState(() {
+                        _apiUrlController.text = 'http://localhost:10000';
+                        inlineError = null;
+                      });
+                    },
+                  ),
+                  ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    label: const Text('Wi-Fi PC', style: TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      setDialogState(() {
+                        _apiUrlController.text = 'http://10.31.5.23:10000';
+                        inlineError = null;
+                      });
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               TextField(

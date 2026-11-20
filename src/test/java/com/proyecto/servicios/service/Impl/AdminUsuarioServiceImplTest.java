@@ -127,6 +127,42 @@ class AdminUsuarioServiceImplTest {
     }
 
     @Test
+    void listarUsaConsultaNativaRapidaCuandoRetornaFilas() {
+        Object[] row = new Object[]{
+                1L,
+                "admin",
+                "ADMINISTRADOR",
+                "GENERAL",
+                "BANCO",
+                "DIGITAL",
+                java.sql.Date.valueOf("1990-01-01"),
+                "HOMBRE",
+                "ADMG900101HDFRSL09",
+                "ADMG900101ADM",
+                "admin@bancodigital.com.mx",
+                "5523456789",
+                "4000000000000001",
+                "ACTIVA",
+                new BigDecimal("10000.00"),
+                Boolean.TRUE,
+                Boolean.FALSE,
+                0,
+                Boolean.TRUE,
+                java.sql.Timestamp.valueOf("2026-11-20 12:00:00"),
+                java.sql.Timestamp.valueOf("2026-11-01 10:00:00")
+        };
+        when(clienteRepo.findAllResumenAdminRaw()).thenReturn(List.<Object[]>of(row));
+
+        List<AdminUsuarioDTO> result = service.listarTodosLosUsuarios("admin");
+        assertEquals(1, result.size());
+        assertEquals("admin", result.get(0).getUsuario());
+        assertTrue(result.get(0).getEsAdmin());
+        assertTrue(result.get(0).getBiometriaActiva());
+        assertEquals(new BigDecimal("10000.00"), result.get(0).getSaldo());
+        verify(clienteRepo, never()).findAll(any(Sort.class));
+    }
+
+    @Test
     void listarCrearActualizarYEliminarUsuariosDesdeController() {
         Cliente user = buildSampleCliente(2L, "carlos98");
         when(clienteRepo.findAll(any(Sort.class))).thenReturn(List.of(user));

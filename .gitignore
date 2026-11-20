@@ -66,6 +66,7 @@ mobile-flutter/.dart_tool/
 mobile-flutter/.flutter-plugins
 mobile-flutter/.flutter-plugins-dependencies
 mobile-flutter/coverage/
+frontend-web/public/*.apk
 **/__pycache__/
 *.pyc
 

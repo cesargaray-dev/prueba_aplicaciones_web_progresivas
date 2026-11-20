@@ -103,13 +103,17 @@ export const AdminUsersPage: React.FC = () => {
       if (statusFilter === 'ACTIVE' && (!u.activo || u.bloqueado)) return false;
       if (statusFilter === 'INACTIVE' && u.activo && !u.bloqueado) return false;
       if (!q) return true;
-      return (
-        u.nombreCompleto.toLowerCase().includes(q) ||
-        u.usuario.toLowerCase().includes(q) ||
-        u.correo.toLowerCase().includes(q) ||
-        u.telefonoMovil.includes(q) ||
-        u.numeroCuenta.includes(q)
-      );
+      const haystack = [
+        u.nombreCompleto,
+        u.usuario,
+        u.correo,
+        u.telefonoMovil,
+        u.numeroCuenta,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
     });
   }, [users, searchQuery, statusFilter]);
 
@@ -117,7 +121,7 @@ export const AdminUsersPage: React.FC = () => {
     const total = users.length;
     const activos = users.filter((u) => u.activo && !u.bloqueado).length;
     const inactivosOBloqueados = total - activos;
-    const saldoTotal = users.reduce((acc, u) => acc + Number(u.saldo), 0);
+    const saldoTotal = users.reduce((acc, u) => acc + Number(u.saldo ?? 0), 0);
     return { total, activos, inactivosOBloqueados, saldoTotal };
   }, [users]);
 
@@ -128,14 +132,14 @@ export const AdminUsersPage: React.FC = () => {
     setFeedback(null);
     setEditingUser(u);
     setEditForm({
-      nombre: u.nombre,
+      nombre: u.nombre ?? '',
       segundoNombre: u.segundoNombre ?? '',
-      apellidoPaterno: u.apellidoPaterno,
-      apellidoMaterno: u.apellidoMaterno,
-      correo: u.correo,
-      telefonoMovil: u.telefonoMovil,
-      usuario: u.usuario,
-      saldo: u.saldo,
+      apellidoPaterno: u.apellidoPaterno ?? '',
+      apellidoMaterno: u.apellidoMaterno ?? '',
+      correo: u.correo ?? '',
+      telefonoMovil: u.telefonoMovil ?? '',
+      usuario: u.usuario ?? '',
+      saldo: u.saldo ?? 0,
       activo: u.activo,
       bloqueado: u.bloqueado,
       nuevaContrasena: '',
