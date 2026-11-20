@@ -38,11 +38,15 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
             if (!token.isEmpty() && SecurityContextHolder.getContext().getAuthentication() == null) {
                 Optional<String> usuarioOpt = authService.validarTokenYObtenerUsuario(token);
                 if (usuarioOpt.isPresent()) {
+                    String username = usuarioOpt.get();
+                    List<SimpleGrantedAuthority> authorities = "admin".equalsIgnoreCase(username.trim())
+                            ? List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("ROLE_ADMIN"))
+                            : List.of(new SimpleGrantedAuthority("ROLE_USER"));
                     UsernamePasswordAuthenticationToken authentication =
                             new UsernamePasswordAuthenticationToken(
-                                    usuarioOpt.get(),
+                                    username,
                                     token,
-                                    List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                                    authorities);
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }

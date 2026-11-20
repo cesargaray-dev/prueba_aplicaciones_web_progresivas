@@ -12,6 +12,8 @@ class UserSession {
   final String numeroCuenta;
   final double saldo;
   final String? ultimoAcceso;
+  final bool esAdmin;
+  final String? rol;
 
   UserSession({
     required this.token,
@@ -27,12 +29,18 @@ class UserSession {
     required this.numeroCuenta,
     required this.saldo,
     this.ultimoAcceso,
+    this.esAdmin = false,
+    this.rol,
   });
 
+  bool get isAdmin => esAdmin || usuario.trim().toLowerCase() == 'admin' || rol == 'ADMIN';
+
   factory UserSession.fromJson(Map<String, dynamic> json, {String? existingToken}) {
+    final usr = (json['usuario'] ?? '').toString();
+    final adminFlag = json['esAdmin'] == true || usr.trim().toLowerCase() == 'admin';
     return UserSession(
       token: (json['token'] ?? existingToken ?? '').toString(),
-      usuario: (json['usuario'] ?? '').toString(),
+      usuario: usr,
       clienteId: json['clienteId'] is int
           ? json['clienteId']
           : int.tryParse(json['clienteId']?.toString() ?? '0') ?? 0,
@@ -48,6 +56,8 @@ class UserSession {
           ? (json['saldo'] as num).toDouble()
           : double.tryParse(json['saldo']?.toString() ?? '0') ?? 0.0,
       ultimoAcceso: json['ultimoAcceso']?.toString(),
+      esAdmin: adminFlag,
+      rol: json['rol']?.toString() ?? (adminFlag ? 'ADMIN' : 'CLIENTE'),
     );
   }
 
@@ -66,6 +76,8 @@ class UserSession {
       'numeroCuenta': numeroCuenta,
       'saldo': saldo,
       'ultimoAcceso': ultimoAcceso,
+      'esAdmin': esAdmin,
+      'rol': rol,
     };
   }
 
@@ -83,6 +95,8 @@ class UserSession {
     String? numeroCuenta,
     double? saldo,
     String? ultimoAcceso,
+    bool? esAdmin,
+    String? rol,
   }) {
     return UserSession(
       token: token ?? this.token,
@@ -98,6 +112,8 @@ class UserSession {
       numeroCuenta: numeroCuenta ?? this.numeroCuenta,
       saldo: saldo ?? this.saldo,
       ultimoAcceso: ultimoAcceso ?? this.ultimoAcceso,
+      esAdmin: esAdmin ?? this.esAdmin,
+      rol: rol ?? this.rol,
     );
   }
 

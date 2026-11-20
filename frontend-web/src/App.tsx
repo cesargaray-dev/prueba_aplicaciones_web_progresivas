@@ -5,13 +5,15 @@ import { Navbar } from './components/Navbar';
 import { LoginPage } from './pages/LoginPage';
 import { CatalogPage } from './pages/CatalogPage';
 import { HistoryPage } from './pages/HistoryPage';
+import { AdminUsersPage } from './pages/AdminUsersPage';
 import { Landmark, Loader2, ShieldCheck } from 'lucide-react';
 
 const CURRENT_YEAR = new Date().getFullYear();
 
 const MainLayout: React.FC = () => {
-  const { isAuthenticated, isInitializing } = useAuth();
-  const [activeTab, setActiveTab] = useState<'catalog' | 'history'>('catalog');
+  const { isAuthenticated, isInitializing, user } = useAuth();
+  const [activeTab, setActiveTab] = useState<'catalog' | 'history' | 'admin'>('catalog');
+  const isAdmin = Boolean(user?.esAdmin || user?.usuario?.toLowerCase() === 'admin');
 
   if (isInitializing) {
     return (
@@ -36,7 +38,9 @@ const MainLayout: React.FC = () => {
       <div>
         <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
         <main>
-          {activeTab === 'catalog' ? (
+          {activeTab === 'admin' && isAdmin ? (
+            <AdminUsersPage />
+          ) : activeTab === 'catalog' ? (
             <CatalogPage onGoToHistory={() => setActiveTab('history')} />
           ) : (
             <HistoryPage onGoToCatalog={() => setActiveTab('catalog')} />

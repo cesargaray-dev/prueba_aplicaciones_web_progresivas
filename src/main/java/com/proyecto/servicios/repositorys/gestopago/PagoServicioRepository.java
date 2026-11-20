@@ -14,6 +14,8 @@ public interface PagoServicioRepository extends JpaRepository<PagoServicio, Long
 
     List<PagoServicio> findByNumeroCuentaOrderByFechaOperacionDesc(String numeroCuenta);
 
+    List<PagoServicio> findByCuentaId(Long cuentaId);
+
     Optional<PagoServicio> findByFolioTicket(String folioTicket);
 
     boolean existsByFolioTicket(String folioTicket);

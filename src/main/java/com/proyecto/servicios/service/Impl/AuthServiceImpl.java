@@ -147,6 +147,7 @@ public class AuthServiceImpl implements AuthService {
         registrarSesion(token, username);
 
         log.info("Autenticación exitosa para usuario: {} con clienteId: {}", username, cliente.getId());
+        boolean isAdmin = esUsuarioAdmin(username);
 
         return LoginResponseDTO.builder()
                 .token(token)
@@ -158,6 +159,8 @@ public class AuthServiceImpl implements AuthService {
                 .numeroCuenta(cuenta != null ? cuenta.getNumeroCuenta() : null)
                 .saldo(saldo)
                 .ultimoAcceso(login.getUltimoAcceso())
+                .esAdmin(isAdmin)
+                .rol(isAdmin ? "ADMIN" : "CLIENTE")
                 .build();
     }
 
@@ -194,6 +197,7 @@ public class AuthServiceImpl implements AuthService {
         registrarSesion(token, username);
 
         log.info("Sesión emitida tras verificación alterna para usuario={} clienteId={}", username, cliente.getId());
+        boolean isAdmin = esUsuarioAdmin(username);
 
         return LoginResponseDTO.builder()
                 .token(token)
@@ -205,6 +209,8 @@ public class AuthServiceImpl implements AuthService {
                 .numeroCuenta(cuenta != null ? cuenta.getNumeroCuenta() : null)
                 .saldo(saldo)
                 .ultimoAcceso(login.getUltimoAcceso())
+                .esAdmin(isAdmin)
+                .rol(isAdmin ? "ADMIN" : "CLIENTE")
                 .build();
     }
 
@@ -257,6 +263,7 @@ public class AuthServiceImpl implements AuthService {
 
         Cuenta cuenta = obtenerCuentaCliente(cliente);
         BigDecimal saldo = obtenerSaldoCuenta(cuenta);
+        boolean isAdmin = esUsuarioAdmin(login.getUsuario());
 
         return UserProfileDTO.builder()
                 .clienteId(cliente.getId())
@@ -272,7 +279,13 @@ public class AuthServiceImpl implements AuthService {
                 .saldo(saldo)
                 .activo(cliente.getActivo())
                 .ultimoAcceso(login.getUltimoAcceso())
+                .esAdmin(isAdmin)
+                .rol(isAdmin ? "ADMIN" : "CLIENTE")
                 .build();
+    }
+
+    public static boolean esUsuarioAdmin(String usuario) {
+        return usuario != null && "admin".equalsIgnoreCase(usuario.trim());
     }
 
     @Override

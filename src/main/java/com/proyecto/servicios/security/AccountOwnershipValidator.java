@@ -34,6 +34,10 @@ public class AccountOwnershipValidator {
             throw new AccessDeniedException(MENSAJE_FORBIDDEN);
         }
 
+        if (esAdmin(usuarioAutenticado)) {
+            return;
+        }
+
         LoginCliente login = loginClienteRepository.findByUsuario(usuarioAutenticado.trim())
                 .orElseThrow(() -> new AutenticacionException("Sesión no autorizada."));
 
@@ -48,5 +52,18 @@ public class AccountOwnershipValidator {
                 || !cuenta.getNumeroCuenta().equals(numeroCuenta.trim())) {
             throw new AccessDeniedException(MENSAJE_FORBIDDEN);
         }
+    }
+
+    public void validarPrivilegiosAdmin(String usuarioAutenticado) {
+        if (usuarioAutenticado == null || usuarioAutenticado.isBlank()) {
+            throw new AutenticacionException("Sesión no autorizada.");
+        }
+        if (!esAdmin(usuarioAutenticado)) {
+            throw new AccessDeniedException("Se requieren privilegios de administrador para realizar esta operación.");
+        }
+    }
+
+    public boolean esAdmin(String usuarioAutenticado) {
+        return usuarioAutenticado != null && "admin".equalsIgnoreCase(usuarioAutenticado.trim());
     }
 }

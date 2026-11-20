@@ -8,14 +8,15 @@ import {
   Clock,
   Wallet,
   UserCog,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import { ProfileModal } from './ProfileModal';
 import { esCorreoPlaceholder } from '../utils/validation';
 
 interface NavbarProps {
-  activeTab: 'catalog' | 'history';
-  setActiveTab: (tab: 'catalog' | 'history') => void;
+  activeTab: 'catalog' | 'history' | 'admin';
+  setActiveTab: (tab: 'catalog' | 'history' | 'admin') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
@@ -43,6 +44,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
   };
 
   const needsRealEmail = esCorreoPlaceholder(user?.email || '');
+  const isAdmin = Boolean(user?.esAdmin || user?.usuario?.toLowerCase() === 'admin');
 
   return (
     <>
@@ -96,6 +98,21 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
                 <History className="w-4 h-4" />
                 <span>Historial de Pagos</span>
               </button>
+
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('admin')}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                    activeTab === 'admin'
+                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-sm'
+                      : 'text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/60'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Panel Admin</span>
+                </button>
+              )}
             </nav>
 
             {/* Right Section: Account, Balance, Profile, Logout */}
@@ -208,6 +225,20 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
                 <History className="w-3.5 h-3.5" />
                 <span>Historial</span>
               </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('admin')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1 ${
+                    activeTab === 'admin'
+                      ? 'bg-amber-400 text-slate-950'
+                      : 'text-amber-900 bg-amber-100'
+                  }`}
+                >
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <span>Admin</span>
+                </button>
+              )}
             </div>
             {user && (
               <button

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authApi } from '../api/authApi';
+import { adminApi } from '../api/adminApi';
 import { catalogApi } from '../api/catalogApi';
 import { paymentApi } from '../api/paymentApi';
 import { historyApi } from '../api/historyApi';
@@ -303,6 +304,51 @@ describe('Frontend API Client Suite', () => {
       const res = await historyApi.getHistorial('5225253189113705');
       expect(res.pagos).toHaveLength(1);
       expect(res.pagos[0].estado).toBe('EXITOSA');
+    });
+
+    it('calls adminApi CRUD endpoints cleanly', async () => {
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => [{ clienteId: 1, usuario: 'admin' }],
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ clienteId: 2, usuario: 'nuevo' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ clienteId: 2, usuario: 'editado' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ codigo: 0, mensaje: 'Eliminado' }),
+        } as Response);
+
+      const list = await adminApi.listarUsuarios();
+      expect(list[0].usuario).toBe('admin');
+
+      const created = await adminApi.crearUsuario({
+        nombre: 'A',
+        apellidoPaterno: 'B',
+        apellidoMaterno: 'C',
+        fechaNacimiento: '1990-01-01',
+        correo: 'a@gmail.com',
+        telefonoMovil: '5512345678',
+        usuario: 'nuevo',
+        contrasena: 'Password1',
+      });
+      expect(created.usuario).toBe('nuevo');
+
+      const updated = await adminApi.actualizarUsuario(2, { nombre: 'AA' });
+      expect(updated.usuario).toBe('editado');
+
+      const deleted = await adminApi.eliminarUsuario(2);
+      expect(deleted.codigo).toBe(0);
     });
   });
 });

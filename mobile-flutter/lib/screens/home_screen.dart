@@ -10,6 +10,7 @@ import '../widgets/banking_card.dart';
 import '../widgets/category_chips.dart';
 import '../widgets/profile_sheet.dart';
 import '../widgets/service_card.dart';
+import 'admin_users_screen.dart';
 import 'history_screen.dart';
 import 'payment_flow_dialog.dart';
 
@@ -212,14 +213,20 @@ class _HomeScreenState extends State<HomeScreen> {
               Icon(
                 _currentTabIndex == 0
                     ? Icons.account_balance_rounded
-                    : Icons.receipt_long_rounded,
+                    : _currentTabIndex == 1
+                        ? Icons.receipt_long_rounded
+                        : Icons.admin_panel_settings_rounded,
                 color: Colors.white,
                 size: 22,
               ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  _currentTabIndex == 0 ? 'Banco Digital' : 'Historial de Pagos',
+                  _currentTabIndex == 0
+                      ? 'Banco Digital'
+                      : _currentTabIndex == 1
+                          ? 'Historial de Pagos'
+                          : 'Consola Admin',
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -297,15 +304,19 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         body: _currentTabIndex == 0
             ? _buildCatalogView(catalog)
-            : HistoryScreen(
-                onExploreCatalog: () {
-                  setState(() {
-                    _currentTabIndex = 0;
-                  });
-                },
-              ),
+            : (_currentTabIndex == 2 && session != null && session.isAdmin)
+                ? const AdminUsersScreen()
+                : HistoryScreen(
+                    onExploreCatalog: () {
+                      setState(() {
+                        _currentTabIndex = 0;
+                      });
+                    },
+                  ),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentTabIndex,
+          selectedIndex: (_currentTabIndex == 2 && (session == null || !session.isAdmin))
+              ? 0
+              : _currentTabIndex,
           backgroundColor: AppTheme.surfaceWhite,
           indicatorColor: AppTheme.secondaryBlue.withValues(alpha: 0.14),
           onDestinationSelected: (index) {
@@ -317,17 +328,26 @@ class _HomeScreenState extends State<HomeScreen> {
                   .loadHistory(session.numeroCuenta);
             }
           },
-          destinations: const [
-            NavigationDestination(
+          destinations: [
+            const NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               selectedIcon: Icon(Icons.dashboard_rounded, color: AppTheme.secondaryBlue),
               label: 'Catálogo',
             ),
-            NavigationDestination(
+            const NavigationDestination(
               icon: Icon(Icons.receipt_long_outlined),
               selectedIcon: Icon(Icons.receipt_long_rounded, color: AppTheme.secondaryBlue),
               label: 'Historial',
             ),
+            if (session != null && session.isAdmin)
+              const NavigationDestination(
+                icon: Icon(Icons.admin_panel_settings_outlined),
+                selectedIcon: Icon(
+                  Icons.admin_panel_settings_rounded,
+                  color: AppTheme.secondaryBlue,
+                ),
+                label: 'Usuarios',
+              ),
           ],
         ),
       ),

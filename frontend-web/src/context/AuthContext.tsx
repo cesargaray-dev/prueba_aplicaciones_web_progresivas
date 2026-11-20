@@ -28,6 +28,8 @@ const profileToLoginResponse = (profile: UserProfile, token: string): LoginRespo
   numeroCuenta: profile.numeroCuenta,
   saldo: profile.saldo,
   ultimoAcceso: profile.ultimoAcceso,
+  esAdmin: profile.esAdmin ?? profile.usuario?.toLowerCase() === 'admin',
+  rol: profile.rol ?? (profile.usuario?.toLowerCase() === 'admin' ? 'ADMIN' : 'CLIENTE'),
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -69,6 +71,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         apellidoMaterno: profile.apellidoMaterno ?? prev.apellidoMaterno,
         nombreCompleto: profile.nombreCompleto || prev.nombreCompleto,
         ultimoAcceso: profile.ultimoAcceso ?? prev.ultimoAcceso,
+        esAdmin: profile.esAdmin ?? prev.esAdmin ?? profile.usuario?.toLowerCase() === 'admin',
+        rol: profile.rol ?? prev.rol,
       };
     });
   }, []);

@@ -10,7 +10,7 @@ describe('Navbar Component', () => {
     const setActiveTab = vi.fn();
     const ctx = createMockAuthContext({
       secondsRemaining: 45,
-      user: { ...mockLoginResponse, email: 'demo@ejemplo.com' },
+      user: { ...mockLoginResponse, usuario: 'admin', esAdmin: true, email: 'demo@ejemplo.com' },
     });
 
     render(
@@ -23,9 +23,11 @@ describe('Navbar Component', () => {
     expect(screen.getByText('0:45')).toBeInTheDocument();
     expect(screen.getAllByText(/\$500\.00/).length).toBeGreaterThan(0);
 
-    // Switch tab
+    // Switch tab to History and Admin
     await user.click(screen.getByRole('button', { name: /Historial de Pagos/i }));
     expect(setActiveTab).toHaveBeenCalledWith('history');
+    await user.click(screen.getByRole('button', { name: /Panel Admin/i }));
+    expect(setActiveTab).toHaveBeenCalledWith('admin');
 
     // Refresh balance
     await user.click(screen.getByTitle('Actualizar saldo'));

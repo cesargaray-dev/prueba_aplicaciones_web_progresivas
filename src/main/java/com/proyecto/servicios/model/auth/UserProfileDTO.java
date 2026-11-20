@@ -58,4 +58,10 @@ public class UserProfileDTO {
     @Schema(description = "Fecha y hora del último acceso", example = "2026-11-14 00:40:00")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime ultimoAcceso;
+
+    @Schema(description = "Indica si el usuario tiene privilegios de administrador", example = "false")
+    private Boolean esAdmin;
+
+    @Schema(description = "Rol del usuario en la plataforma (ADMIN o CLIENTE)", example = "CLIENTE")
+    private String rol;
 }

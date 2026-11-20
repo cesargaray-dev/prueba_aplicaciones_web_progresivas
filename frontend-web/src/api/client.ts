@@ -257,4 +257,10 @@ export const apiClient = {
       method: 'PUT',
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
+
+  delete: <T>(endpoint: string, options?: ApiRequestOptions) =>
+    request<T>(endpoint, {
+      ...options,
+      method: 'DELETE',
+    }),
 };

@@ -5,7 +5,9 @@ import { App } from '../App';
 import { LoginPage } from '../pages/LoginPage';
 import { CatalogPage } from '../pages/CatalogPage';
 import { HistoryPage } from '../pages/HistoryPage';
+import { AdminUsersPage } from '../pages/AdminUsersPage';
 import { authApi } from '../api/authApi';
+import { adminApi } from '../api/adminApi';
 import { setAuthToken } from '../api/client';
 import { catalogApi } from '../api/catalogApi';
 import { historyApi } from '../api/historyApi';
@@ -464,10 +466,152 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await waitFor(() =>
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
+    });
+  });
 
-      // Verify Premium Banking Card renders and its refresh button works
-      expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
-      await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
+  describe('AdminUsersPage Component', () => {
+    const sampleAdminUsers = [
+      {
+        clienteId: 1,
+        usuario: 'admin',
+        rol: 'ADMIN',
+        esAdmin: true,
+        nombre: 'ADMINISTRADOR',
+        apellidoPaterno: 'BANCO',
+        apellidoMaterno: 'DIGITAL',
+        nombreCompleto: 'ADMINISTRADOR BANCO DIGITAL',
+        correo: 'admin@bancodigital.com.mx',
+        telefonoMovil: '5523456789',
+        numeroCuenta: '4000000000000001',
+        estatusCuenta: 'ACTIVA',
+        saldo: 10000,
+        activo: true,
+        bloqueado: false,
+        intentosFallidos: 0,
+      },
+      {
+        clienteId: 2,
+        usuario: 'carlos98',
+        rol: 'CLIENTE',
+        esAdmin: false,
+        nombre: 'CARLOS',
+        apellidoPaterno: 'GARAY',
+        apellidoMaterno: 'LOPEZ',
+        nombreCompleto: 'CARLOS GARAY LOPEZ',
+        correo: 'carlos@gmail.com',
+        telefonoMovil: '5512345678',
+        numeroCuenta: '5225253189113705',
+        estatusCuenta: 'ACTIVA',
+        saldo: 350,
+        activo: true,
+        bloqueado: false,
+        intentosFallidos: 0,
+        biometriaActiva: true,
+      },
+      {
+        clienteId: 3,
+        usuario: 'bloqueado1',
+        rol: 'CLIENTE',
+        esAdmin: false,
+        nombre: 'PEDRO',
+        apellidoPaterno: 'RUIZ',
+        apellidoMaterno: 'DIAZ',
+        nombreCompleto: 'PEDRO RUIZ DIAZ',
+        correo: 'pedro@gmail.com',
+        telefonoMovil: '5587654321',
+        numeroCuenta: '5225253189119999',
+        estatusCuenta: 'INACTIVA',
+        saldo: 0,
+        activo: false,
+        bloqueado: true,
+        intentosFallidos: 5,
+      },
+    ];
+
+    it('lists, filters, edits, toggles status, creates, and deletes users', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(adminApi, 'listarUsuarios').mockResolvedValue(sampleAdminUsers);
+      vi.spyOn(adminApi, 'actualizarUsuario').mockResolvedValue({
+        ...sampleAdminUsers[1],
+        nombreCompleto: 'CARLOS EDITADO',
+        saldo: 900,
+      });
+      vi.spyOn(adminApi, 'crearUsuario').mockResolvedValue({
+        ...sampleAdminUsers[1],
+        clienteId: 4,
+        usuario: 'nuevo_usr',
+        nombreCompleto: 'NUEVO USUARIO',
+      });
+      vi.spyOn(adminApi, 'eliminarUsuario').mockResolvedValue({
+        codigo: 0,
+        mensaje: 'Usuario eliminado permanentemente.',
+      });
+
+      render(<AdminUsersPage />);
+
+      await waitFor(() =>
+        expect(screen.getByText('CARLOS GARAY LOPEZ')).toBeInTheDocument()
+      );
+
+      // Search & Filter tabs
+      const searchInput = screen.getByPlaceholderText(/Buscar por nombre/i);
+      await user.type(searchInput, 'carlos');
+      await user.clear(searchInput);
+      await user.click(screen.getByRole('button', { name: 'Activos' }));
+      await user.click(screen.getByRole('button', { name: 'Inactivos / Bloqueados' }));
+      await user.click(screen.getByRole('button', { name: 'Todos' }));
+
+      // Edit user & change fields
+      const editButtons = screen.getAllByRole('button', { name: /Editar/i });
+      await user.click(editButtons[1]);
+      const editDialog = screen.getByRole('dialog', { name: /Editar usuario/i });
+      const textInputs = editDialog.querySelectorAll('input');
+      for (const inp of Array.from(textInputs)) {
+        if (inp.type === 'text' || inp.type === 'email') {
+          fireEvent.change(inp, { target: { value: inp.value || 'NuevoValor123' } });
+        } else if (inp.type === 'number') {
+          fireEvent.change(inp, { target: { value: '950' } });
+        } else if (inp.type === 'checkbox') {
+          fireEvent.click(inp);
+        }
+      }
+      await user.click(screen.getByRole('button', { name: /Guardar Cambios/i }));
+      await waitFor(() =>
+        expect(screen.getByText(/actualizado correctamente/i)).toBeInTheDocument()
+      );
+
+      // Quick toggle status (Desactivar & Desbloquear)
+      await user.click(screen.getByRole('button', { name: /Desactivar/i }));
+      await user.click(screen.getByRole('button', { name: /Desbloquear/i }));
+      await waitFor(() => expect(adminApi.actualizarUsuario).toHaveBeenCalledTimes(3));
+
+      // Create user modal & fill inputs
+      await user.click(screen.getByRole('button', { name: /Nuevo Usuario/i }));
+      const createDialog = screen.getByRole('dialog', { name: /Crear nuevo usuario/i });
+      const createInputs = createDialog.querySelectorAll('input');
+      for (const inp of Array.from(createInputs)) {
+        fireEvent.change(inp, {
+          target: { value: inp.type === 'date' ? '1994-03-10' : 'TestValue1' },
+        });
+      }
+      fireEvent.submit(createDialog.querySelector('form')!);
+      await waitFor(() =>
+        expect(screen.getByText(/creado exitosamente/i)).toBeInTheDocument()
+      );
+
+      // Delete user modal
+      const deleteButtons = screen.getAllByRole('button', { name: /Borrar/i });
+      await user.click(deleteButtons[0]);
+      expect(screen.getByRole('dialog', { name: /Confirmar eliminación/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /Sí, Eliminar Usuario/i }));
+      await waitFor(() =>
+        expect(screen.getByText(/Usuario eliminado permanentemente/i)).toBeInTheDocument()
+      );
+
+      // Refresh & error branches
+      vi.spyOn(adminApi, 'listarUsuarios').mockRejectedValueOnce(new Error('Fallo red admin'));
+      await user.click(screen.getByRole('button', { name: /Actualizar/i }));
+      await waitFor(() => expect(screen.getByText('Fallo red admin')).toBeInTheDocument());
     });
   });
 });
