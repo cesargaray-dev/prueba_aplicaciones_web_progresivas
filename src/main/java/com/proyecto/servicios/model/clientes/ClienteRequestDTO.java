@@ -1,5 +1,6 @@
 package com.proyecto.servicios.model.clientes;
 
+import com.proyecto.servicios.validation.TelefonoMexicano;
 import jakarta.validation.constraints.*;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
@@ -68,10 +69,10 @@ public class ClienteRequestDTO {
     private String correo;
 
     @NotBlank(message = "El teléfono móvil es obligatorio")
-    @Pattern(regexp = "^\\d{10}$", message = "El teléfono móvil debe contener exactamente 10 dígitos. No se aceptan letras ni caracteres especiales")
+    @TelefonoMexicano(message = "El teléfono móvil debe ser un número mexicano válido de 10 dígitos (sin prefijo 0 ni 1, ni secuencias/dígitos repetidos)")
     private String telefonoMovil;
 
-    @Pattern(regexp = "^(\\d{10})?$", message = "El teléfono alternativo debe contener exactamente 10 dígitos. No se aceptan letras ni caracteres especiales")
+    @TelefonoMexicano(optional = true, message = "El teléfono alternativo debe ser un número mexicano válido de 10 dígitos")
     private String telefonoAlternativo;
 
     // ───────────────────── DATOS LABORALES ─────────────────────

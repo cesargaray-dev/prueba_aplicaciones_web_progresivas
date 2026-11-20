@@ -155,8 +155,25 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
             GestoPagoProductCache cacheBd = productCacheRepository.findTopByOrderByFechaActualizacionDesc().orElse(null);
             if (cacheBd != null && cacheBd.getProductosJson() != null) {
                 ProductGroupedResponse datos = objectMapper.readValue(cacheBd.getProductosJson(), ProductGroupedResponse.class);
-                datos.setOrigenDatos(DataSourceEnum.ERROR_REDIS);
-                return datos;
+                if (datos != null && !"VACIO".equalsIgnoreCase(datos.getStatus())
+                        && datos.getGrupos() != null && !datos.getGrupos().isEmpty()) {
+                    datos.setOrigenDatos(DataSourceEnum.ERROR_REDIS);
+                    return datos;
+                }
+                ProductListResponse listaPlana = consultarServicioExterno();
+                if ((listaPlana == null || listaPlana.getData() == null || listaPlana.getData().isEmpty())
+                        && java.nio.file.Files.exists(java.nio.file.Path.of("response.xml"))) {
+                    listaPlana = parsearRespuesta(java.nio.file.Files.readString(java.nio.file.Path.of("response.xml")));
+                    if (listaPlana != null) {
+                        listaPlana.calcularStatus();
+                    }
+                }
+                ProductGroupedResponse groupedResponse = agruparProductos(listaPlana);
+                if (groupedResponse.getGrupos() != null && !groupedResponse.getGrupos().isEmpty()) {
+                    guardarEnBd(groupedResponse);
+                    groupedResponse.setOrigenDatos(DataSourceEnum.ERROR_REDIS);
+                    return groupedResponse;
+                }
             }
             throw new RuntimeException("Caché en BD vacía");
         } catch (Exception eBd) {
@@ -312,7 +329,14 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
         if (rawResponse == null || rawResponse.isBlank()) {
             return null;
         }
-        String trimmed = rawResponse.trim();
+        String trimmed = rawResponse.replace("\uFEFF", "").trim();
+        if (trimmed.contains("┬í") || trimmed.contains("Ã¡") || trimmed.contains("Ã©")) {
+            byte[] cp437OrLatin1 = trimmed.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+            String candidate = new String(cp437OrLatin1, java.nio.charset.StandardCharsets.UTF_8);
+            if (!candidate.contains("\uFFFD")) {
+                trimmed = candidate;
+            }
+        }
         if (trimmed.startsWith("<")) {
             // Respuesta en formato XML
             log.debug("Respuesta detectada como XML, parseando con XmlMapper");
@@ -335,7 +359,7 @@ public class GestoPagoProductServiceImpl implements GestoPagoProductService {
             redisTemplate.opsForValue().set(REDIS_KEY, json, cacheTtlHoras, TimeUnit.HOURS);
             log.info("Productos agrupados guardados en Redis (TTL: {} hora(s))", cacheTtlHoras);
         } catch (Exception redisEx) {
-            log.error("Redis no disponible. Guardando caché agrupada en BD como fallback", redisEx);
+            log.warn("Redis no disponible ({}). Guardando caché agrupada en BD como respaldo.", redisEx.getMessage());
             guardarEnBd(response);
         }
     }

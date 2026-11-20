@@ -62,6 +62,26 @@ class Soporte2FAServiceTest {
     }
 
     @Test
+    void generarYPropagarCodigo2FA_conRedisFallando_noLanzaExcepcion() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        doThrow(new RuntimeException("Redis error")).when(valueOperations).set(anyString(), anyString(), anyLong(), any());
+
+        assertDoesNotThrow(() -> soporte2FAService.invocarGenerar(CUENTA));
+    }
+
+    @Test
+    void generarYPropagarCodigo2FA_sinRedis_funcionaEnMemoria() {
+        Concrete2FAService serviceSinRedis = new Concrete2FAService(null);
+
+        Soporte2FAService.CodigoTemporal2FA result = serviceSinRedis.invocarGenerar(CUENTA);
+        assertNotNull(result);
+        assertDoesNotThrow(() -> serviceSinRedis.invocarValidar(CUENTA, result.getCodigo()));
+
+        serviceSinRedis.consumirCodigo2FA(CUENTA);
+        assertThrows(Autenticacion2FAException.class, () -> serviceSinRedis.invocarValidar(CUENTA, result.getCodigo()));
+    }
+
+    @Test
     void validarCodigo2FA_conCodigoValido_noLanzaExcepcion() {
         soporte2FAService.propagarCodigo2FA(CUENTA, "654321");
 
@@ -93,6 +113,30 @@ class Soporte2FAServiceTest {
     }
 
     @Test
+    void validarCodigo2FA_desdeRedisCuandoNoEstaEnMemoria() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn("777888");
+
+        assertDoesNotThrow(() -> soporte2FAService.invocarValidar(CUENTA, "777888"));
+    }
+
+    @Test
+    void validarCodigo2FA_desdeRedisVacioOBlank_lanzaExcepcion() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenReturn("");
+
+        assertThrows(Autenticacion2FAException.class, () -> soporte2FAService.invocarValidar(CUENTA, "777888"));
+    }
+
+    @Test
+    void validarCodigo2FA_cuandoRedisLanzaExcepcion_lanzaAutenticacion2FAException() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(anyString())).thenThrow(new RuntimeException("Redis error"));
+
+        assertThrows(Autenticacion2FAException.class, () -> soporte2FAService.invocarValidar(CUENTA, "777888"));
+    }
+
+    @Test
     void consumirCodigo2FA_eliminaCodigoDeMemoriaYRedis() {
         when(redisTemplate.delete(anyString())).thenReturn(true);
         soporte2FAService.propagarCodigo2FA(CUENTA, "112233");
@@ -103,5 +147,11 @@ class Soporte2FAServiceTest {
                 () -> soporte2FAService.invocarValidar(CUENTA, "112233"));
         verify(redisTemplate, times(1)).delete(anyString());
     }
-}
 
+    @Test
+    void consumirCodigo2FA_conFalloEnRedis_noLanzaExcepcion() {
+        when(redisTemplate.delete(anyString())).thenThrow(new RuntimeException("Redis down"));
+
+        assertDoesNotThrow(() -> soporte2FAService.consumirCodigo2FA(CUENTA));
+    }
+}

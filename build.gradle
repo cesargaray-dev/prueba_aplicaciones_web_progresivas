@@ -28,6 +28,7 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-config-client:4.1.4'
     implementation 'org.springframework.cloud:spring-cloud-starter-openfeign:4.1.4'
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
@@ -49,7 +50,6 @@ dependencies {
     implementation 'io.lettuce:lettuce-core:6.5.1.RELEASE'
     //Seguridad
     //implementation 'io.jsonwebtoken:jjwt:0.9.1'
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
     implementation 'com.auth0:jwks-rsa:0.22.1'
     implementation 'com.auth0:java-jwt:4.4.0'
     //Utilerias Apache Commons
@@ -82,6 +82,7 @@ dependencies {
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.36'
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.mockito:mockito-inline:5.1.1'
     testImplementation 'com.h2database:h2:2.2.220'
     implementation 'io.jsonwebtoken:jjwt-api:0.11.5'
@@ -123,13 +124,15 @@ sonar {
         property "sonar.projectKey", "prueba_aplicaciones_web_progresivas"
         property "sonar.projectName", "Prueba Aplicaciones Web Progresivas"
         property "sonar.host.url", System.getenv("SONAR_HOST_URL") ?: (project.findProperty("sonar.host.url") ?: "http://localhost:9000")
-        property "sonar.login", System.getenv("SONAR_TOKEN") ?: (project.findProperty("sonar.login") ?: "squ_61c608b9c22e0f85643f0bd580cfabe2d92afbf5")
-        property "sonar.token", System.getenv("SONAR_TOKEN") ?: (project.findProperty("sonar.token") ?: "squ_61c608b9c22e0f85643f0bd580cfabe2d92afbf5")
+        def sonarToken = System.getenv("SONAR_TOKEN") ?: (project.findProperty("sonar.token") ?: project.findProperty("sonar.login"))
+        if (sonarToken) {
+            property "sonar.token", sonarToken
+        }
         property "sonar.sourceEncoding", "UTF-8"
         property "sonar.java.binaries", "${buildDir}/classes/java/main"
         property "sonar.coverage.jacoco.xmlReportPaths", "${buildDir}/reports/jacoco/test/jacocoTestReport.xml"
         property "sonar.exclusions", "**/App.java,**/model/**,**/entity/**,**/enums/**"
-        property "sonar.coverage.exclusions", "**/App.java,**/model/**,**/entity/**,**/enums/**,**/controller/**,**/client/**,**/repositorys/**,**/mapper/**,**/exception/**"
+        property "sonar.coverage.exclusions", "**/App.java,**/model/**,**/entity/**,**/enums/**,**/client/**,**/repositorys/**,**/mapper/**"
     }
 }
 

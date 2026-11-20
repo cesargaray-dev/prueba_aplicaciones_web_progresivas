@@ -54,7 +54,7 @@ public class ProductListResponse {
     /** Lista de productos (elemento contenedor: PRODUCTOS, elementos hijos: producto) */
     @JacksonXmlElementWrapper(localName = "PRODUCTOS")
     @JacksonXmlProperty(localName = "producto")
-    @JsonAlias({"data", "PRODUCTOS"})
+    @JsonAlias({"data"})
     private List<ProductDTO> data;
 
     /**

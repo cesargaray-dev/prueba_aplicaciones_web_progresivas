@@ -90,6 +90,17 @@ class GestoPagoTokenServiceImplTest {
     }
 
     @Test
+    void renovarToken_respuestaSinToken_noGuardaNada() {
+        GestoPagoAuthResponse authResponse = new GestoPagoAuthResponse();
+        authResponse.setToken(null);
+        when(authClient.authenticate(83, "GPS83-TPV-17", "12345678")).thenReturn(authResponse);
+
+        tokenService.renovarToken();
+
+        verify(tokenRepository, never()).save(any());
+    }
+
+    @Test
     void renovarToken_conExcepcion_manejaErrorYNoFalla() {
         when(authClient.authenticate(anyInt(), anyString(), anyString()))
                 .thenThrow(new RuntimeException("Connection timeout"));

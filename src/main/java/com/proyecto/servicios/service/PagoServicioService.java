@@ -4,6 +4,8 @@ import com.proyecto.servicios.model.gestopago.GenerarCodigo2FARequestDTO;
 import com.proyecto.servicios.model.gestopago.GenerarCodigo2FAResponseDTO;
 import com.proyecto.servicios.model.gestopago.PagoServicioRequestDTO;
 import com.proyecto.servicios.model.gestopago.PagoServicioResponseDTO;
+import com.proyecto.servicios.model.gestopago.ValidarReferenciaRequestDTO;
+import com.proyecto.servicios.model.gestopago.ValidarReferenciaResponseDTO;
 
 /**
  * Servicio de negocio para la gestión y ejecución de pagos de servicios
@@ -27,6 +29,15 @@ public interface PagoServicioService {
      * @return Comprobante de la operación con el saldo restante y folios de autorización.
      */
     PagoServicioResponseDTO procesarPagoServicio(PagoServicioRequestDTO request);
+
+    /**
+     * Valida el formato y reglas de negocio de una referencia o número telefónico
+     * para un servicio o producto de GestoPago (tipoFront, tipoReferencia, dígito verificador).
+     *
+     * @param request Datos de la referencia y servicio a validar.
+     * @return Resultado de la validación indicando si es válida y metadatos asociados.
+     */
+    ValidarReferenciaResponseDTO validarReferencia(ValidarReferenciaRequestDTO request);
 
     /**
      * Consulta el historial de pagos de servicios y recargas de una cuenta bancaria,

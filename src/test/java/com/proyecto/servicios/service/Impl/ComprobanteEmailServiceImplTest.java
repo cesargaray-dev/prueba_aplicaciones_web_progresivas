@@ -75,7 +75,54 @@ class ComprobanteEmailServiceImplTest {
         assertTrue(sent.getSubject().contains("100072555"));
         assertTrue(sent.getHtmlContent().contains("100072555"));
         assertTrue(sent.getHtmlContent().contains("IZZI Telecom"));
-        assertTrue(sent.getHtmlContent().contains("3456")); // Enmascarada
+        assertTrue(sent.getHtmlContent().contains("3456"));
+    }
+
+    @Test
+    void enviarComprobantePago_datosOpcionalesNulosYTelefono1111111111() {
+        Cliente cliente = new Cliente();
+        cliente.setNombre(null);
+        cliente.setApellidoPaterno(null);
+        cliente.setCorreo("cliente.anonimo@example.com");
+
+        Cuenta cuenta = new Cuenta();
+        cuenta.setNumeroCuenta("123"); // Cuenta corta (< 4 caracteres)
+
+        PagoServicio pago = new PagoServicio();
+        pago.setNumAutorizacion(null);
+        pago.setFolioTicket(null);
+        pago.setNombreServicio(null);
+        pago.setNombreProducto(null);
+        pago.setReferencia(null);
+        pago.setTelefono("1111111111"); // Teléfono ficticio para recibos
+        pago.setMontoPagado(null);
+        pago.setComision(null);
+        pago.setSaldoRestante(null);
+        pago.setFechaOperacion(null);
+
+        when(brevoEmailClient.sendEmail(eq("test-api-key"), any(BrevoEmailRequestDTO.class)))
+                .thenReturn(null); // response nulo
+
+        assertDoesNotThrow(() -> emailService.enviarComprobantePago(cuenta, cliente, pago));
+
+        ArgumentCaptor<BrevoEmailRequestDTO> captor = ArgumentCaptor.forClass(BrevoEmailRequestDTO.class);
+        verify(brevoEmailClient, times(1)).sendEmail(eq("test-api-key"), captor.capture());
+
+        BrevoEmailRequestDTO sent = captor.getValue();
+        assertTrue(sent.getHtmlContent().contains("Estimado(a) Cliente"));
+        assertTrue(sent.getHtmlContent().contains("No aplica (Servicio con recibo)"));
+        assertTrue(sent.getHtmlContent().contains("No aplica (Recarga de tiempo aire)"));
+        assertTrue(sent.getHtmlContent().contains("123")); // Cuenta completa
+    }
+
+    @Test
+    void enviarComprobantePago_clienteNulo_noEnviaEmail() {
+        Cuenta cuenta = new Cuenta();
+        cuenta.setNumeroCuenta("1234567890123456");
+        PagoServicio pago = new PagoServicio();
+
+        emailService.enviarComprobantePago(cuenta, null, pago);
+        verifyNoInteractions(brevoEmailClient);
     }
 
     @Test
@@ -89,7 +136,6 @@ class ComprobanteEmailServiceImplTest {
         PagoServicio pago = new PagoServicio();
 
         emailService.enviarComprobantePago(cuenta, cliente, pago);
-
         verifyNoInteractions(brevoEmailClient);
     }
 
@@ -104,7 +150,6 @@ class ComprobanteEmailServiceImplTest {
         PagoServicio pago = new PagoServicio();
 
         emailService.enviarComprobantePago(cuenta, cliente, pago);
-
         verifyNoInteractions(brevoEmailClient);
     }
 
@@ -123,8 +168,6 @@ class ComprobanteEmailServiceImplTest {
         when(brevoEmailClient.sendEmail(any(), any()))
                 .thenThrow(new RuntimeException("Error en servidor Brevo"));
 
-        // No debe lanzar excepción para no revertir transacciones financieras ya cobradas
         assertDoesNotThrow(() -> emailService.enviarComprobantePago(cuenta, cliente, pago));
     }
 }
-

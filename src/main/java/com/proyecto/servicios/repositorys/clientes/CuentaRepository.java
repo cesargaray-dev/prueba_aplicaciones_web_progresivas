@@ -16,6 +16,8 @@ public interface CuentaRepository extends JpaRepository<Cuenta, Long> {
 
     Optional<Cuenta> findByNumeroCuenta(String numeroCuenta);
 
+    Optional<Cuenta> findByClienteId(Long clienteId);
+
     /**
      * Obtiene la cuenta aplicando un bloqueo pesimista de escritura (SELECT ... FOR UPDATE)
      * para garantizar el control de concurrencia ante solicitudes simultáneas de pago.

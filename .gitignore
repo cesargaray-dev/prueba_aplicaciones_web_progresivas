@@ -50,4 +50,22 @@ bin/
 [Uu]ser[Ss]ettings/
 *.slnx
 *.sln
-*.csproj
+*.csproj
+
+### Environment & Secrets ###
+.env
+.env.*
+!.env.example
+
+### Frontend Web & Flutter Artifacts ###
+**/node_modules/
+frontend-web/dist/
+frontend-web/coverage/
+mobile-flutter/build/
+mobile-flutter/.dart_tool/
+mobile-flutter/.flutter-plugins
+mobile-flutter/.flutter-plugins-dependencies
+mobile-flutter/coverage/
+**/__pycache__/
+*.pyc
+

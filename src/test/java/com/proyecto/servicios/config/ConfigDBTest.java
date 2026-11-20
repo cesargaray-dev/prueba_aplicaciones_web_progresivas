@@ -61,6 +61,10 @@ class ConfigDBTest {
 
         assertNotNull(em);
         assertEquals("sfDatasource", em.getPersistenceUnitName());
+        assertEquals("none", em.getJpaPropertyMap().get("hibernate.hbm2ddl.auto"));
+        assertEquals(false, em.getJpaPropertyMap().get("hibernate.show_sql"));
+        assertEquals("org.hibernate.dialect.PostgreSQLDialect", em.getJpaPropertyMap().get("hibernate.dialect"));
+        assertEquals(600000, em.getJpaPropertyMap().get("jakarta.persistence.query.timeout"));
     }
 
     @Test

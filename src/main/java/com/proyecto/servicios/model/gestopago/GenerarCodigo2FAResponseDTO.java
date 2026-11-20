@@ -28,4 +28,9 @@ public class GenerarCodigo2FAResponseDTO extends GenericResponse {
 
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime fechaExpiracion;
+
+    private Boolean correoEnviado;
+    private String correoDestino;
+    private String mensajeCorreo;
+    private String messageId;
 }

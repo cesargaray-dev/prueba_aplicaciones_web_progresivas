@@ -1,9 +1,11 @@
 package com.proyecto.servicios.exception;
 
 import com.proyecto.servicios.model.GenericResponse;
+import com.proyecto.servicios.util.TelefonoUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -13,10 +15,27 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    private static final Pattern ACCOUNT_NUMBER_PATTERN = Pattern.compile("\\b\\d{12,19}\\b");
+
+    private String sanitizarMensaje(String mensaje) {
+        if (mensaje == null) {
+            return null;
+        }
+        Matcher matcher = ACCOUNT_NUMBER_PATTERN.matcher(mensaje);
+        StringBuilder sb = new StringBuilder();
+        while (matcher.find()) {
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(TelefonoUtil.enmascararCuenta(matcher.group())));
+        }
+        matcher.appendTail(sb);
+        return sb.toString();
+    }
 
     @ExceptionHandler(ClienteNoEncontradoException.class)
     public ResponseEntity<GenericResponse> handleClienteNoEncontrado(ClienteNoEncontradoException ex) {
@@ -55,73 +74,90 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(CuentaNoEncontradaException.class)
     public ResponseEntity<GenericResponse> handleCuentaNoEncontrada(CuentaNoEncontradaException ex) {
-        log.error("Cuenta no encontrada", ex);
+        log.error("Cuenta no encontrada: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(ClienteInactivoException.class)
     public ResponseEntity<GenericResponse> handleClienteInactivo(ClienteInactivoException ex) {
-        log.error("Cliente inactivo", ex);
+        log.error("Cliente inactivo: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(CuentaInactivaException.class)
     public ResponseEntity<GenericResponse> handleCuentaInactiva(CuentaInactivaException ex) {
-        log.error("Cuenta inactiva", ex);
+        log.error("Cuenta inactiva: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(Autenticacion2FAException.class)
     public ResponseEntity<GenericResponse> handleAutenticacion2FA(Autenticacion2FAException ex) {
-        log.error("Fallo de autenticación 2FA", ex);
+        log.error("Fallo de autenticación 2FA: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
+    }
+
+    @ExceptionHandler(AutenticacionException.class)
+    public ResponseEntity<GenericResponse> handleAutenticacion(AutenticacionException ex) {
+        log.error("Fallo de autenticación de cliente");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<GenericResponse> handleAccessDenied(AccessDeniedException ex) {
+        log.warn("Acceso denegado: {}", sanitizarMensaje(ex.getMessage()));
+        String msg = ex.getMessage() != null && !ex.getMessage().isBlank()
+                ? sanitizarMensaje(ex.getMessage())
+                : "Acceso denegado. No tienes permisos para acceder a este recurso.";
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new GenericResponse(1, msg));
     }
 
     @ExceptionHandler(SaldoInsuficienteException.class)
     public ResponseEntity<GenericResponse> handleSaldoInsuficiente(SaldoInsuficienteException ex) {
-        log.error("Saldo insuficiente en cuenta", ex);
+        log.error("Saldo insuficiente en cuenta: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(PagoServicioProveedorException.class)
     public ResponseEntity<GenericResponse> handlePagoServicioProveedor(PagoServicioProveedorException ex) {
-        log.error("Error devuelto por el proveedor de pago de servicios (código: {})", ex.getCodigoProveedor(), ex);
+        log.error("Error devuelto por el proveedor de pago de servicios (código: {})", ex.getCodigoProveedor());
         HttpStatus status = HttpStatus.resolve(ex.getStatusCode());
         if (status == null) {
             status = HttpStatus.BAD_REQUEST;
         }
         return ResponseEntity.status(status)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(GestoPagoException.class)
     public ResponseEntity<GenericResponse> handleGestoPagoException(GestoPagoException ex) {
-        log.error("Error de comunicación con GestoPago", ex);
+        log.error("Error de comunicación con GestoPago");
         HttpStatus status = HttpStatus.resolve(ex.getStatusCode());
         if (status == null) {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
         }
         return ResponseEntity.status(status)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(ValidacionException.class)
     public ResponseEntity<GenericResponse> handleValidacion(ValidacionException ex) {
-        log.error("Error de validación", ex);
+        log.error("Error de validación: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     @ExceptionHandler(ClienteException.class)
     public ResponseEntity<GenericResponse> handleClienteException(ClienteException ex) {
-        log.error("Error en módulo de clientes", ex);
+        log.error("Error en módulo de clientes: {}", sanitizarMensaje(ex.getMessage()));
         return ResponseEntity.status(ex.getStatusCode())
-                .body(new GenericResponse(1, ex.getMessage()));
+                .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }
 
     /**
@@ -136,8 +172,13 @@ public class GlobalExceptionHandler {
             listError.put(fieldError.getField(), fieldError.getDefaultMessage());
         }
         genericResponse.setCodigo(1);
-        genericResponse.setMensaje("Datos no validos" + listError);
-        log.error("Error de validación DTO: {}", genericResponse.getMensaje());
+        String detalle = listError.values().stream()
+                .filter(m -> m != null && !m.isBlank())
+                .distinct()
+                .reduce((a, b) -> a + " · " + b)
+                .orElse("Verifica los campos ingresados.");
+        genericResponse.setMensaje(detalle);
+        log.error("Error de validación DTO: {}", detalle);
         return new ResponseEntity<>(genericResponse, HttpStatus.BAD_REQUEST);
     }
 
@@ -149,8 +190,13 @@ public class GlobalExceptionHandler {
             String campo = path.contains(".") ? path.substring(path.lastIndexOf('.') + 1) : path;
             listError.put(campo, violation.getMessage());
         });
-        GenericResponse response = new GenericResponse(1, "Datos no validos" + listError);
-        log.error("Error de validación de parámetros: {}", response.getMensaje());
+        String detalle = listError.values().stream()
+                .filter(m -> m != null && !m.isBlank())
+                .distinct()
+                .reduce((a, b) -> a + " · " + b)
+                .orElse("Parámetros inválidos.");
+        GenericResponse response = new GenericResponse(1, detalle);
+        log.error("Error de validación de parámetros: {}", detalle);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
@@ -209,11 +255,19 @@ public class GlobalExceptionHandler {
                 .body(new GenericResponse(1, "Conflicto de integridad: el registro ya existe o viola una restricción del sistema"));
     }
 
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<GenericResponse> handleMethodNotSupported(
+            org.springframework.web.HttpRequestMethodNotSupportedException ex) {
+        log.warn("Método HTTP no soportado: {}", ex.getMethod());
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+                .body(new GenericResponse(1, "Método HTTP '" + ex.getMethod() + "' no permitido para este endpoint."));
+    }
+
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
     public ResponseEntity<GenericResponse> handleNoResourceFound(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
-        log.warn("Recurso no encontrado: {}", ex.getResourcePath());
+        log.warn("Recurso no encontrado");
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new GenericResponse(1, "Recurso no encontrado: " + ex.getResourcePath()));
+                .body(new GenericResponse(1, "Recurso no encontrado."));
     }
 
     @ExceptionHandler(Exception.class)

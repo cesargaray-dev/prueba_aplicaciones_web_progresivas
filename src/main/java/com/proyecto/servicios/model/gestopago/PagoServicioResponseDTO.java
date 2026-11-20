@@ -35,4 +35,9 @@ public class PagoServicioResponseDTO extends GenericResponse {
     private LocalDateTime fechaHoraOperacion;
 
     private String concepto;
+
+    private Boolean correoEnviado;
+    private String correoDestino;
+    private String mensajeCorreo;
+    private String brevoMessageId;
 }

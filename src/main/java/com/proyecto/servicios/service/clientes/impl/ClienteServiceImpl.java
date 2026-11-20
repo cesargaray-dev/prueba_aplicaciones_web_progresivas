@@ -13,14 +13,15 @@ import com.proyecto.servicios.model.clientes.CuentaResponseDTO;
 import com.proyecto.servicios.repositorys.clientes.*;
 import com.proyecto.servicios.repositorys.clientes.specification.ClienteSpecification;
 import com.proyecto.servicios.service.clientes.ClienteService;
-import lombok.RequiredArgsConstructor;
+import com.proyecto.servicios.util.TelefonoUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.Period;
@@ -29,7 +30,6 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class ClienteServiceImpl implements ClienteService {
 
@@ -38,11 +38,38 @@ public class ClienteServiceImpl implements ClienteService {
     private final LoginClienteRepository loginRepository;
     private final DatoBiometricoRepository biometricoRepository;
     private final CatalogoRepository catalogoRepository;
+    private final PasswordEncoder passwordEncoder;
+
+    public ClienteServiceImpl(
+            ClienteRepository clienteRepository,
+            CuentaRepository cuentaRepository,
+            LoginClienteRepository loginRepository,
+            DatoBiometricoRepository biometricoRepository,
+            CatalogoRepository catalogoRepository) {
+        this(clienteRepository, cuentaRepository, loginRepository, biometricoRepository,
+                catalogoRepository, new BCryptPasswordEncoder());
+    }
+
+    @Autowired
+    public ClienteServiceImpl(
+            ClienteRepository clienteRepository,
+            CuentaRepository cuentaRepository,
+            LoginClienteRepository loginRepository,
+            DatoBiometricoRepository biometricoRepository,
+            CatalogoRepository catalogoRepository,
+            PasswordEncoder passwordEncoder) {
+        this.clienteRepository = clienteRepository;
+        this.cuentaRepository = cuentaRepository;
+        this.loginRepository = loginRepository;
+        this.biometricoRepository = biometricoRepository;
+        this.catalogoRepository = catalogoRepository;
+        this.passwordEncoder = passwordEncoder != null ? passwordEncoder : new BCryptPasswordEncoder();
+    }
 
     @Override
     @Transactional
     public ClienteResponseDTO registrarCliente(ClienteRequestDTO request) {
-        log.info("Iniciando registro de cliente con CURP: {}", request.getCurp());
+        log.info("Iniciando registro de cliente");
         
         validarReglasNegocio(request);
 
@@ -99,7 +126,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional(readOnly = true)
     public ClienteResponseDTO obtenerClientePorCurp(String curp) {
         Cliente cliente = clienteRepository.findByCurp(curp)
-                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + curp));
+                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
         return mapToResponse(cliente);
     }
 
@@ -107,7 +134,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional(readOnly = true)
     public ClienteResponseDTO obtenerClientePorRfc(String rfc) {
         Cliente cliente = clienteRepository.findByRfc(rfc)
-                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con RFC: " + rfc));
+                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
         return mapToResponse(cliente);
     }
 
@@ -115,7 +142,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional(readOnly = true)
     public ClienteResponseDTO obtenerClientePorCorreo(String correo) {
         Cliente cliente = clienteRepository.findByCorreo(correo)
-                .orElseThrow(() -> new ClienteNoEncontradoException("El correo electrónico '" + correo + "' no está registrado en el sistema"));
+                .orElseThrow(() -> new ClienteNoEncontradoException("El correo electrónico ingresado no está registrado en el sistema"));
         return mapToResponse(cliente);
     }
 
@@ -123,7 +150,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional(readOnly = true)
     public ClienteResponseDTO obtenerClientePorNumeroCuenta(String numeroCuenta) {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
-                .orElseThrow(() -> new CuentaNoEncontradaException("Cuenta no encontrada: " + numeroCuenta));
+                .orElseThrow(() -> new CuentaNoEncontradaException("Cuenta no encontrada: " + TelefonoUtil.enmascararCuenta(numeroCuenta)));
         return mapToResponse(cuenta.getCliente());
     }
 
@@ -131,7 +158,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional
     public ClienteResponseDTO actualizarCliente(String curp, ClienteRequestDTO request) {
         Cliente cliente = clienteRepository.findByCurp(curp)
-                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + curp));
+                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
 
         // Actualizar datos permitidos (NO CURP, NO RFC)
         cliente.setNombre(request.getNombre());
@@ -191,10 +218,10 @@ public class ClienteServiceImpl implements ClienteService {
                     .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con ID: " + request.getId()));
         } else if (request.getCurp() != null && !request.getCurp().isBlank()) {
             cliente = clienteRepository.findByCurp(request.getCurp())
-                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + request.getCurp()));
+                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
         } else if (request.getRfc() != null && !request.getRfc().isBlank()) {
             cliente = clienteRepository.findByRfc(request.getRfc())
-                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con RFC: " + request.getRfc()));
+                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
         } else {
             throw new ValidacionException("Debe proporcionar el ID, CURP o RFC del cliente para actualizar");
         }
@@ -210,7 +237,7 @@ public class ClienteServiceImpl implements ClienteService {
                     .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con ID: " + request.getId()));
         } else if (request.getCurp() != null && !request.getCurp().isBlank()) {
             cliente = clienteRepository.findByCurp(request.getCurp())
-                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + request.getCurp()));
+                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
         } else {
             throw new ValidacionException("Debe proporcionar el ID o la CURP del cliente para actualizar");
         }
@@ -277,7 +304,7 @@ public class ClienteServiceImpl implements ClienteService {
         }
 
         cliente = clienteRepository.save(cliente);
-        log.info("Cliente {} actualizado parcialmente", cliente.getCurp());
+        log.info("Cliente con ID {} actualizado parcialmente", cliente.getId());
         ClienteResponseDTO response = mapToResponse(cliente);
         response.setCodigo(0);
         response.setMensaje("Datos actualizados parcialmente de forma correcta");
@@ -297,7 +324,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional
     public void desactivarCliente(String curp) {
         Cliente cliente = clienteRepository.findByCurp(curp)
-                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + curp));
+                .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
         
         cliente.setActivo(false);
         
@@ -310,7 +337,7 @@ public class ClienteServiceImpl implements ClienteService {
         }
         
         clienteRepository.save(cliente);
-        log.info("Cliente {} desactivado correctamente", curp);
+        log.info("Cliente con ID {} desactivado correctamente", cliente.getId());
     }
 
     @Override
@@ -362,7 +389,7 @@ public class ClienteServiceImpl implements ClienteService {
         }
         if (request.getCurp() != null && !request.getCurp().isBlank()) {
             Cliente cliente = clienteRepository.findByCurp(request.getCurp())
-                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado con CURP: " + request.getCurp()));
+                    .orElseThrow(() -> new ClienteNoEncontradoException("Cliente no encontrado"));
             return reactivarCliente(cliente.getId());
         }
         throw new ValidacionException("Debe proporcionar el ID o la CURP del cliente a reactivar");
@@ -433,7 +460,7 @@ public class ClienteServiceImpl implements ClienteService {
     @Transactional(readOnly = true)
     public CuentaResponseDTO obtenerCuentaPorNumero(String numeroCuenta) {
         Cuenta cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta)
-                .orElseThrow(() -> new CuentaNoEncontradaException("Cuenta no encontrada: " + numeroCuenta));
+                .orElseThrow(() -> new CuentaNoEncontradaException("Cuenta no encontrada: " + TelefonoUtil.enmascararCuenta(numeroCuenta)));
         return mapToCuentaResponse(cuenta);
     }
 
@@ -552,7 +579,7 @@ public class ClienteServiceImpl implements ClienteService {
         LoginCliente login = new LoginCliente();
         login.setCliente(cliente);
         login.setUsuario(usuario);
-        login.setContrasenaHash(cifrarSHA256(contrasenaRaw));
+        login.setContrasenaHash(passwordEncoder.encode(contrasenaRaw));
         login.setActivo(true);
         login.setBloqueado(false);
         login.setIntentosFallidos(0);
@@ -566,24 +593,6 @@ public class ClienteServiceImpl implements ClienteService {
         db.setHashBiometrico(hash);
         db.setActivo(true);
         biometricoRepository.save(db);
-    }
-
-    private String cifrarSHA256(String input) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] encodedhash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder hexString = new StringBuilder(2 * encodedhash.length);
-            for (byte b : encodedhash) {
-                String hex = Integer.toHexString(0xff & b);
-                if (hex.length() == 1) {
-                    hexString.append('0');
-                }
-                hexString.append(hex);
-            }
-            return hexString.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException("Error cifrando contraseña", e);
-        }
     }
 
     private ClienteResponseDTO mapToResponse(Cliente cliente) {

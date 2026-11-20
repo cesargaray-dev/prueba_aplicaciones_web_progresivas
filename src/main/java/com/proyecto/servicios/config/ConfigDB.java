@@ -76,9 +76,10 @@ public class ConfigDB {
             em.setJpaVendorAdapter(vendorAdapter);
           Map<String, Object> properties=new HashMap<>();
           properties.put("hibernate.hbm2ddl.auto", "none");
-            properties.put("hibernate.show-sql", false);
-            properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-            properties.put("jakarta.persistence.query.timeout", 600000);
+          properties.put("hibernate.show_sql", false);
+          properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
+          properties.put("jakarta.persistence.query.timeout", 600000);
+          em.setJpaPropertyMap(properties);
 
 
         } catch (Exception e) {

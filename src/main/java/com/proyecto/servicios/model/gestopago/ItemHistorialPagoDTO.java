@@ -70,4 +70,10 @@ public class ItemHistorialPagoDTO {
     @Schema(description = "Fecha y hora exacta de la operación", example = "2026-10-23 19:01:05")
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime fechaOperacion;
+
+    @Schema(description = "Estado de la transacción", example = "EXITOSA")
+    private String estado;
+
+    @Schema(description = "URL oficial del logotipo del proveedor", example = "https://gestopago.portalventas.net/sistema/images/gestopago/servicios/76.png")
+    private String logoUrl;
 }

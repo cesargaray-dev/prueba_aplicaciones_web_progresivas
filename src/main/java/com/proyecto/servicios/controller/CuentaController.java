@@ -3,6 +3,7 @@ package com.proyecto.servicios.controller;
 import com.proyecto.servicios.model.clientes.CuentaConsultaRequestDTO;
 import com.proyecto.servicios.model.clientes.CuentaResponseDTO;
 import com.proyecto.servicios.service.clientes.ClienteService;
+import com.proyecto.servicios.util.TelefonoUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -38,7 +39,7 @@ public class CuentaController {
     @Operation(summary = "Consultar saldo", description = "Consulta el saldo disponible de una cuenta bancaria mediante JSON con @RequestBody")
     public ResponseEntity<CuentaResponseDTO> consultarSaldo(@Valid @RequestBody CuentaConsultaRequestDTO request) {
         CuentaResponseDTO cuenta = clienteService.obtenerCuentaPorNumero(request.getNumeroCuenta());
-        cuenta.setMensaje("El saldo disponible de la cuenta " + request.getNumeroCuenta() + " es: $" + cuenta.getSaldo());
+        cuenta.setMensaje("El saldo disponible de la cuenta " + TelefonoUtil.enmascararCuenta(request.getNumeroCuenta()) + " es: $" + cuenta.getSaldo());
         return ResponseEntity.ok(cuenta);
     }
 }

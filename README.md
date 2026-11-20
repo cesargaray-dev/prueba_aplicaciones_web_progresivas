@@ -99,35 +99,35 @@ El endpoint `POST /api/v1/pagos/historial` devuelve la lista cronológica comple
 
 ## 🧪 Cuentas de Prueba Disponibles para Evaluación
 
-Las siguientes cuentas están activas y listas en la base de datos de producción:
+Las cuentas de prueba se provisionan y gestionan mediante variables de entorno seguras y migraciones controladas (datos sensibles enmascarados):
 
-| Número de Cuenta (16 dígitos) | Titular | Saldo Disponible | Correo de Notificación |
-| :---: | :---: | :---: | :---: |
-| `5225253189113705` | Cesar Enrique Garay Garcia | **$60.00 MXN** | `cesarenriquegaraygarcia@gmail.com` |
-| `8906887292154504` | Carlos Sánchez | **$60.00 MXN** | `cesarenriquegaraygarcia50@gmail.com` |
+| Número de Cuenta (Enmascarado) | Titular | Correo de Notificación |
+| :---: | :---: | :---: |
+| `************3705` | Cliente Demo 1 | `demo1@ejemplo.com` |
+| `************4504` | Cliente Demo 2 | `demo2@ejemplo.com` |
 
 ---
 
 ## 🛠️ Guía Rápida de Prueba en Swagger
 
-Para probar la API en [Render Swagger UI](https://prueba-aplicaciones-web-progresivas.onrender.com/swagger-ui/index.html):
+Para probar la API en [Render Swagger UI](https://prueba-aplicaciones-web-progresivas.onrender.com/swagger-ui/index.html) (requiere `Authorization: Bearer <token>`):
 
 ### Paso 1: Generar código 2FA
 * **Endpoint:** `POST /api/v1/pagos/2fa/generar`
 * **Body:**
   ```json
   {
-    "numeroCuenta": "5225253189113705"
+    "numeroCuenta": "<CUENTA_16_DIGITOS>"
   }
   ```
-* Copia el `codigo2FA` devuelto (vigencia de 5 minutos).
+* Revisa el código de verificación en el correo registrado (vigencia de 5 minutos).
 
 ### Paso 2: Realizar Pago de Servicio
 * **Endpoint:** `POST /api/v1/pagos/servicios`
 * **Body:**
   ```json
   {
-    "numeroCuenta": "5225253189113705",
+    "numeroCuenta": "<CUENTA_16_DIGITOS>",
     "idServicio": 76,
     "idProducto": 205,
     "monto": 20.00,
@@ -143,7 +143,7 @@ Para probar la API en [Render Swagger UI](https://prueba-aplicaciones-web-progre
 * **Body:**
   ```json
   {
-    "numeroCuenta": "5225253189113705"
+    "numeroCuenta": "<CUENTA_16_DIGITOS>"
   }
   ```
 

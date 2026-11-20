@@ -1,5 +1,6 @@
 package com.proyecto.servicios.model.clientes;
 
+import com.proyecto.servicios.validation.TelefonoMexicano;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.*;
 import lombok.Data;
@@ -62,10 +63,10 @@ public class ClienteActualizacionParcialRequestDTO {
     @Size(max = 100, message = "El correo electrónico no debe exceder 100 caracteres")
     private String correo;
 
-    @Pattern(regexp = "^\\d{10}$", message = "El teléfono móvil debe contener exactamente 10 dígitos. No se aceptan letras ni caracteres especiales")
+    @TelefonoMexicano(optional = true, message = "El teléfono móvil debe ser un número mexicano válido de 10 dígitos (sin prefijo 0 ni 1, ni secuencias/dígitos repetidos)")
     private String telefonoMovil;
 
-    @Pattern(regexp = "^(\\d{10})?$", message = "El teléfono alternativo debe contener exactamente 10 dígitos. No se aceptan letras ni caracteres especiales")
+    @TelefonoMexicano(optional = true, message = "El teléfono alternativo debe ser un número mexicano válido de 10 dígitos")
     private String telefonoAlternativo;
 
     // ───────────────────── DATOS LABORALES ─────────────────────
