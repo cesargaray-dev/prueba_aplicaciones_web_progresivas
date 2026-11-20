@@ -383,6 +383,188 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     );
   }
 
+  Future<void> _openCreateDialog() async {
+    final nombreCtrl = TextEditingController();
+    final segundoCtrl = TextEditingController();
+    final paternoCtrl = TextEditingController();
+    final maternoCtrl = TextEditingController();
+    final fechaCtrl = TextEditingController(text: '1995-05-15');
+    final correoCtrl = TextEditingController();
+    final telCtrl = TextEditingController();
+    final usrCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.cardBg(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 20,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Crear Nuevo Usuario',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.textPrimary(ctx),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: nombreCtrl,
+                        decoration: const InputDecoration(labelText: 'Nombre *'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: segundoCtrl,
+                        decoration: const InputDecoration(labelText: 'Segundo Nombre'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: paternoCtrl,
+                        decoration: const InputDecoration(labelText: 'Apellido Paterno *'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: maternoCtrl,
+                        decoration: const InputDecoration(labelText: 'Apellido Materno *'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: fechaCtrl,
+                        decoration: const InputDecoration(labelText: 'Fecha Nac (YYYY-MM-DD) *'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: telCtrl,
+                        maxLength: 10,
+                        keyboardType: TextInputType.phone,
+                        decoration: const InputDecoration(
+                          labelText: 'Teléfono (10 díg) *',
+                          counterText: '',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: correoCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Correo Electrónico Real *'),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: usrCtrl,
+                        decoration: const InputDecoration(labelText: 'Usuario *'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: passCtrl,
+                        decoration: const InputDecoration(labelText: 'Contraseña (ej. Venta2026#) *'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.person_add_alt_1_rounded),
+                    label: const Text('Crear Usuario'),
+                    onPressed: () async {
+                      final navigator = Navigator.of(ctx);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await _api.post('/api/v1/admin/usuarios', body: {
+                          'nombre': nombreCtrl.text.trim(),
+                          'segundoNombre': segundoCtrl.text.trim(),
+                          'apellidoPaterno': paternoCtrl.text.trim(),
+                          'apellidoMaterno': maternoCtrl.text.trim(),
+                          'fechaNacimiento': fechaCtrl.text.trim(),
+                          'sexo': 'HOMBRE',
+                          'correo': correoCtrl.text.trim(),
+                          'telefonoMovil': telCtrl.text.trim(),
+                          'usuario': usrCtrl.text.trim(),
+                          'contrasena': passCtrl.text,
+                        });
+                        navigator.pop();
+                        await _loadUsers();
+                        messenger.showSnackBar(
+                          const SnackBar(
+                            backgroundColor: Color(0xFF10B981),
+                            content: Text('Usuario creado exitosamente.'),
+                          ),
+                        );
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(
+                            backgroundColor: AppTheme.errorRed,
+                            content: Text(
+                              e is ApiException ? e.message : 'Error al crear usuario',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = _filteredUsers;
@@ -407,32 +589,56 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Row(
-                      children: [
-                        Icon(
-                          Icons.admin_panel_settings_rounded,
-                          color: Color(0xFFFDE68A),
-                          size: 20,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'CONSOLA ADMIN • USUARIOS',
-                          style: TextStyle(
+                    const Flexible(
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.admin_panel_settings_rounded,
                             color: Color(0xFFFDE68A),
-                            fontWeight: FontWeight.w900,
-                            fontSize: 12,
-                            letterSpacing: 1.1,
+                            size: 20,
+                          ),
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'GESTIÓN TOTAL DE USUARIOS',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Color(0xFFFDE68A),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: _openCreateDialog,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFFF59E0B),
+                            foregroundColor: const Color(0xFF040914),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            minimumSize: Size.zero,
+                          ),
+                          icon: const Icon(Icons.person_add_alt_1_rounded, size: 14),
+                          label: const Text(
+                            'Nuevo',
+                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        IconButton(
+                          visualDensity: VisualDensity.compact,
+                          onPressed: _loadUsers,
+                          icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
+                          tooltip: 'Actualizar lista',
+                        ),
                       ],
-                    ),
-                    Text(
-                      '${_users.length} registrados',
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                      ),
                     ),
                   ],
                 ),
@@ -440,12 +646,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                 TextField(
                   controller: _searchController,
                   onChanged: (v) => setState(() => _searchQuery = v),
-                  style: const TextStyle(fontSize: 13),
+                  style: TextStyle(fontSize: 13, color: AppTheme.textPrimary(context)),
                   decoration: InputDecoration(
                     hintText: 'Buscar por nombre, @usuario, correo o cuenta...',
                     prefixIcon: const Icon(Icons.search_rounded, size: 18),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: AppTheme.cardBg(context),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(14),

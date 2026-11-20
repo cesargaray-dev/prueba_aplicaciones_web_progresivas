@@ -201,8 +201,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final auth = Provider.of<AuthProvider>(context);
     final catalog = Provider.of<CatalogProvider>(context);
     final session = auth.session;
-
     final isDark = AppTheme.isDark(context);
+    final isAdminUser = session != null && session.isAdmin;
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -213,22 +213,20 @@ class _HomeScreenState extends State<HomeScreen> {
           title: Row(
             children: [
               Icon(
-                _currentTabIndex == 0
-                    ? Icons.account_balance_rounded
-                    : _currentTabIndex == 1
-                        ? Icons.receipt_long_rounded
-                        : Icons.admin_panel_settings_rounded,
-                color: Colors.white,
+                isAdminUser
+                    ? Icons.admin_panel_settings_rounded
+                    : (_currentTabIndex == 0
+                        ? Icons.account_balance_rounded
+                        : Icons.receipt_long_rounded),
+                color: isAdminUser ? const Color(0xFFFDE68A) : Colors.white,
                 size: 22,
               ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  _currentTabIndex == 0
-                      ? 'Banco Digital'
-                      : _currentTabIndex == 1
-                          ? 'Historial de Pagos'
-                          : 'Consola Admin',
+                  isAdminUser
+                      ? 'Panel Administrador'
+                      : (_currentTabIndex == 0 ? 'Banco Digital' : 'Historial de Pagos'),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -243,7 +241,7 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro',
               onPressed: () => AppTheme.toggleTheme(),
             ),
-            if (_currentTabIndex == 1 && session != null)
+            if (!isAdminUser && _currentTabIndex == 1 && session != null)
               IconButton(
                 icon: const Icon(Icons.refresh_rounded),
                 tooltip: 'Actualizar historial',
@@ -251,59 +249,60 @@ class _HomeScreenState extends State<HomeScreen> {
                     .loadHistory(session.numeroCuenta),
               ),
             if (session != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(16),
-                  onTap: _openProfileSheet,
-                  child: Tooltip(
-                    message: ValidationUtils.esCorreoPlaceholder(session.email)
-                        ? 'Configura tu correo real, huella y abona saldo'
-                        : 'Mi perfil, huella digital y abonar saldo',
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.16),
-                        borderRadius: BorderRadius.circular(16),
-                        border: ValidationUtils.esCorreoPlaceholder(session.email)
-                            ? Border.all(color: Colors.amberAccent, width: 1.2)
-                            : null,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            ValidationUtils.esCorreoPlaceholder(session.email)
-                                ? Icons.warning_amber_rounded
-                                : (auth.biometricEnabledForCurrentUser
-                                    ? Icons.fingerprint_rounded
-                                    : Icons.account_circle_rounded),
-                            size: 15,
-                            color: ValidationUtils.esCorreoPlaceholder(session.email)
-                                ? Colors.amberAccent
-                                : Colors.white,
-                          ),
-                          const SizedBox(width: 5),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 90),
-                            child: Text(
-                              session.usuario,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
+              if (!isAdminUser)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: _openProfileSheet,
+                    child: Tooltip(
+                      message: ValidationUtils.esCorreoPlaceholder(session.email)
+                          ? 'Configura tu correo real, huella y abona saldo'
+                          : 'Mi perfil, huella digital y abonar saldo',
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(16),
+                          border: ValidationUtils.esCorreoPlaceholder(session.email)
+                              ? Border.all(color: Colors.amberAccent, width: 1.2)
+                              : null,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              ValidationUtils.esCorreoPlaceholder(session.email)
+                                  ? Icons.warning_amber_rounded
+                                  : (auth.biometricEnabledForCurrentUser
+                                      ? Icons.fingerprint_rounded
+                                      : Icons.account_circle_rounded),
+                              size: 15,
+                              color: ValidationUtils.esCorreoPlaceholder(session.email)
+                                  ? Colors.amberAccent
+                                  : Colors.white,
+                            ),
+                            const SizedBox(width: 5),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 90),
+                              child: Text(
+                                session.usuario,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.tune_rounded, size: 13, color: Colors.white70),
-                        ],
+                            const SizedBox(width: 4),
+                            const Icon(Icons.tune_rounded, size: 13, color: Colors.white70),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
               IconButton(
                 icon: const Icon(Icons.logout_rounded),
                 tooltip: 'Cerrar sesión',
@@ -312,54 +311,48 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ],
         ),
-        body: _currentTabIndex == 0
-            ? _buildCatalogView(catalog)
-            : (_currentTabIndex == 2 && session != null && session.isAdmin)
-                ? const AdminUsersScreen()
+        body: isAdminUser
+            ? const AdminUsersScreen()
+            : (_currentTabIndex == 0
+                ? _buildCatalogView(catalog)
                 : HistoryScreen(
                     onExploreCatalog: () {
                       setState(() {
                         _currentTabIndex = 0;
                       });
                     },
+                  )),
+        bottomNavigationBar: isAdminUser
+            ? null
+            : NavigationBar(
+                selectedIndex: _currentTabIndex > 1 ? 0 : _currentTabIndex,
+                backgroundColor: AppTheme.cardBg(context),
+                indicatorColor:
+                    AppTheme.secondaryBlue.withValues(alpha: isDark ? 0.28 : 0.14),
+                onDestinationSelected: (index) {
+                  setState(() {
+                    _currentTabIndex = index;
+                  });
+                  if (index == 1 && session != null) {
+                    Provider.of<HistoryProvider>(context, listen: false)
+                        .loadHistory(session.numeroCuenta);
+                  }
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.dashboard_outlined),
+                    selectedIcon:
+                        Icon(Icons.dashboard_rounded, color: AppTheme.secondaryBlue),
+                    label: 'Catálogo',
                   ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: (_currentTabIndex == 2 && (session == null || !session.isAdmin))
-              ? 0
-              : _currentTabIndex,
-          backgroundColor: AppTheme.cardBg(context),
-          indicatorColor: AppTheme.secondaryBlue.withValues(alpha: isDark ? 0.28 : 0.14),
-          onDestinationSelected: (index) {
-            setState(() {
-              _currentTabIndex = index;
-            });
-            if (index == 1 && session != null) {
-              Provider.of<HistoryProvider>(context, listen: false)
-                  .loadHistory(session.numeroCuenta);
-            }
-          },
-          destinations: [
-            const NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded, color: AppTheme.secondaryBlue),
-              label: 'Catálogo',
-            ),
-            const NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined),
-              selectedIcon: Icon(Icons.receipt_long_rounded, color: AppTheme.secondaryBlue),
-              label: 'Historial',
-            ),
-            if (session != null && session.isAdmin)
-              const NavigationDestination(
-                icon: Icon(Icons.admin_panel_settings_outlined),
-                selectedIcon: Icon(
-                  Icons.admin_panel_settings_rounded,
-                  color: AppTheme.secondaryBlue,
-                ),
-                label: 'Usuarios',
+                  NavigationDestination(
+                    icon: Icon(Icons.receipt_long_outlined),
+                    selectedIcon:
+                        Icon(Icons.receipt_long_rounded, color: AppTheme.secondaryBlue),
+                    label: 'Historial',
+                  ),
+                ],
               ),
-          ],
-        ),
       ),
     );
   }

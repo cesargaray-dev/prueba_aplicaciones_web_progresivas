@@ -10,10 +10,10 @@ describe('Navbar Component', () => {
     const setActiveTab = vi.fn();
     const ctx = createMockAuthContext({
       secondsRemaining: 45,
-      user: { ...mockLoginResponse, usuario: 'admin', esAdmin: true, email: 'demo@ejemplo.com' },
+      user: { ...mockLoginResponse, email: 'demo@ejemplo.com' },
     });
 
-    render(
+    const { rerender } = render(
       <MockAuthProvider value={ctx}>
         <Navbar activeTab="catalog" setActiveTab={setActiveTab} />
       </MockAuthProvider>
@@ -23,11 +23,9 @@ describe('Navbar Component', () => {
     expect(screen.getByText('0:45')).toBeInTheDocument();
     expect(screen.getAllByText(/\$500\.00/).length).toBeGreaterThan(0);
 
-    // Switch tab to History and Admin
+    // Switch tab to History
     await user.click(screen.getByRole('button', { name: /Historial de Pagos/i }));
     expect(setActiveTab).toHaveBeenCalledWith('history');
-    await user.click(screen.getByRole('button', { name: /Panel Admin/i }));
-    expect(setActiveTab).toHaveBeenCalledWith('admin');
 
     // Toggle Dark / Light Mode
     await user.click(screen.getByLabelText('Cambiar tema'));
@@ -47,5 +45,16 @@ describe('Navbar Component', () => {
     // Logout
     await user.click(screen.getByTitle('Cerrar sesión'));
     expect(ctx.logout).toHaveBeenCalled();
+
+    // Admin view renders dedicated Admin Console badge without customer balance/catalog tabs
+    const adminCtx = createMockAuthContext({
+      user: { ...mockLoginResponse, usuario: 'admin', esAdmin: true },
+    });
+    rerender(
+      <MockAuthProvider value={adminCtx}>
+        <Navbar activeTab="admin" setActiveTab={setActiveTab} />
+      </MockAuthProvider>
+    );
+    expect(screen.getByText(/Consola de Administración de Usuarios/i)).toBeInTheDocument();
   });
 });

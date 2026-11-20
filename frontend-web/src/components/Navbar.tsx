@@ -83,53 +83,47 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
             </button>
 
             {/* Center Navigation Tabs (Desktop) */}
-            <nav className="hidden md:flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200/70">
-              <button
-                type="button"
-                onClick={() => setActiveTab('catalog')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  activeTab === 'catalog'
-                    ? 'bg-white text-blue-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                }`}
-              >
-                <LayoutGrid className="w-4 h-4" />
-                <span>Catálogo y Pagos</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveTab('history')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
-                  activeTab === 'history'
-                    ? 'bg-white text-blue-950 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
-                }`}
-              >
-                <History className="w-4 h-4" />
-                <span>Historial de Pagos</span>
-              </button>
-
-              {isAdmin && (
+            {isAdmin ? (
+              <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-2xl bg-gradient-to-r from-amber-400/20 via-amber-500/15 to-amber-400/20 border border-amber-400/50 text-amber-900">
+                <ShieldCheck className="w-4 h-4 text-amber-500" />
+                <span className="text-xs font-black tracking-wide uppercase">
+                  Consola de Administración de Usuarios
+                </span>
+              </div>
+            ) : (
+              <nav className="hidden md:flex items-center gap-1.5 bg-slate-100 p-1 rounded-2xl border border-slate-200/70">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('admin')}
-                  className={`px-4 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                    activeTab === 'admin'
-                      ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-slate-950 shadow-sm'
-                      : 'text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-300/60'
+                  onClick={() => setActiveTab('catalog')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+                    activeTab === 'catalog'
+                      ? 'bg-white text-blue-950 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
                   }`}
                 >
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Panel Admin</span>
+                  <LayoutGrid className="w-4 h-4" />
+                  <span>Catálogo y Pagos</span>
                 </button>
-              )}
-            </nav>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('history')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+                    activeTab === 'history'
+                      ? 'bg-white text-blue-950 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  <History className="w-4 h-4" />
+                  <span>Historial de Pagos</span>
+                </button>
+              </nav>
+            )}
 
             {/* Right Section: Account, Balance, Profile, Logout */}
             <div className="flex items-center gap-2 sm:gap-3">
-              {/* Available Balance Pill */}
-              {user && (
+              {/* Available Balance Pill (Only for normal customer accounts) */}
+              {user && !isAdmin && (
                 <div className="hidden sm:flex items-center gap-2.5 bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-950 text-white px-4 py-2 rounded-2xl shadow-[0_8px_20px_-4px_rgba(15,23,42,0.55),0_0_15px_-3px_rgba(37,99,235,0.35)] border border-amber-300/30 ring-1 ring-white/10">
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 rounded-xl bg-gradient-to-br from-amber-300/25 to-amber-500/10 border border-amber-300/40">
@@ -224,60 +218,48 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
             </div>
           </div>
 
-          {/* Mobile Bottom Navigation */}
-          <div className="flex md:hidden border-t border-slate-100 py-2 items-center justify-between gap-2">
-            <div className="flex items-center gap-1 flex-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab('catalog')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 ${
-                  activeTab === 'catalog'
-                    ? 'bg-blue-900 text-white'
-                    : 'text-slate-600 bg-slate-100'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Catálogo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('history')}
-                className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 ${
-                  activeTab === 'history'
-                    ? 'bg-blue-900 text-white'
-                    : 'text-slate-600 bg-slate-100'
-                }`}
-              >
-                <History className="w-3.5 h-3.5" />
-                <span>Historial</span>
-              </button>
-              {isAdmin && (
+          {/* Mobile Bottom Navigation (Only for normal customer accounts) */}
+          {!isAdmin && (
+            <div className="flex md:hidden border-t border-slate-100 py-2 items-center justify-between gap-2">
+              <div className="flex items-center gap-1 flex-1">
                 <button
                   type="button"
-                  onClick={() => setActiveTab('admin')}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-extrabold flex items-center justify-center gap-1 ${
-                    activeTab === 'admin'
-                      ? 'bg-amber-400 text-slate-950'
-                      : 'text-amber-900 bg-amber-100'
+                  onClick={() => setActiveTab('catalog')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 ${
+                    activeTab === 'catalog'
+                      ? 'bg-blue-900 text-white'
+                      : 'text-slate-600 bg-slate-100'
                   }`}
                 >
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>Admin</span>
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Catálogo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('history')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 ${
+                    activeTab === 'history'
+                      ? 'bg-blue-900 text-white'
+                      : 'text-slate-600 bg-slate-100'
+                  }`}
+                >
+                  <History className="w-3.5 h-3.5" />
+                  <span>Historial</span>
+                </button>
+              </div>
+              {user && (
+                <button
+                  type="button"
+                  onClick={() => setIsProfileOpen(true)}
+                  title="Ver perfil y abonar saldo"
+                  className="px-2.5 py-1.5 bg-blue-950 hover:bg-blue-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <Wallet className="w-3.5 h-3.5 text-blue-300" />
+                  <span>{formatCurrency(user.saldo)}</span>
                 </button>
               )}
             </div>
-            {user && (
-              <button
-                type="button"
-                onClick={() => setIsProfileOpen(true)}
-                title="Ver perfil y abonar saldo"
-                className="px-2.5 py-1.5 bg-blue-950 hover:bg-blue-900 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors"
-              >
-                <Wallet className="w-3.5 h-3.5 text-blue-300" />
-                <span>{formatCurrency(user.saldo)}</span>
-              </button>
-            )}
-          </div>
+          )}
         </div>
       </header>
 

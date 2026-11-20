@@ -36,9 +36,9 @@ const MainLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between">
       <div>
-        <Navbar activeTab={activeTab} setActiveTab={setActiveTab} />
+        <Navbar activeTab={isAdmin ? 'admin' : activeTab} setActiveTab={setActiveTab} />
         <main>
-          {activeTab === 'admin' && isAdmin ? (
+          {isAdmin ? (
             <AdminUsersPage />
           ) : activeTab === 'catalog' ? (
             <CatalogPage onGoToHistory={() => setActiveTab('history')} />
