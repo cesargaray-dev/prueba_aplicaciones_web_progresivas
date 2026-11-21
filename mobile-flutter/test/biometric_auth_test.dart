@@ -4,13 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mobile_flutter/models/history_item.dart';
+import 'package:mobile_flutter/models/product_item.dart';
 import 'package:mobile_flutter/models/user_session.dart';
 import 'package:mobile_flutter/providers/auth_provider.dart';
+import 'package:mobile_flutter/providers/payment_provider.dart';
 import 'package:mobile_flutter/screens/admin_users_screen.dart';
 import 'package:mobile_flutter/screens/login_screen.dart';
+import 'package:mobile_flutter/screens/payment_flow_dialog.dart';
 import 'package:mobile_flutter/services/api_client.dart';
 import 'package:mobile_flutter/services/auth_service.dart';
 import 'package:mobile_flutter/services/biometric_service.dart';
+import 'package:mobile_flutter/theme/app_theme.dart';
 import 'package:mobile_flutter/widgets/profile_sheet.dart';
 import 'package:provider/provider.dart';
 
@@ -101,9 +105,9 @@ class _FakeAuthService extends AuthService {
     required String nombre,
     String? segundoNombre,
     required String apellidoPaterno,
-    required String apellidoMaterno,
-    required String fechaNacimiento,
-    required String sexo,
+    String apellidoMaterno = '',
+    String fechaNacimiento = '1995-01-01',
+    String sexo = 'HOMBRE',
     required String correo,
     required String telefonoMovil,
     required String usuario,
@@ -637,6 +641,105 @@ void main() {
       expect(deleteAllCalled, isTrue);
       expect(find.text('ADMIN BANCO DIGITAL'), findsOneWidget);
       expect(find.text('CARLOS EDITADO'), findsNothing);
+    });
+
+    testWidgets(
+        'Modo oscuro mantiene visibles montos en Abonar, botones en PaymentFlowDialog y registro simplificado',
+        (WidgetTester tester) async {
+      final fakeBio = _FakeBiometricService(
+        availability: const BiometricAvailability(
+          isSupported: false,
+          hasEnrolledBiometrics: false,
+          hasFingerprint: false,
+          label: 'Huella Digital',
+        ),
+      );
+      final auth = AuthProvider(authService: _FakeAuthService(), biometricService: fakeBio);
+      await auth.initBiometrics();
+      await auth.login('cesar_app', 'Venta2026#');
+
+      // 1. ProfileSheet Abonar en modo oscuro: los montos ($100, $250, $500, $1000) tienen texto claro sin tocarlos
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AuthProvider>.value(
+          value: auth,
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: ThemeMode.dark,
+            home: const Scaffold(body: ProfileSheet(initialTab: 1)),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final chipText = tester.widget<Text>(find.text('\$100'));
+      expect(chipText.style?.color, AppTheme.darkTextPrimary);
+      expect(find.text('\$250'), findsOneWidget);
+      expect(find.text('\$500'), findsOneWidget);
+      expect(find.text('\$1000'), findsOneWidget);
+
+      // 2. PaymentFlowDialog en modo oscuro: fondo oscuro adaptable y botones visibles
+      final product = ProductItem(
+        id: '403',
+        name: 'Recarga \$20',
+        service: 'Telcel',
+        serviceId: '133',
+        price: 20,
+        referenceType: 'a',
+        frontType: '1',
+        hasVerificationDigit: false,
+        categoryId: '1',
+      );
+      final paymentProvider = PaymentProvider()..initForProduct(product);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<PaymentProvider>.value(value: paymentProvider),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: ThemeMode.dark,
+            home: Scaffold(
+              body: PaymentFlowDialog(product: product, onViewHistory: () {}),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final dialog = tester.widget<Dialog>(find.byType(Dialog));
+      expect(dialog.backgroundColor, AppTheme.darkSurface);
+      expect(find.text('Valida la Referencia para Continuar'), findsOneWidget);
+      expect(find.text('Usar mi celular (5512345678)'), findsOneWidget);
+
+      // 3. LoginScreen Crear Cuenta no solicita CURP, nacionalidad, fecha de nacimiento ni sexo
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AuthProvider>.value(
+          value: auth,
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            themeMode: ThemeMode.dark,
+            home: const LoginScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Crear Cuenta'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nombre *'), findsOneWidget);
+      expect(find.text('Apellido(s) *'), findsOneWidget);
+      expect(find.text('CURP'), findsNothing);
+      expect(find.text('Nacionalidad'), findsNothing);
+      expect(find.text('Nacimiento *'), findsNothing);
+      expect(find.text('Sexo'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
     });
   });
 }

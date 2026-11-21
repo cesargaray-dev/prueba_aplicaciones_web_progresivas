@@ -285,6 +285,40 @@ class PortalCuentaServiceImplTest {
     }
 
     @Test
+    void registrarClientePortal_minimalSinKyc_aplicaValoresPorDefecto() {
+        RegisterRequestDTO minReq = new RegisterRequestDTO();
+        minReq.setNombre("Carlos");
+        minReq.setApellidoPaterno("Garay");
+        minReq.setCorreo("carlos.min@gmail.com");
+        minReq.setTelefonoMovil("5512345678");
+        minReq.setUsuario("carlos_min");
+        minReq.setContrasena("Segura2026");
+
+        when(loginClienteRepository.findByUsuario("carlos_min")).thenReturn(Optional.empty());
+        when(clienteRepository.existsByCorreo("carlos.min@gmail.com")).thenReturn(false);
+        when(clienteRepository.existsByCurp(any())).thenReturn(false);
+        when(clienteRepository.existsByRfc(any())).thenReturn(false);
+        when(cuentaRepository.existsByNumeroCuenta(anyString())).thenReturn(false);
+        when(clienteRepository.save(any(Cliente.class))).thenAnswer(inv -> {
+            Cliente c = inv.getArgument(0);
+            assertEquals("", c.getApellidoMaterno());
+            assertEquals(java.time.LocalDate.of(1995, 1, 1), c.getFechaNacimiento());
+            assertEquals("HOMBRE", c.getSexo());
+            assertNotNull(c.getCurp());
+            assertNotNull(c.getRfc());
+            c.setId(105L);
+            return c;
+        });
+        when(authService.login(any())).thenReturn(
+                LoginResponseDTO.builder().clienteId(105L).usuario("carlos_min").token("jwt-min").build()
+        );
+
+        LoginResponseDTO resp = service.registrarClientePortal(minReq);
+        assertNotNull(resp);
+        assertEquals("carlos_min", resp.getUsuario());
+    }
+
+    @Test
     void validarEntradasYFallosRegistroYContactoYCambioContrasena() {
         assertThrows(ValidacionException.class, () -> service.registrarClientePortal(null));
         assertThrows(ValidacionException.class, () -> service.actualizarContacto("Bearer t", null, null));

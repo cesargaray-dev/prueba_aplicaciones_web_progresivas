@@ -27,24 +27,27 @@ class AuthService {
     required String nombre,
     String? segundoNombre,
     required String apellidoPaterno,
-    required String apellidoMaterno,
-    required String fechaNacimiento,
-    required String sexo,
+    String apellidoMaterno = '',
+    String fechaNacimiento = '1995-01-01',
+    String sexo = 'HOMBRE',
     required String correo,
     required String telefonoMovil,
     required String usuario,
     required String contrasena,
   }) async {
     final cleanSegundo = segundoNombre?.trim();
+    final cleanMaterno = apellidoMaterno.trim();
+    final cleanFecha = fechaNacimiento.trim();
+    final cleanSexo = sexo.trim();
     final response = await _client.post(
       '/api/v1/auth/register',
       body: {
         'nombre': nombre.trim(),
         if (cleanSegundo != null && cleanSegundo.isNotEmpty) 'segundoNombre': cleanSegundo,
         'apellidoPaterno': apellidoPaterno.trim(),
-        'apellidoMaterno': apellidoMaterno.trim(),
-        'fechaNacimiento': fechaNacimiento.trim(),
-        'sexo': sexo.trim(),
+        if (cleanMaterno.isNotEmpty) 'apellidoMaterno': cleanMaterno,
+        if (cleanFecha.isNotEmpty) 'fechaNacimiento': cleanFecha,
+        if (cleanSexo.isNotEmpty) 'sexo': cleanSexo,
         'correo': correo.trim(),
         'telefonoMovil': telefonoMovil.trim(),
         'usuario': usuario.trim(),

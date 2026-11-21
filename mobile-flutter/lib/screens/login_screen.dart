@@ -27,11 +27,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   // Register controllers
   final _nombreController = TextEditingController();
-  final _segundoNombreController = TextEditingController();
   final _apPaternoController = TextEditingController();
-  final _apMaternoController = TextEditingController();
-  final _fechaNacController = TextEditingController(text: '1998-01-15');
-  String _sexo = 'HOMBRE';
   final _correoController = TextEditingController();
   final _telefonoController = TextEditingController();
   final _regUsuarioController = TextEditingController();
@@ -63,10 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _usuarioController.dispose();
     _contrasenaController.dispose();
     _nombreController.dispose();
-    _segundoNombreController.dispose();
     _apPaternoController.dispose();
-    _apMaternoController.dispose();
-    _fechaNacController.dispose();
     _correoController.dispose();
     _telefonoController.dispose();
     _regUsuarioController.dispose();
@@ -102,11 +95,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final success = await auth.register(
       nombre: _nombreController.text.trim(),
-      segundoNombre: _segundoNombreController.text.trim(),
       apellidoPaterno: _apPaternoController.text.trim(),
-      apellidoMaterno: _apMaternoController.text.trim(),
-      fechaNacimiento: _fechaNacController.text.trim(),
-      sexo: _sexo,
       correo: _correoController.text.trim(),
       telefonoMovil: _telefonoController.text.trim(),
       usuario: _regUsuarioController.text.trim(),
@@ -127,22 +116,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Future<void> _pickFechaNacimiento() async {
-    final now = DateTime.now();
-    final initial = DateTime(now.year - 25, now.month, now.day);
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial,
-      firstDate: DateTime(now.year - 100),
-      lastDate: DateTime(now.year - 18, now.month, now.day),
-    );
-    if (picked != null && mounted) {
-      final mm = picked.month.toString().padLeft(2, '0');
-      final dd = picked.day.toString().padLeft(2, '0');
-      _fechaNacController.text = '${picked.year}-$mm-$dd';
-    }
-  }
-
   void _showApiConfigDialog() {
     _apiUrlController.text = ApiClient().baseUrl;
     String? inlineError;
@@ -150,9 +123,9 @@ class _LoginScreenState extends State<LoginScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.dns_rounded, color: AppTheme.primaryNavy),
+              Icon(Icons.dns_rounded, color: AppTheme.brandAccent(ctx)),
               SizedBox(width: 8),
               Flexible(
                 child: Text('Configurar Servidor API', style: TextStyle(fontSize: 17)),
@@ -505,14 +478,18 @@ class _LoginScreenState extends State<LoginScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Text(
+        Text(
           'Accede a tu cuenta',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textDark),
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary(context),
+          ),
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Elige tu método de ingreso preferido.',
-          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+          style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
         ),
 
         if (canChooseBiometric) ...[
@@ -567,16 +544,16 @@ class _LoginScreenState extends State<LoginScreen> {
         Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: AppTheme.backgroundSlate,
+            color: AppTheme.elevatedBg(context),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.borderSlate),
+            border: Border.all(color: AppTheme.borderCol(context)),
           ),
           child: Row(
             children: [
               CircleAvatar(
                 radius: 20,
-                backgroundColor: AppTheme.primaryNavy.withValues(alpha: 0.12),
-                child: const Icon(Icons.person_rounded, color: AppTheme.primaryNavy),
+                backgroundColor: AppTheme.brandAccent(context).withValues(alpha: 0.16),
+                child: Icon(Icons.person_rounded, color: AppTheme.brandAccent(context)),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -587,10 +564,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       profile.nombreCompleto,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 14,
-                        color: AppTheme.textDark,
+                        color: AppTheme.textPrimary(context),
                       ),
                     ),
                     Text(
@@ -791,14 +768,18 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
+          Text(
             'Abre tu cuenta digital',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textDark),
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary(context),
+            ),
           ),
           const SizedBox(height: 4),
-          const Text(
+          Text(
             'Mismo usuario y contraseña para la aplicación Web y Móvil.',
-            style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
           ),
           const SizedBox(height: 14),
           Row(
@@ -814,72 +795,11 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: TextFormField(
-                  controller: _segundoNombreController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Segundo nombre',
-                    hintText: 'Opcional',
-                  ),
-                  validator: (val) => ValidationUtils.diagnosticarNombre(
-                    val,
-                    'El segundo nombre',
-                    optional: true,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
                   controller: _apPaternoController,
                   textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Ap. Paterno *'),
+                  decoration: const InputDecoration(labelText: 'Apellido(s) *'),
                   validator: (val) =>
-                      ValidationUtils.diagnosticarNombre(val, 'El apellido paterno'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: TextFormField(
-                  controller: _apMaternoController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(labelText: 'Ap. Materno *'),
-                  validator: (val) =>
-                      ValidationUtils.diagnosticarNombre(val, 'El apellido materno'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _fechaNacController,
-                  readOnly: true,
-                  onTap: _pickFechaNacimiento,
-                  decoration: const InputDecoration(
-                    labelText: 'Nacimiento *',
-                    suffixIcon: Icon(Icons.calendar_today_rounded, size: 18),
-                  ),
-                  validator: (val) => ValidationUtils.diagnosticarFechaNacimiento(val),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  initialValue: _sexo,
-                  decoration: const InputDecoration(labelText: 'Sexo'),
-                  items: const [
-                    DropdownMenuItem(value: 'HOMBRE', child: Text('Hombre')),
-                    DropdownMenuItem(value: 'MUJER', child: Text('Mujer')),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) setState(() => _sexo = v);
-                  },
+                      ValidationUtils.diagnosticarNombre(val, 'El apellido'),
                 ),
               ),
             ],

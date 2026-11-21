@@ -148,7 +148,7 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: AppTheme.borderSlate,
+                      color: AppTheme.borderCol(context),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -167,17 +167,17 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                             item.servicio,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
+                              color: AppTheme.textPrimary(context),
                             ),
                           ),
                           Text(
                             item.producto,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                            style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
                           ),
                         ],
                       ),
@@ -216,29 +216,29 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSlate,
+                    color: AppTheme.elevatedBg(context),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderSlate),
+                    border: Border.all(color: AppTheme.borderCol(context)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Monto Pagado',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textMuted,
+                          color: AppTheme.textSecondary(context),
                         ),
                       ),
                       Flexible(
                         child: Text(
                           '${currencyFormatter.format(item.monto)} MXN',
                           textAlign: TextAlign.end,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: AppTheme.primaryNavy,
+                            color: AppTheme.brandAccent(context),
                           ),
                         ),
                       ),
@@ -258,17 +258,17 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                 Divider(height: 16, color: AppTheme.borderCol(context)),
                 if (item.isRecarga) ...[
                   _buildRow('Teléfono Recargado', item.telefono),
-                  const Divider(height: 16, color: AppTheme.borderSlate),
+                  Divider(height: 16, color: AppTheme.borderCol(context)),
                 ] else if (item.referencia.isNotEmpty) ...[
                   _buildRow('Referencia de Pago', item.referencia),
-                  const Divider(height: 16, color: AppTheme.borderSlate),
+                  Divider(height: 16, color: AppTheme.borderCol(context)),
                 ],
                 _buildRow('Saldo Anterior', currencyFormatter.format(item.saldoAnterior)),
-                const Divider(height: 16, color: AppTheme.borderSlate),
+                Divider(height: 16, color: AppTheme.borderCol(context)),
                 _buildRow('Saldo Posterior', currencyFormatter.format(item.saldoRestante), isBold: true),
-                const Divider(height: 16, color: AppTheme.borderSlate),
+                Divider(height: 16, color: AppTheme.borderCol(context)),
                 _buildRow('Fecha de Operación', item.fechaOperacion),
-                const Divider(height: 16, color: AppTheme.borderSlate),
+                Divider(height: 16, color: AppTheme.borderCol(context)),
                 _buildRow('Concepto', item.concepto),
 
                 const SizedBox(height: 18),
@@ -276,19 +276,19 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSlate,
+                    color: AppTheme.elevatedBg(context),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderSlate),
+                    border: Border.all(color: AppTheme.borderCol(context)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
+                      Text(
                         'Enviar comprobante oficial por correo (Brevo)',
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryNavy,
+                          color: AppTheme.brandAccent(context),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -376,7 +376,10 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
 
                 ElevatedButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryNavy),
+                  style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.brandAccent(context),
+                  foregroundColor: Colors.white,
+                ),
                   child: const Text('Cerrar Comprobante'),
                 ),
               ],

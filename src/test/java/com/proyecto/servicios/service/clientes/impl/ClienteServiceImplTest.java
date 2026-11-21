@@ -1063,4 +1063,38 @@ class ClienteServiceImplTest {
         assertNotNull(list);
         assertEquals(1, list.size());
     }
+
+    @Test
+    void registrarCliente_minimalSinKyc_aplicaValoresPorDefectoYGuarda() {
+        ClienteRequestDTO req = new ClienteRequestDTO();
+        req.setNombre("Carlos");
+        req.setApellidoPaterno("Garay");
+        req.setCorreo("carlos.simple@gmail.com");
+        req.setTelefonoMovil("5512345678");
+
+        when(clienteRepository.existsByCorreo("carlos.simple@gmail.com")).thenReturn(false);
+        when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
+        when(cuentaRepository.existsByNumeroCuenta(anyString())).thenReturn(false);
+        when(clienteRepository.save(any(Cliente.class))).thenAnswer(i -> {
+            Cliente saved = i.getArgument(0);
+            assertEquals("", saved.getApellidoMaterno());
+            assertEquals(LocalDate.of(1995, 1, 1), saved.getFechaNacimiento());
+            assertEquals("HOMBRE", saved.getSexo());
+            assertEquals("MEXICANA", saved.getNacionalidad());
+            assertEquals("SOLTERO", saved.getEstadoCivil());
+            assertNotNull(saved.getCurp());
+            assertEquals(18, saved.getCurp().length());
+            assertNotNull(saved.getRfc());
+            saved.setId(50L);
+            return saved;
+        });
+
+        ClienteResponseDTO res = clienteService.registrarCliente(req);
+        assertNotNull(res);
+        assertEquals(50L, res.getId());
+        assertEquals("Carlos", res.getNombre());
+        assertEquals("CIUDAD DE MEXICO", res.getEstado());
+        assertEquals("06000", res.getCodigoPostal());
+        assertEquals(0, res.getCodigo());
+    }
 }

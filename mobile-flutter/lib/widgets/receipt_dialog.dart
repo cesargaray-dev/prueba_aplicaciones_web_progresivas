@@ -191,17 +191,17 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               Text(
                 titleText,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark,
+                  color: AppTheme.textPrimary(context),
                 ),
               ),
               const SizedBox(height: 4),
               Text(
                 displayMsg,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
               ),
               const SizedBox(height: 16),
 
@@ -267,28 +267,28 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSlate,
+                    color: AppTheme.elevatedBg(context),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.borderSlate),
+                    border: Border.all(color: AppTheme.borderCol(context)),
                   ),
                   child: Column(
                     children: [
                       Text(
                         '${widget.product.service} - ${widget.product.name}',
                         textAlign: TextAlign.center,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
-                          color: AppTheme.textMuted,
+                          color: AppTheme.textSecondary(context),
                           fontSize: 13,
                         ),
                       ),
                       const SizedBox(height: 6),
                       Text(
                         '${currencyFormatter.format(r.montoPagado)} MXN',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryNavy,
+                          color: AppTheme.brandAccent(context),
                         ),
                       ),
                     ],
@@ -300,16 +300,16 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSlate,
+                    color: AppTheme.elevatedBg(context),
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppTheme.borderSlate),
+                    border: Border.all(color: AppTheme.borderCol(context)),
                   ),
                   child: Text(
                     '${widget.product.service} - ${widget.product.name}',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      color: AppTheme.textDark,
+                      color: AppTheme.textPrimary(context),
                       fontSize: 13,
                     ),
                   ),
@@ -453,24 +453,24 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               ],
               if (r.upc != null && r.upc!.isNotEmpty) ...[
                 _buildDetailRow('Folio UPC', r.upc!, isMonospace: true),
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
               ],
               if (r.codigoProveedor != null && r.codigoProveedor!.isNotEmpty) ...[
                 _buildDetailRow('Código Proveedor', r.codigoProveedor!, isMonospace: true),
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
               ],
               _buildDetailRow(
                 widget.product.isRecarga ? 'Teléfono Celular' : 'Referencia',
                 widget.referenciaORPhone,
               ),
               if (r.fechaHoraOperacion.isNotEmpty) ...[
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
                 _buildDetailRow('Fecha Operación', r.fechaHoraOperacion),
               ],
               if (r.isSuccess) ...[
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
                 _buildDetailRow('Comisión Bancaria', currencyFormatter.format(r.comision)),
-                const Divider(height: 14, color: AppTheme.borderSlate),
+                Divider(height: 14, color: AppTheme.borderCol(context)),
                 _buildDetailRow(
                   'Saldo Restante',
                   '${currencyFormatter.format(r.saldoRestanteCuenta)} MXN',
@@ -482,7 +482,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: (isEmailOk ? AppTheme.secondaryBlue : AppTheme.warningAmber)
-                        .withValues(alpha: 0.08),
+                        .withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: (isEmailOk ? AppTheme.secondaryBlue : AppTheme.warningAmber)
@@ -497,7 +497,11 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                           Icon(
                             isEmailOk ? Icons.mark_email_read_outlined : Icons.mail_outline_rounded,
                             size: 20,
-                            color: isEmailOk ? AppTheme.secondaryBlue : const Color(0xFFB45309),
+                            color: isEmailOk
+                                ? AppTheme.brandAccent(context)
+                                : (AppTheme.isDark(context)
+                                    ? const Color(0xFFFBBF24)
+                                    : const Color(0xFFB45309)),
                           ),
                           const SizedBox(width: 8),
                           Expanded(
@@ -506,7 +510,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                                   (isEmailOk
                                       ? 'Comprobante enviado por correo electrónico vía Brevo.'
                                       : 'No se pudo confirmar la entrega por correo. Puedes reenviarlo aquí.'),
-                              style: const TextStyle(fontSize: 12, color: AppTheme.textDark),
+                              style: TextStyle(fontSize: 12, color: AppTheme.textPrimary(context)),
                             ),
                           ),
                           TextButton(
@@ -609,7 +613,10 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryNavy),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.brandAccent(context),
+                        foregroundColor: Colors.white,
+                      ),
                       child: Text(
                         r.isRejected ? 'Cerrar' : (r.isPending ? 'Entendido' : 'Finalizar'),
                       ),

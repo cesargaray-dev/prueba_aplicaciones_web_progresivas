@@ -329,9 +329,11 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
             if (v.length() < 2) throw new ValidacionException("El apellido paterno requiere minimo 2 caracteres.");
             c.setApellidoPaterno(v);
         }
-        if (req.getApellidoMaterno() != null && !req.getApellidoMaterno().isBlank()) {
+        if (req.getApellidoMaterno() != null) {
             String v = req.getApellidoMaterno().trim().toUpperCase(Locale.ROOT);
-            if (v.length() < 2) throw new ValidacionException("El apellido materno requiere minimo 2 caracteres.");
+            if (!v.isEmpty() && v.length() < 2) {
+                throw new ValidacionException("El apellido materno requiere minimo 2 caracteres.");
+            }
             c.setApellidoMaterno(v);
         }
         if (req.getCorreo() != null && !req.getCorreo().isBlank()) {

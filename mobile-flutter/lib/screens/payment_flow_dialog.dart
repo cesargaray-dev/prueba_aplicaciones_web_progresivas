@@ -55,7 +55,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
   void initState() {
     super.initState();
     final payment = Provider.of<PaymentProvider>(context, listen: false);
-    payment.initForProduct(widget.product);
+    payment.initForProduct(widget.product, notify: false);
 
     if (_isFixedPrice) {
       _montoController.text = widget.product.price.toStringAsFixed(2);
@@ -182,7 +182,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.cardBg(context),
       constraints: const BoxConstraints(maxWidth: 520),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -246,7 +246,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      backgroundColor: Colors.white,
+      backgroundColor: AppTheme.cardBg(context),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 480),
@@ -265,13 +265,13 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryNavy.withValues(alpha: 0.1),
+                            color: AppTheme.brandAccent(context).withValues(alpha: 0.14),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             'PASO $_currentStep DE 2',
-                            style: const TextStyle(
-                              color: AppTheme.primaryNavy,
+                            style: TextStyle(
+                              color: AppTheme.brandAccent(context),
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
@@ -284,10 +284,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                             _currentStep == 1 ? 'Validación de Referencia' : 'Confirmación 2FA',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
+                              color: AppTheme.textPrimary(context),
                             ),
                           ),
                         ),
@@ -295,7 +295,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, color: AppTheme.textMuted),
+                    icon: Icon(Icons.close_rounded, color: AppTheme.textSecondary(context)),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
@@ -307,9 +307,9 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.backgroundSlate,
+                  color: AppTheme.elevatedBg(context),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppTheme.borderSlate),
+                  border: Border.all(color: AppTheme.borderCol(context)),
                 ),
                 child: Row(
                   children: [
@@ -327,19 +327,19 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                             widget.product.service,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark,
+                              color: AppTheme.textPrimary(context),
                             ),
                           ),
                           Text(
                             widget.product.name,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: AppTheme.textMuted,
+                              color: AppTheme.textSecondary(context),
                             ),
                           ),
                         ],
@@ -350,10 +350,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                       _isFixedPrice
                           ? currencyFormatter.format(widget.product.price)
                           : 'Monto libre',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: AppTheme.primaryNavy,
+                        color: AppTheme.brandAccent(context),
                       ),
                     ),
                   ],
@@ -377,7 +377,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                       Expanded(
                         child: Text(
                           widget.product.legend!,
-                          style: const TextStyle(fontSize: 12, color: AppTheme.textDark),
+                          style: TextStyle(fontSize: 12, color: AppTheme.textPrimary(context)),
                         ),
                       ),
                     ],
@@ -391,10 +391,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
               if (_currentStep == 1) ...[
                 Text(
                   widget.product.referenceInstruction,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.textDark,
+                    color: AppTheme.textPrimary(context),
                   ),
                 ),
                 if (showModHint) ...[
@@ -402,21 +402,27 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AppTheme.primaryNavy.withValues(alpha: 0.06),
+                      color: AppTheme.brandAccent(context).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.primaryNavy.withValues(alpha: 0.2)),
+                      border: Border.all(
+                        color: AppTheme.brandAccent(context).withValues(alpha: 0.3),
+                      ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.calculate_outlined, size: 15, color: AppTheme.primaryNavy),
-                        SizedBox(width: 6),
+                        Icon(
+                          Icons.calculate_outlined,
+                          size: 15,
+                          color: AppTheme.brandAccent(context),
+                        ),
+                        const SizedBox(width: 6),
                         Expanded(
                           child: Text(
                             'Esta referencia incluye dígito verificador (Módulo 10 / 11). Verifica el último dígito.',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: AppTheme.primaryNavy,
+                              color: AppTheme.brandAccent(context),
                             ),
                           ),
                         ),
@@ -431,10 +437,22 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     Align(
                       alignment: Alignment.centerRight,
                       child: ActionChip(
-                        avatar: const Icon(Icons.smartphone_rounded, size: 16, color: AppTheme.secondaryBlue),
+                        backgroundColor: AppTheme.brandAccent(context).withValues(alpha: 0.12),
+                        side: BorderSide(
+                          color: AppTheme.brandAccent(context).withValues(alpha: 0.35),
+                        ),
+                        avatar: Icon(
+                          Icons.smartphone_rounded,
+                          size: 16,
+                          color: AppTheme.brandAccent(context),
+                        ),
                         label: Text(
                           'Usar mi celular (${session.telefonoMovil})',
-                          style: const TextStyle(fontSize: 12, color: AppTheme.secondaryBlue),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.brandAccent(context),
+                          ),
                         ),
                         onPressed: () {
                           final tel = session.telefonoMovil!.trim();
@@ -467,7 +485,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                       errorText: (_phoneValidateAttempted || _phoneController.text.length == 10)
                           ? ValidationUtils.diagnosticarTelefono(_phoneController.text)
                           : null,
-                      prefixIcon: const Icon(Icons.phone_iphone_rounded, color: AppTheme.textMuted),
+                      prefixIcon: Icon(
+                        Icons.phone_iphone_rounded,
+                        color: AppTheme.textSecondary(context),
+                      ),
                     ),
                   ),
                 ] else ...[
@@ -483,7 +504,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                           ? 'Referencia / No. de Cuenta o TAG'
                           : 'Referencia / No. de Servicio',
                       hintText: widget.product.referenceType == 'b' ? 'Código de barras' : 'Ej. 0180020300',
-                      prefixIcon: const Icon(Icons.receipt_long_rounded, color: AppTheme.textMuted),
+                      prefixIcon: Icon(
+                        Icons.receipt_long_rounded,
+                        color: AppTheme.textSecondary(context),
+                      ),
                     ),
                   ),
                 ],
@@ -507,7 +531,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                           : (widget.product.price > 0
                               ? 'Referencia sugerida: \$${widget.product.price.toStringAsFixed(2)} MXN'
                               : null),
-                      prefixIcon: const Icon(Icons.attach_money_rounded, color: AppTheme.textMuted),
+                      prefixIcon: Icon(
+                        Icons.attach_money_rounded,
+                        color: AppTheme.textSecondary(context),
+                      ),
                     ),
                   ),
                 ],
@@ -578,7 +605,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                 ElevatedButton(
                   onPressed: payment.isReferenceValid ? _proceedToStep2 : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryNavy,
+                    backgroundColor: AppTheme.brandAccent(context),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppTheme.elevatedBg(context),
+                    disabledForegroundColor: AppTheme.textSecondary(context),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   child: Row(
@@ -604,9 +634,9 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.backgroundSlate,
+                    color: AppTheme.elevatedBg(context),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.borderSlate),
+                    border: Border.all(color: AppTheme.borderCol(context)),
                   ),
                   child: Column(
                     children: [
@@ -614,29 +644,29 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                         'Cuenta Cargo',
                         session?.maskedAccount ?? '****',
                       ),
-                      const Divider(height: 14, color: AppTheme.borderSlate),
+                      Divider(height: 14, color: AppTheme.borderCol(context)),
                       _buildSummaryRow(
                         'Destino',
                         widget.product.isRecarga ? payment.telefono : payment.referencia,
                       ),
-                      const Divider(height: 14, color: AppTheme.borderSlate),
+                      Divider(height: 14, color: AppTheme.borderCol(context)),
                       _buildSummaryRow(
                         'Monto a Pagar',
                         '${currencyFormatter.format(payment.monto)} MXN',
                         isBold: true,
                       ),
-                      const Divider(height: 14, color: AppTheme.borderSlate),
+                      Divider(height: 14, color: AppTheme.borderCol(context)),
                       _buildSummaryRow(
                         'Comisión Bancaria',
                         '\$0.00 MXN',
                         highlightColor: AppTheme.accentEmerald,
                       ),
-                      const Divider(height: 14, color: AppTheme.borderSlate),
+                      Divider(height: 14, color: AppTheme.borderCol(context)),
                       _buildSummaryRow(
                         'Saldo Actual',
                         '${currencyFormatter.format(saldoActual)} MXN',
                       ),
-                      const Divider(height: 14, color: AppTheme.borderSlate),
+                      Divider(height: 14, color: AppTheme.borderCol(context)),
                       _buildSummaryRow(
                         'Saldo Posterior',
                         '${currencyFormatter.format(saldoPosterior)} MXN',
@@ -710,11 +740,11 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     children: [
                       Row(
                         children: [
-                          const Expanded(
+                          Expanded(
                             child: Row(
                               children: [
-                                Icon(Icons.security_rounded, color: AppTheme.secondaryBlue, size: 18),
-                                SizedBox(width: 6),
+                                Icon(Icons.security_rounded, color: AppTheme.brandAccent(context), size: 18),
+                                const SizedBox(width: 6),
                                 Flexible(
                                   child: Text(
                                     'Autorización 2FA Requerida',
@@ -723,7 +753,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: AppTheme.primaryNavy,
+                                      color: AppTheme.brandAccent(context),
                                     ),
                                   ),
                                 ),
@@ -850,10 +880,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     LengthLimitingTextInputFormatter(6),
                   ],
                   onChanged: (val) => payment.setEnteredOtp(val),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Ingresa el código 2FA (6 dígitos)',
                     hintText: '123456',
-                    prefixIcon: Icon(Icons.pin_rounded, color: AppTheme.textMuted),
+                    prefixIcon: Icon(Icons.pin_rounded, color: AppTheme.textSecondary(context)),
                   ),
                 ),
 
@@ -871,7 +901,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                   },
                   title: Text(
                     'Confirmo que verifiqué la referencia y autorizo el cargo de ${currencyFormatter.format(payment.monto)} MXN.',
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textDark),
+                    style: TextStyle(fontSize: 12, color: AppTheme.textPrimary(context)),
                   ),
                 ),
 
@@ -924,6 +954,9 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                             onPressed: disabled ? null : _executePayment,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: AppTheme.accentEmerald,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: AppTheme.elevatedBg(context),
+                              disabledForegroundColor: AppTheme.textSecondary(context),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                             child: payment.isPaying
@@ -956,7 +989,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 13, color: AppTheme.textMuted),
+          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -967,7 +1000,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
             style: TextStyle(
               fontSize: 13,
               fontWeight: isBold ? FontWeight.bold : FontWeight.w600,
-              color: highlightColor ?? AppTheme.textDark,
+              color: highlightColor ?? AppTheme.textPrimary(context),
             ),
           ),
         ),

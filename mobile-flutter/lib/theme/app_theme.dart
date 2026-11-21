@@ -259,10 +259,75 @@ class AppTheme {
         backgroundColor: darkSurface,
         modalBackgroundColor: darkSurface,
       ),
+      textTheme: const TextTheme(
+        bodyLarge: TextStyle(color: darkTextPrimary, fontSize: 15),
+        bodyMedium: TextStyle(color: darkTextPrimary, fontSize: 14),
+        bodySmall: TextStyle(color: darkTextSecondary, fontSize: 12),
+        titleLarge: TextStyle(color: darkTextPrimary, fontWeight: FontWeight.bold),
+        titleMedium: TextStyle(color: darkTextPrimary, fontWeight: FontWeight.w600),
+        titleSmall: TextStyle(color: darkTextSecondary, fontWeight: FontWeight.w600),
+        labelLarge: TextStyle(color: darkTextPrimary, fontWeight: FontWeight.w600),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: darkBorder,
+        thickness: 1,
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: darkElevated,
+        selectedColor: secondaryBlue,
+        disabledColor: const Color(0xFF111827),
+        side: const BorderSide(color: Color(0xFF334155)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        labelStyle: const TextStyle(
+          color: darkTextPrimary,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+        secondaryLabelStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      segmentedButtonTheme: SegmentedButtonThemeData(
+        style: ButtonStyle(
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) return secondaryBlue;
+            return darkElevated;
+          }),
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) return Colors.white;
+            return darkTextPrimary;
+          }),
+          side: const WidgetStatePropertyAll(
+            BorderSide(color: Color(0xFF334155)),
+          ),
+        ),
+      ),
+      checkboxTheme: CheckboxThemeData(
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return secondaryBlue;
+          return Colors.transparent;
+        }),
+        checkColor: const WidgetStatePropertyAll(Colors.white),
+        side: const BorderSide(color: Color(0xFF94A3B8), width: 1.6),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return Colors.white;
+          return darkTextSecondary;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return accentEmerald;
+          return const Color(0xFF334155);
+        }),
+      ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: secondaryBlue,
           foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xFF1E293B),
+          disabledForegroundColor: const Color(0xFF94A3B8),
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(
@@ -277,11 +342,22 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: darkAccentBlue,
-          side: const BorderSide(color: darkBorder, width: 1.5),
+          disabledForegroundColor: const Color(0xFF64748B),
+          side: const BorderSide(color: Color(0xFF3B82F6), width: 1.4),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+          textStyle: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: darkAccentBlue,
+          disabledForegroundColor: const Color(0xFF64748B),
           textStyle: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,

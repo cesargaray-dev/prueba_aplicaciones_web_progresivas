@@ -155,6 +155,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
       apellidoMaterno,
       'El apellido materno',
       maxLength: 80,
+      optional: true,
     );
     if (apMatErr != null) {
       setState(() {
@@ -344,7 +345,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       height: 4,
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: AppTheme.borderSlate,
+                        color: AppTheme.borderCol(context),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -353,7 +354,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
                   // Header
                   Row(
                     children: [
-                      const Icon(Icons.account_circle_rounded, color: AppTheme.primaryNavy, size: 32),
+                      Icon(Icons.account_circle_rounded, color: AppTheme.brandAccent(context), size: 32),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Column(
@@ -363,7 +364,11 @@ class _ProfileSheetState extends State<ProfileSheet> {
                               session.nombreCompleto,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppTheme.textPrimary(context),
+                              ),
                             ),
                             Row(
                               children: [
@@ -372,7 +377,10 @@ class _ProfileSheetState extends State<ProfileSheet> {
                                     '@${session.usuario} • ${session.numeroCuenta}',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textSecondary(context),
+                                    ),
                                   ),
                                 ),
                                 IconButton(
@@ -476,9 +484,13 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         padding: EdgeInsets.only(bottom: 10),
                         child: LinearProgressIndicator(minHeight: 2),
                       ),
-                    const Text(
+                    Text(
                       'Información Personal',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryNavy),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.brandAccent(context),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Row(
@@ -524,16 +536,20 @@ class _ProfileSheetState extends State<ProfileSheet> {
                             controller: _apellidoMaternoController,
                             textCapitalization: TextCapitalization.words,
                             decoration: const InputDecoration(
-                              labelText: 'Apellido materno *',
+                              labelText: 'Apellido materno (opcional)',
                             ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Correo Electrónico y Celular Asociado',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryNavy),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.brandAccent(context),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
@@ -609,15 +625,23 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       runSpacing: 6,
                       children: ['100', '250', '500', '1000'].map((amt) {
                         final active = _abonoController.text.trim() == amt;
+                        final isDark = AppTheme.isDark(context);
                         return ChoiceChip(
                           showCheckmark: false,
                           selected: active,
+                          backgroundColor: isDark ? AppTheme.darkElevated : Colors.white,
                           selectedColor: AppTheme.accentEmerald,
+                          side: BorderSide(
+                            color: active
+                                ? AppTheme.accentEmerald
+                                : AppTheme.borderCol(context),
+                            width: active ? 1.5 : 1,
+                          ),
                           label: Text(
                             '\$$amt',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
-                              color: active ? Colors.white : AppTheme.textDark,
+                              color: active ? Colors.white : AppTheme.textPrimary(context),
                             ),
                           ),
                           onSelected: (_) => setState(() => _abonoController.text = amt),
@@ -630,7 +654,13 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         Expanded(
                           child: TextField(
                             controller: _abonoController,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary(context),
+                            ),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (_) => setState(() {}),
                             decoration: const InputDecoration(
                               labelText: 'Monto MXN',
                               prefixText: '\$ ',
@@ -641,6 +671,10 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         Expanded(
                           child: TextField(
                             controller: _conceptoController,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: AppTheme.textPrimary(context),
+                            ),
                             decoration: const InputDecoration(labelText: 'Concepto'),
                           ),
                         ),
@@ -649,7 +683,12 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     const SizedBox(height: 14),
                     ElevatedButton.icon(
                       onPressed: auth.isLoading ? null : () => _applyAbono(auth),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentEmerald,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: AppTheme.elevatedBg(context),
+                        disabledForegroundColor: AppTheme.textSecondary(context),
+                      ),
                       icon: auth.isLoading
                           ? const SizedBox(
                               width: 16,
@@ -666,9 +705,9 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryNavy.withValues(alpha: 0.04),
+                        color: AppTheme.brandAccent(context).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppTheme.borderSlate),
+                        border: Border.all(color: AppTheme.borderCol(context)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -678,12 +717,12 @@ class _ProfileSheetState extends State<ProfileSheet> {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.secondaryBlue.withValues(alpha: 0.12),
+                                  color: AppTheme.secondaryBlue.withValues(alpha: 0.14),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.fingerprint_rounded,
-                                  color: AppTheme.primaryNavy,
+                                  color: AppTheme.brandAccent(context),
                                   size: 22,
                                 ),
                               ),
@@ -694,10 +733,10 @@ class _ProfileSheetState extends State<ProfileSheet> {
                                   children: [
                                     Text(
                                       'Acceso con ${auth.biometricLabel}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        color: AppTheme.primaryNavy,
+                                        color: AppTheme.brandAccent(context),
                                       ),
                                     ),
                                     Text(
@@ -707,7 +746,10 @@ class _ProfileSheetState extends State<ProfileSheet> {
                                               : 'Inicia sesión rápido y seguro con tu huella')
                                           : (auth.biometricAvailability.unavailableReason ??
                                               'Disponible en dispositivos móviles con sensor'),
-                                      style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppTheme.textSecondary(context),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -763,9 +805,13 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     ),
 
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Cambiar Contraseña',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.primaryNavy),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.brandAccent(context),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(

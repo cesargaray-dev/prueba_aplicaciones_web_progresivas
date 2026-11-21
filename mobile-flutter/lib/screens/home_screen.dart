@@ -82,12 +82,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.secondaryBlue.withValues(alpha: 0.12),
+                color: AppTheme.secondaryBlue.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.fingerprint_rounded,
-                color: AppTheme.primaryNavy,
+                color: AppTheme.brandAccent(ctx),
                 size: 24,
               ),
             ),
@@ -95,20 +95,20 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: Text(
                 '¿Activar acceso con ${auth.biometricLabel}?',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
-                  color: AppTheme.primaryNavy,
+                  color: AppTheme.brandAccent(ctx),
                 ),
               ),
             ),
           ],
         ),
-        content: const Text(
+        content: Text(
           '¡Tu cuenta bancaria ha sido creada con éxito!\n\n'
           '¿Deseas agregar tu huella digital ahora para iniciar sesión más fácil y rápido la próxima vez?\n\n'
           'Si eliges "Ahora no", podrás activarla cuando gustes desde Mi Perfil → Seguridad.',
-          style: TextStyle(fontSize: 13, color: AppTheme.textDark, height: 1.45),
+          style: TextStyle(fontSize: 13, color: AppTheme.textPrimary(ctx), height: 1.45),
         ),
         actions: [
           TextButton(
@@ -577,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Text(
                         catalog.errorMessage!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 14, color: AppTheme.textDark),
+                        style: TextStyle(fontSize: 14, color: AppTheme.textPrimary(context)),
                       ),
                       const SizedBox(height: 16),
                       ElevatedButton(

@@ -76,7 +76,7 @@ class PaymentProvider with ChangeNotifier {
       _isConfirmed &&
       !_isPaying;
 
-  void initForProduct(ProductItem product) {
+  void initForProduct(ProductItem product, {bool notify = true}) {
     _selectedProduct = product;
     _referencia = '';
     _telefono = '';
@@ -93,7 +93,7 @@ class PaymentProvider with ChangeNotifier {
     twoFASecondsNotifier.value = 0;
     _isPaying = false;
     _paymentError = null;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   void setReferencia(String val) {

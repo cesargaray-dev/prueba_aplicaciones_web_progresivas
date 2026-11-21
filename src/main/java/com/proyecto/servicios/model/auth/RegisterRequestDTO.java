@@ -32,13 +32,10 @@ public class RegisterRequestDTO {
     @Size(min = 2, max = 50, message = "El apellido paterno debe tener entre 2 y 50 caracteres")
     private String apellidoPaterno;
 
-    @NotBlank(message = "El apellido materno es obligatorio")
-    @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$", message = "El apellido materno solo debe contener letras")
-    @Size(min = 2, max = 50, message = "El apellido materno debe tener entre 2 y 50 caracteres")
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,50}$", message = "El apellido materno debe tener entre 2 y 50 letras")
     private String apellidoMaterno;
 
-    @NotBlank(message = "La fecha de nacimiento es obligatoria")
-    @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "La fecha de nacimiento debe tener formato yyyy-MM-dd")
+    @Pattern(regexp = "^$|^\\d{4}-\\d{2}-\\d{2}$", message = "La fecha de nacimiento debe tener formato yyyy-MM-dd")
     private String fechaNacimiento;
 
     @NotBlank(message = "El correo electrónico es obligatorio")

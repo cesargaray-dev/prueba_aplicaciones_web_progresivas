@@ -146,7 +146,9 @@ class ServiceCard extends StatelessWidget {
                         onPressed: onSelect,
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
-                              product.isRecarga ? AppTheme.secondaryBlue : AppTheme.primaryNavy,
+                              product.isRecarga
+                                  ? AppTheme.secondaryBlue
+                                  : AppTheme.brandAccent(context),
                           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,

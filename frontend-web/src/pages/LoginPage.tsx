@@ -12,7 +12,6 @@ import {
   UserPlus,
   Mail,
   Phone,
-  Calendar,
   CheckCircle2,
   X,
 } from 'lucide-react';
@@ -22,11 +21,9 @@ import {
   esContrasenaSegura,
   esCorreoPlaceholder,
   esCorreoValido,
-  esMayorDeEdad,
   esNombreValido,
   esTelefonoMexicanoValido,
   esUsuarioValido,
-  getMaxBirthDateIso,
 } from '../utils/validation';
 
 type AuthMode = 'login' | 'register';
@@ -42,11 +39,7 @@ export const LoginPage: React.FC = () => {
 
   // Register state
   const [nombre, setNombre] = useState('');
-  const [segundoNombre, setSegundoNombre] = useState('');
   const [apellidoPaterno, setApellidoPaterno] = useState('');
-  const [apellidoMaterno, setApellidoMaterno] = useState('');
-  const [fechaNacimiento, setFechaNacimiento] = useState('1998-01-15');
-  const [sexo, setSexo] = useState<'HOMBRE' | 'MUJER'>('HOMBRE');
   const [correo, setCorreo] = useState('');
   const [telefonoMovil, setTelefonoMovil] = useState('');
   const [regUsuario, setRegUsuario] = useState('');
@@ -56,7 +49,6 @@ export const LoginPage: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  const maxBirthDate = getMaxBirthDateIso();
   const phoneDiag = telefonoMovil ? diagnosticarTelefono(telefonoMovil) : null;
   const phoneOk = esTelefonoMexicanoValido(telefonoMovil);
 
@@ -93,28 +85,10 @@ export const LoginPage: React.FC = () => {
       setError('El nombre debe tener entre 2 y 50 caracteres y contener solo letras y espacios.');
       return;
     }
-    if (!esNombreValido(segundoNombre, false)) {
-      setError('El segundo nombre solo puede contener letras y espacios (máximo 50 caracteres).');
-      return;
-    }
     if (!esNombreValido(apellidoPaterno, true)) {
       setError(
         'El apellido paterno debe tener entre 2 y 50 caracteres y contener solo letras y espacios.'
       );
-      return;
-    }
-    if (!esNombreValido(apellidoMaterno, true)) {
-      setError(
-        'El apellido materno debe tener entre 2 y 50 caracteres y contener solo letras y espacios.'
-      );
-      return;
-    }
-    if (!fechaNacimiento) {
-      setError('Selecciona tu fecha de nacimiento.');
-      return;
-    }
-    if (!esMayorDeEdad(fechaNacimiento)) {
-      setError('Debes ser mayor de 18 años para abrir una cuenta digital.');
       return;
     }
     const emailTrim = correo.trim();
@@ -153,11 +127,7 @@ export const LoginPage: React.FC = () => {
     try {
       await register({
         nombre: nombre.trim(),
-        segundoNombre: segundoNombre.trim() || undefined,
         apellidoPaterno: apellidoPaterno.trim(),
-        apellidoMaterno: apellidoMaterno.trim(),
-        fechaNacimiento,
-        sexo,
         correo: emailTrim,
         telefonoMovil: telefonoMovil.trim(),
         usuario: regUsuario.trim(),
@@ -357,26 +327,8 @@ export const LoginPage: React.FC = () => {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label
-                    htmlFor="reg-segundo-nombre"
-                    className="text-[11px] font-bold text-slate-700"
-                  >
-                    Segundo Nombre (opcional)
-                  </label>
-                  <input
-                    id="reg-segundo-nombre"
-                    type="text"
-                    maxLength={50}
-                    value={segundoNombre}
-                    onChange={(e) => setSegundoNombre(e.target.value)}
-                    placeholder="Opcional"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    disabled={isLoading}
-                  />
-                </div>
-                <div className="space-y-1">
                   <label htmlFor="reg-ap-paterno" className="text-[11px] font-bold text-slate-700">
-                    Ap. Paterno *
+                    Apellido(s) / Paterno *
                   </label>
                   <input
                     id="reg-ap-paterno"
@@ -388,56 +340,6 @@ export const LoginPage: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
                     disabled={isLoading}
                   />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="reg-ap-materno" className="text-[11px] font-bold text-slate-700">
-                    Ap. Materno *
-                  </label>
-                  <input
-                    id="reg-ap-materno"
-                    type="text"
-                    maxLength={50}
-                    value={apellidoMaterno}
-                    onChange={(e) => setApellidoMaterno(e.target.value)}
-                    placeholder="Materno"
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    disabled={isLoading}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div className="space-y-1">
-                  <label htmlFor="reg-fecha-nac" className="text-[11px] font-bold text-slate-700">
-                    Fecha de nacimiento (18+) *
-                  </label>
-                  <div className="relative">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
-                    <input
-                      id="reg-fecha-nac"
-                      type="date"
-                      max={maxBirthDate}
-                      value={fechaNacimiento}
-                      onChange={(e) => setFechaNacimiento(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                      disabled={isLoading}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="reg-sexo" className="text-[11px] font-bold text-slate-700">
-                    Sexo *
-                  </label>
-                  <select
-                    id="reg-sexo"
-                    value={sexo}
-                    onChange={(e) => setSexo(e.target.value as 'HOMBRE' | 'MUJER')}
-                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                    disabled={isLoading}
-                  >
-                    <option value="HOMBRE">Hombre</option>
-                    <option value="MUJER">Mujer</option>
-                  </select>
                 </div>
               </div>
 

@@ -218,7 +218,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               Text(
                                 history.errorMessage!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 13, color: AppTheme.textDark),
+                                style: TextStyle(fontSize: 13, color: AppTheme.textPrimary(context)),
                               ),
                               const SizedBox(height: 14),
                               ElevatedButton.icon(
@@ -306,10 +306,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                                         item.servicio,
                                                         maxLines: 1,
                                                         overflow: TextOverflow.ellipsis,
-                                                        style: const TextStyle(
+                                                        style: TextStyle(
                                                           fontSize: 14,
                                                           fontWeight: FontWeight.bold,
-                                                          color: AppTheme.textDark,
+                                                          color: AppTheme.textPrimary(context),
                                                         ),
                                                       ),
                                                     ),

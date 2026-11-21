@@ -100,36 +100,12 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(screen.getByText(/El nombre debe tener entre 2 y 50/i)).toBeInTheDocument();
       await user.type(screen.getByLabelText(/^Nombre \*/i), 'Cesar');
 
-      // 2. Invalid segundoNombre
-      const segInput = screen.getByLabelText(/Segundo Nombre/i);
-      await user.type(segInput, '123');
-      await user.click(submitBtn());
-      expect(screen.getByText(/El segundo nombre solo puede contener letras/i)).toBeInTheDocument();
-      await user.clear(segInput);
-      await user.type(segInput, 'Enrique');
-
-      // 3. Invalid apellidoPaterno
+      // 2. Invalid apellidoPaterno
       await user.click(submitBtn());
       expect(screen.getByText(/El apellido paterno debe tener/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Ap\. Paterno/i), 'Garay');
+      await user.type(screen.getByLabelText(/Apellido\(s\) \/ Paterno/i), 'Garay');
 
-      // 4. Invalid apellidoMaterno
-      await user.click(submitBtn());
-      expect(screen.getByText(/El apellido materno debe tener/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Ap\. Materno/i), 'Garcia');
-
-      // 5. Empty & underage birth date
-      const birthInput = screen.getByLabelText(/Fecha de nacimiento/i);
-      fireEvent.change(birthInput, { target: { value: '' } });
-      await user.click(submitBtn());
-      expect(screen.getByText(/Selecciona tu fecha de nacimiento/i)).toBeInTheDocument();
-      fireEvent.change(birthInput, { target: { value: '2020-01-01' } });
-      await user.click(submitBtn());
-      expect(screen.getByText(/Debes ser mayor de 18 años/i)).toBeInTheDocument();
-      fireEvent.change(birthInput, { target: { value: '1998-01-15' } });
-
-      // 6. Invalid & placeholder email + sexo change
-      fireEvent.change(screen.getByLabelText(/Sexo \*/i), { target: { value: 'MUJER' } });
+      // 3. Invalid & placeholder email
       const emailInput = screen.getByLabelText(/Correo electrónico real/i);
       await user.type(emailInput, 'correo-invalido');
       await user.click(submitBtn());

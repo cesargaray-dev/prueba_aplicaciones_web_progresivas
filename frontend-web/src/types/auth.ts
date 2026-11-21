@@ -27,8 +27,8 @@ export interface RegisterRequest {
   nombre: string;
   segundoNombre?: string;
   apellidoPaterno: string;
-  apellidoMaterno: string;
-  fechaNacimiento: string;
+  apellidoMaterno?: string;
+  fechaNacimiento?: string;
   correo: string;
   telefonoMovil: string;
   usuario: string;

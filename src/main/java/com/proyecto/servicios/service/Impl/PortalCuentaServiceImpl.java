@@ -223,7 +223,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         }
         if (request.getApellidoMaterno() != null) {
             String apMatClean = request.getApellidoMaterno().trim();
-            if (apMatClean.length() < 2) {
+            if (!apMatClean.isEmpty() && apMatClean.length() < 2) {
                 throw new ValidacionException("El apellido materno debe tener al menos 2 caracteres.");
             }
             cliente.setApellidoMaterno(apMatClean);
@@ -365,7 +365,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
                 ? request.getSegundoNombre().trim().toUpperCase(Locale.ROOT)
                 : null;
         String apPaterno = request.getApellidoPaterno().trim().toUpperCase(Locale.ROOT);
-        String apMaterno = request.getApellidoMaterno().trim().toUpperCase(Locale.ROOT);
+        String apMaterno = request.getApellidoMaterno() == null ? "" : request.getApellidoMaterno().trim().toUpperCase(Locale.ROOT);
 
         String curp = resolverCurpUnica(request.getCurp(), nombre, apPaterno, apMaterno, fechaNacimiento, sexo);
         String rfc = resolverRfcUnico(request.getRfc(), curp);
@@ -429,6 +429,9 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
     }
 
     private LocalDate parsearYValidarFechaNacimiento(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return LocalDate.of(1995, 1, 1);
+        }
         LocalDate fecha;
         try {
             fecha = LocalDate.parse(raw.trim());

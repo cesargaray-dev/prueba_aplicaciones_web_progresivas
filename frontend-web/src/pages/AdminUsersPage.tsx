@@ -43,11 +43,7 @@ export const AdminUsersPage: React.FC = () => {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<RegisterRequest>({
     nombre: '',
-    segundoNombre: '',
     apellidoPaterno: '',
-    apellidoMaterno: '',
-    fechaNacimiento: '1995-05-15',
-    sexo: 'HOMBRE',
     correo: '',
     telefonoMovil: '',
     usuario: '',
@@ -250,11 +246,7 @@ export const AdminUsersPage: React.FC = () => {
       setIsCreateOpen(false);
       setCreateForm({
         nombre: '',
-        segundoNombre: '',
         apellidoPaterno: '',
-        apellidoMaterno: '',
-        fechaNacimiento: '1995-05-15',
-        sexo: 'HOMBRE',
         correo: '',
         telefonoMovil: '',
         usuario: '',
@@ -622,7 +614,6 @@ export const AdminUsersPage: React.FC = () => {
                   <label className="font-bold text-slate-700 block mb-1">Apellido Materno *</label>
                   <input
                     type="text"
-                    required
                     value={editForm.apellidoMaterno}
                     onChange={(e) => setEditForm({ ...editForm, apellidoMaterno: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300"
@@ -785,18 +776,7 @@ export const AdminUsersPage: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Segundo Nombre</label>
-                  <input
-                    type="text"
-                    value={createForm.segundoNombre}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, segundoNombre: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Apellido Paterno *</label>
+                  <label className="font-bold text-slate-700 block mb-1">Apellido(s) / Paterno *</label>
                   <input
                     type="text"
                     required
@@ -807,45 +787,17 @@ export const AdminUsersPage: React.FC = () => {
                     className="w-full px-3 py-2 rounded-xl border border-slate-300"
                   />
                 </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Apellido Materno *</label>
-                  <input
-                    type="text"
-                    required
-                    value={createForm.apellidoMaterno}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, apellidoMaterno: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                  />
-                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">
-                    Fecha de Nacimiento *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={createForm.fechaNacimiento}
-                    onChange={(e) =>
-                      setCreateForm({ ...createForm, fechaNacimiento: e.target.value })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold text-slate-700 block mb-1">Correo Real *</label>
-                  <input
-                    type="email"
-                    required
-                    value={createForm.correo}
-                    onChange={(e) => setCreateForm({ ...createForm, correo: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300"
-                  />
-                </div>
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Correo Real *</label>
+                <input
+                  type="email"
+                  required
+                  value={createForm.correo}
+                  onChange={(e) => setCreateForm({ ...createForm, correo: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                />
               </div>
 
               <div className="grid grid-cols-3 gap-3">

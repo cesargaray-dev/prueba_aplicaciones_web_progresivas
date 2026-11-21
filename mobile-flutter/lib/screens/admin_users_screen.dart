@@ -775,7 +775,7 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
                   Expanded(
                     child: TextField(
                       controller: _maternoCtrl,
-                      decoration: const InputDecoration(labelText: 'Apellido Materno *'),
+                      decoration: const InputDecoration(labelText: 'Apellido Materno (opcional)'),
                     ),
                   ),
                 ],
@@ -816,14 +816,26 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
                   Expanded(
                     child: TextField(
                       controller: _saldoCtrl,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary(context),
+                      ),
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Saldo Disponible (MXN) *'),
+                      decoration: const InputDecoration(
+                        labelText: 'Saldo Disponible (MXN) *',
+                        prefixText: '\$ ',
+                      ),
                     ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
                       controller: _passCtrl,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: AppTheme.textPrimary(context),
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Nueva Contraseña (opcional)',
                       ),
@@ -835,18 +847,28 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
                 const SizedBox(height: 10),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text(
+                  activeThumbColor: AppTheme.accentEmerald,
+                  title: Text(
                     'Cuenta Activa',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary(context),
+                    ),
                   ),
                   value: _activo,
                   onChanged: _isSaving ? null : (v) => setState(() => _activo = v),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text(
+                  activeThumbColor: AppTheme.errorRed,
+                  title: Text(
                     'Acceso Bloqueado',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.textPrimary(context),
+                    ),
                   ),
                   value: _bloqueado,
                   onChanged: _isSaving ? null : (v) => setState(() => _bloqueado = v),
@@ -856,6 +878,12 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.brandAccent(context),
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppTheme.elevatedBg(context),
+                    disabledForegroundColor: AppTheme.textSecondary(context),
+                  ),
                   icon: _isSaving
                       ? const SizedBox(
                           width: 18,
@@ -886,10 +914,7 @@ class _AdminCreateUserSheet extends StatefulWidget {
 
 class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
   final _nombreCtrl = TextEditingController();
-  final _segundoCtrl = TextEditingController();
   final _paternoCtrl = TextEditingController();
-  final _maternoCtrl = TextEditingController();
-  final _fechaCtrl = TextEditingController(text: '1995-05-15');
   final _correoCtrl = TextEditingController();
   final _telCtrl = TextEditingController();
   final _usrCtrl = TextEditingController();
@@ -902,10 +927,7 @@ class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
   @override
   void dispose() {
     _nombreCtrl.dispose();
-    _segundoCtrl.dispose();
     _paternoCtrl.dispose();
-    _maternoCtrl.dispose();
-    _fechaCtrl.dispose();
     _correoCtrl.dispose();
     _telCtrl.dispose();
     _usrCtrl.dispose();
@@ -933,11 +955,7 @@ class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
     try {
       await widget.api.post('/api/v1/admin/usuarios', body: {
         'nombre': _nombreCtrl.text.trim(),
-        'segundoNombre': _segundoCtrl.text.trim(),
         'apellidoPaterno': _paternoCtrl.text.trim(),
-        'apellidoMaterno': _maternoCtrl.text.trim(),
-        'fechaNacimiento': _fechaCtrl.text.trim(),
-        'sexo': 'HOMBRE',
         'correo': _correoCtrl.text.trim(),
         'telefonoMovil': _telCtrl.text.trim(),
         'usuario': _usrCtrl.text.trim(),
@@ -1019,52 +1037,21 @@ class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
-                      controller: _segundoCtrl,
-                      decoration: const InputDecoration(labelText: 'Segundo Nombre'),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
                       controller: _paternoCtrl,
-                      decoration: const InputDecoration(labelText: 'Apellido Paterno *'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _maternoCtrl,
-                      decoration: const InputDecoration(labelText: 'Apellido Materno *'),
+                      decoration: const InputDecoration(labelText: 'Apellido(s) *'),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _fechaCtrl,
-                      decoration: const InputDecoration(labelText: 'Fecha Nac (YYYY-MM-DD) *'),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _telCtrl,
-                      maxLength: 10,
-                      keyboardType: TextInputType.phone,
-                      decoration: const InputDecoration(
-                        labelText: 'Teléfono (10 díg) *',
-                        counterText: '',
-                      ),
-                    ),
-                  ),
-                ],
+              TextField(
+                controller: _telCtrl,
+                maxLength: 10,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'Teléfono (10 díg) *',
+                  counterText: '',
+                ),
               ),
               const SizedBox(height: 10),
               TextField(

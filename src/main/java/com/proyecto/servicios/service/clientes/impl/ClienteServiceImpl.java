@@ -162,22 +162,40 @@ public class ClienteServiceImpl implements ClienteService {
 
         // Actualizar datos permitidos (NO CURP, NO RFC)
         cliente.setNombre(request.getNombre());
-        cliente.setSegundoNombre(request.getSegundoNombre());
+        if (request.getSegundoNombre() != null) {
+            cliente.setSegundoNombre(request.getSegundoNombre());
+        }
         cliente.setApellidoPaterno(request.getApellidoPaterno());
-        cliente.setApellidoMaterno(request.getApellidoMaterno());
-        cliente.setFechaNacimiento(parseFecha(request.getFechaNacimiento()));
-        cliente.setSexo(request.getSexo());
-        // Resolver descripción de nacionalidad desde el catálogo
-        String descNacionalidad = catalogoRepository.findById(request.getNacionalidadId())
-                .filter(c -> "NACIONALIDAD".equals(c.getTipo()) && Boolean.TRUE.equals(c.getActivo()))
-                .map(cat -> cat.getDescripcion())
-                .orElseThrow(() -> new ValidacionException(
-                        "La nacionalidad con ID " + request.getNacionalidadId() + " no existe en el catálogo"));
-        cliente.setNacionalidad(descNacionalidad);
-        cliente.setEstadoCivil(request.getEstadoCivil());
-        cliente.setOcupacion(request.getOcupacion());
-        cliente.setEmpresa(request.getEmpresa());
-        cliente.setIngresoMensual(request.getIngresoMensual());
+        if (request.getApellidoMaterno() != null) {
+            cliente.setApellidoMaterno(request.getApellidoMaterno().trim());
+        }
+        if (request.getFechaNacimiento() != null && !request.getFechaNacimiento().isBlank()) {
+            cliente.setFechaNacimiento(parseFecha(request.getFechaNacimiento()));
+        }
+        if (request.getSexo() != null && !request.getSexo().isBlank()) {
+            cliente.setSexo(request.getSexo());
+        }
+        // Resolver descripción de nacionalidad desde el catálogo solo si se envía
+        if (request.getNacionalidadId() != null) {
+            String descNacionalidad = catalogoRepository.findById(request.getNacionalidadId())
+                    .filter(c -> "NACIONALIDAD".equals(c.getTipo()) && Boolean.TRUE.equals(c.getActivo()))
+                    .map(cat -> cat.getDescripcion())
+                    .orElseThrow(() -> new ValidacionException(
+                            "La nacionalidad con ID " + request.getNacionalidadId() + " no existe en el catálogo"));
+            cliente.setNacionalidad(descNacionalidad);
+        }
+        if (request.getEstadoCivil() != null && !request.getEstadoCivil().isBlank()) {
+            cliente.setEstadoCivil(request.getEstadoCivil());
+        }
+        if (request.getOcupacion() != null && !request.getOcupacion().isBlank()) {
+            cliente.setOcupacion(request.getOcupacion());
+        }
+        if (request.getEmpresa() != null && !request.getEmpresa().isBlank()) {
+            cliente.setEmpresa(request.getEmpresa());
+        }
+        if (request.getIngresoMensual() != null) {
+            cliente.setIngresoMensual(request.getIngresoMensual());
+        }
         
         // Correo (validar unicidad si cambia)
         if (!cliente.getCorreo().equals(request.getCorreo())) {
@@ -475,36 +493,44 @@ public class ClienteServiceImpl implements ClienteService {
     // --- Métodos Privados Auxiliares ---
 
     private void validarReglasNegocio(ClienteRequestDTO request) {
-        LocalDate fechaNac = parseFecha(request.getFechaNacimiento());
-        if (fechaNac.isAfter(LocalDate.now())) {
-            throw new ValidacionException("La fecha de nacimiento no puede ser una fecha futura");
+        if (request.getFechaNacimiento() != null && !request.getFechaNacimiento().isBlank()) {
+            LocalDate fechaNac = parseFecha(request.getFechaNacimiento());
+            if (fechaNac.isAfter(LocalDate.now())) {
+                throw new ValidacionException("La fecha de nacimiento no puede ser una fecha futura");
+            }
+            // Validar mayoría de edad
+            if (Period.between(fechaNac, LocalDate.now()).getYears() < 18) {
+                throw new ValidacionException("El cliente debe ser mayor de edad (18 años o más)");
+            }
         }
-        // Validar mayoría de edad
-        if (Period.between(fechaNac, LocalDate.now()).getYears() < 18) {
-            throw new ValidacionException("El cliente debe ser mayor de edad (18 años o más)");
+        // Validar que el ID de nacionalidad exista en el catálogo cuando se proporcione
+        if (request.getNacionalidadId() != null) {
+            catalogoRepository.findById(request.getNacionalidadId())
+                    .filter(c -> "NACIONALIDAD".equals(c.getTipo()) && Boolean.TRUE.equals(c.getActivo()))
+                    .orElseThrow(() -> new ValidacionException(
+                            "La nacionalidad con ID " + request.getNacionalidadId() +
+                            " no existe en el catálogo. Consulta GET /api/v1/catalogos/NACIONALIDAD"));
         }
-        // Validar que el ID de nacionalidad exista en el catálogo
-        catalogoRepository.findById(request.getNacionalidadId())
-                .filter(c -> "NACIONALIDAD".equals(c.getTipo()) && Boolean.TRUE.equals(c.getActivo()))
-                .orElseThrow(() -> new ValidacionException(
-                        "La nacionalidad con ID " + request.getNacionalidadId() +
-                        " no existe en el catálogo. Consulta GET /api/v1/catalogos/NACIONALIDAD"));
-        // Validar unicidad
-        if (clienteRepository.existsByCurp(request.getCurp())) {
+        // Validar unicidad solo si CURP / RFC fueron enviados explícitamente
+        if (request.getCurp() != null && !request.getCurp().isBlank()
+                && clienteRepository.existsByCurp(request.getCurp().trim())) {
             throw new CurpDuplicadaException("La CURP ya se encuentra registrada");
         }
-        if (clienteRepository.existsByRfc(request.getRfc())) {
+        if (request.getRfc() != null && !request.getRfc().isBlank()
+                && clienteRepository.existsByRfc(request.getRfc().trim())) {
             throw new RfcDuplicadoException("El RFC ya se encuentra registrado");
         }
         if (clienteRepository.existsByCorreo(request.getCorreo())) {
             throw new CorreoDuplicadoException("El correo electrónico ya se encuentra registrado");
         }
 
-        // Validar que el Estado exista en el catálogo oficial de entidades federativas
-        boolean estadoValido = catalogoRepository.existsByTipoAndDescripcionIgnoreCaseAndActivoTrue("ESTADO", request.getEstado().trim())
-                || catalogoRepository.existsByTipoAndClaveIgnoreCaseAndActivoTrue("ESTADO", request.getEstado().trim());
-        if (!estadoValido) {
-            throw new ValidacionException("El estado '" + request.getEstado() + "' no es válido o no existe en el catálogo oficial de entidades federativas.");
+        // Validar que el Estado exista en el catálogo cuando se proporcione
+        if (request.getEstado() != null && !request.getEstado().isBlank()) {
+            boolean estadoValido = catalogoRepository.existsByTipoAndDescripcionIgnoreCaseAndActivoTrue("ESTADO", request.getEstado().trim())
+                    || catalogoRepository.existsByTipoAndClaveIgnoreCaseAndActivoTrue("ESTADO", request.getEstado().trim());
+            if (!estadoValido) {
+                throw new ValidacionException("El estado '" + request.getEstado() + "' no es válido o no existe en el catálogo oficial de entidades federativas.");
+            }
         }
     }
 
@@ -512,36 +538,68 @@ public class ClienteServiceImpl implements ClienteService {
         c.setNombre(req.getNombre());
         c.setSegundoNombre(req.getSegundoNombre());
         c.setApellidoPaterno(req.getApellidoPaterno());
-        c.setApellidoMaterno(req.getApellidoMaterno());
-        c.setFechaNacimiento(parseFecha(req.getFechaNacimiento()));
-        c.setCurp(req.getCurp());
-        c.setRfc(req.getRfc());
-        c.setSexo(req.getSexo());
-        // Resolver descripción de nacionalidad desde el catálogo
-        String descNacionalidad = catalogoRepository.findById(req.getNacionalidadId())
-                .map(cat -> cat.getDescripcion())
-                .orElse("Desconocida");
+        c.setApellidoMaterno(req.getApellidoMaterno() == null ? "" : req.getApellidoMaterno().trim());
+        LocalDate fechaNac = (req.getFechaNacimiento() == null || req.getFechaNacimiento().isBlank())
+                ? LocalDate.of(1995, 1, 1)
+                : parseFecha(req.getFechaNacimiento());
+        c.setFechaNacimiento(fechaNac);
+        String curp = (req.getCurp() != null && !req.getCurp().isBlank())
+                ? req.getCurp().trim().toUpperCase(java.util.Locale.ROOT)
+                : generarCurpAutomatica();
+        String rfc = (req.getRfc() != null && !req.getRfc().isBlank())
+                ? req.getRfc().trim().toUpperCase(java.util.Locale.ROOT)
+                : curp.substring(0, 10) + curp.substring(15, 18);
+        c.setCurp(curp);
+        c.setRfc(rfc);
+        c.setSexo(valorOPorDefecto(req.getSexo(), "HOMBRE"));
+        // Resolver descripción de nacionalidad desde el catálogo si se envía
+        String descNacionalidad = "MEXICANA";
+        if (req.getNacionalidadId() != null) {
+            descNacionalidad = catalogoRepository.findById(req.getNacionalidadId())
+                    .map(cat -> cat.getDescripcion())
+                    .orElse("MEXICANA");
+        }
         c.setNacionalidad(descNacionalidad);
-        c.setEstadoCivil(req.getEstadoCivil());
+        c.setEstadoCivil(valorOPorDefecto(req.getEstadoCivil(), "SOLTERO"));
         c.setCorreo(req.getCorreo());
         c.setTelefonoMovil(req.getTelefonoMovil());
         c.setTelefonoAlternativo(req.getTelefonoAlternativo());
-        c.setOcupacion(req.getOcupacion());
-        c.setEmpresa(req.getEmpresa());
-        c.setIngresoMensual(req.getIngresoMensual());
+        c.setOcupacion(valorOPorDefecto(req.getOcupacion(), "NO ESPECIFICADA"));
+        c.setEmpresa(valorOPorDefecto(req.getEmpresa(), "INDEPENDIENTE"));
+        c.setIngresoMensual(req.getIngresoMensual() != null ? req.getIngresoMensual() : new BigDecimal("1.00"));
         c.setActivo(true);
     }
 
     private void mapearDomicilio(ClienteRequestDTO req, Domicilio d) {
-        d.setCalle(req.getCalle());
-        d.setNumeroExterior(req.getNumeroExterior());
+        d.setCalle(valorOPorDefecto(req.getCalle(), "DOMICILIO NO ESPECIFICADO"));
+        d.setNumeroExterior(valorOPorDefecto(req.getNumeroExterior(), "S/N"));
         d.setNumeroInterior(req.getNumeroInterior());
-        d.setColonia(req.getColonia());
-        d.setMunicipio(req.getMunicipio());
-        d.setEstado(req.getEstado());
-        d.setCodigoPostal(req.getCodigoPostal());
-        d.setPais(req.getPais());
+        d.setColonia(valorOPorDefecto(req.getColonia(), "CENTRO"));
+        d.setMunicipio(valorOPorDefecto(req.getMunicipio(), "CUAUHTEMOC"));
+        d.setEstado(valorOPorDefecto(req.getEstado(), "CIUDAD DE MEXICO"));
+        d.setCodigoPostal(valorOPorDefecto(req.getCodigoPostal(), "06000"));
+        d.setPais(valorOPorDefecto(req.getPais(), "MEXICO"));
         d.setActivo(true);
+    }
+
+    private String valorOPorDefecto(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value.trim();
+    }
+
+    private String generarCurpAutomatica() {
+        String letras = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        String alnum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        Random rnd = new Random();
+        String cand;
+        do {
+            cand = "XXXX950101HDF"
+                    + letras.charAt(rnd.nextInt(letras.length()))
+                    + letras.charAt(rnd.nextInt(letras.length()))
+                    + letras.charAt(rnd.nextInt(letras.length()))
+                    + alnum.charAt(rnd.nextInt(alnum.length()))
+                    + rnd.nextInt(10);
+        } while (clienteRepository.existsByCurp(cand));
+        return cand;
     }
 
     private Cuenta crearCuentaBancaria(Cliente cliente) {
@@ -661,7 +719,7 @@ public class ClienteServiceImpl implements ClienteService {
     }
     
     private LocalDate parseFecha(String fechaStr) {
-        if (fechaStr == null) return null;
+        if (fechaStr == null || fechaStr.isBlank()) return null;
         try {
             LocalDate fecha = LocalDate.parse(fechaStr);
             return fecha;
