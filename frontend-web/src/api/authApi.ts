@@ -45,6 +45,10 @@ export const authApi = {
     return apiClient.get<UserProfile>('/auth/me', options);
   },
 
+  checkSessionStatus: async (): Promise<{ activa: boolean }> => {
+    return apiClient.get<{ activa: boolean }>('/auth/session-status');
+  },
+
   updateContacto: async (payload: ActualizarContactoRequest): Promise<UserProfile> => {
     return apiClient.put<UserProfile>('/auth/me/perfil', payload);
   },

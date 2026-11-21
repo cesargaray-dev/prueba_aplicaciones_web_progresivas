@@ -19,12 +19,19 @@ import java.util.Optional;
 @Component
 public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
 
+    public static final String ATTR_AUTH_ERROR_MESSAGE = "AUTH_ERROR_MESSAGE";
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final String SESSION_STATUS_PATH = "/api/v1/auth/session-status";
 
     private final AuthService authService;
 
     public BearerTokenAuthenticationFilter(AuthService authService) {
         this.authService = authService;
+    }
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return SESSION_STATUS_PATH.equals(request.getRequestURI());
     }
 
     @Override
@@ -49,6 +56,10 @@ public class BearerTokenAuthenticationFilter extends OncePerRequestFilter {
                                     authorities);
                     authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                     SecurityContextHolder.getContext().setAuthentication(authentication);
+                } else if (authService.fueDesplazadoPorOtroDispositivo(token)) {
+                    request.setAttribute(
+                            ATTR_AUTH_ERROR_MESSAGE,
+                            "Se inició sesión con tu cuenta desde otro dispositivo. Por seguridad, esta sesión fue cerrada.");
                 }
             }
         }

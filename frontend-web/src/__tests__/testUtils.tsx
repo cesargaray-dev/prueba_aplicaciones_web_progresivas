@@ -126,6 +126,8 @@ export const createMockAuthContext = (
   secondsRemaining: 290,
   sessionExpiredMessage: null,
   clearSessionExpired: vi.fn(),
+  sessionNotice: null,
+  clearSessionNotice: vi.fn(),
   login: vi.fn().mockResolvedValue(undefined),
   register: vi.fn().mockResolvedValue(undefined),
   logout: vi.fn().mockResolvedValue(undefined),

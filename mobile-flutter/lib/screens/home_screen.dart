@@ -45,6 +45,24 @@ class _HomeScreenState extends State<HomeScreen> {
       catalog.loadProducts();
 
       final auth = Provider.of<AuthProvider>(context, listen: false);
+      final sessionNotice = auth.sessionNotice;
+      if (sessionNotice != null) {
+        auth.consumeSessionNotice();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.security_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(sessionNotice)),
+              ],
+            ),
+            backgroundColor: AppTheme.warningAmber,
+            duration: const Duration(seconds: 6),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
       if (auth.shouldPromptBiometricOnboarding && auth.canUseBiometrics) {
         auth.consumeBiometricOnboardingPrompt();
         _showPostRegistrationBiometricPrompt();

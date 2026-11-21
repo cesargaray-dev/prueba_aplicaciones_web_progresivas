@@ -117,6 +117,17 @@ public class AuthController {
         return ResponseEntity.ok(authService.obtenerPerfilAutenticado(authHeader, null));
     }
 
+    @GetMapping("/session-status")
+    @Operation(
+            summary = "Verificar vigencia de la sesión sin reiniciar inactividad",
+            description = "Comprueba si el token Bearer sigue activo o fue desplazado por un inicio de sesión en otro dispositivo."
+    )
+    public ResponseEntity<java.util.Map<String, Object>> sessionStatus(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        boolean activa = authService.verificarSesionActivaSinRefrescar(authHeader);
+        return ResponseEntity.ok(java.util.Map.of("activa", activa));
+    }
+
     @PostMapping("/register")
     @Operation(
             summary = "Registrar nuevo cliente y cuenta digital",

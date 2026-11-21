@@ -14,6 +14,8 @@ class UserSession {
   final String? ultimoAcceso;
   final bool esAdmin;
   final String? rol;
+  final bool sesionPreviaCerrada;
+  final String? avisoSesion;
 
   UserSession({
     required this.token,
@@ -31,6 +33,8 @@ class UserSession {
     this.ultimoAcceso,
     this.esAdmin = false,
     this.rol,
+    this.sesionPreviaCerrada = false,
+    this.avisoSesion,
   });
 
   bool get isAdmin => esAdmin || usuario.trim().toLowerCase() == 'admin' || rol == 'ADMIN';
@@ -58,6 +62,8 @@ class UserSession {
       ultimoAcceso: json['ultimoAcceso']?.toString(),
       esAdmin: adminFlag,
       rol: json['rol']?.toString() ?? (adminFlag ? 'ADMIN' : 'CLIENTE'),
+      sesionPreviaCerrada: json['sesionPreviaCerrada'] == true,
+      avisoSesion: json['avisoSesion']?.toString(),
     );
   }
 
@@ -78,6 +84,8 @@ class UserSession {
       'ultimoAcceso': ultimoAcceso,
       'esAdmin': esAdmin,
       'rol': rol,
+      'sesionPreviaCerrada': sesionPreviaCerrada,
+      'avisoSesion': avisoSesion,
     };
   }
 
@@ -97,6 +105,8 @@ class UserSession {
     String? ultimoAcceso,
     bool? esAdmin,
     String? rol,
+    bool? sesionPreviaCerrada,
+    String? avisoSesion,
   }) {
     return UserSession(
       token: token ?? this.token,
@@ -114,6 +124,8 @@ class UserSession {
       ultimoAcceso: ultimoAcceso ?? this.ultimoAcceso,
       esAdmin: esAdmin ?? this.esAdmin,
       rol: rol ?? this.rol,
+      sesionPreviaCerrada: sesionPreviaCerrada ?? this.sesionPreviaCerrada,
+      avisoSesion: avisoSesion ?? this.avisoSesion,
     );
   }
 

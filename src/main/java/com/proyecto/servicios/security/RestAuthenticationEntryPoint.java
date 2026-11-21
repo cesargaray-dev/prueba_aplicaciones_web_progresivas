@@ -27,7 +27,11 @@ public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
             AuthenticationException authException) throws IOException, ServletException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType("application/json;charset=UTF-8");
-        GenericResponse body = new GenericResponse(1, "No autorizado. Se requiere un token de sesión válido.");
+        Object customMsg = request.getAttribute(BearerTokenAuthenticationFilter.ATTR_AUTH_ERROR_MESSAGE);
+        String message = (customMsg instanceof String s && !s.isBlank())
+                ? s
+                : "No autorizado. Se requiere un token de sesión válido.";
+        GenericResponse body = new GenericResponse(1, message);
         response.getWriter().write(objectMapper.writeValueAsString(body));
     }
 }

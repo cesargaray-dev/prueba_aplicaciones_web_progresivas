@@ -163,8 +163,11 @@ class ApiClient {
     _handlingUnauthorized = true;
     try {
       authToken = null;
+      final isDisplaced = message.toLowerCase().contains('otro dispositivo');
       onUnauthorized?.call(
-        'Tu sesión ha expirado o fue cerrada. Inicia sesión nuevamente.',
+        isDisplaced
+            ? message
+            : 'Tu sesión ha expirado o fue cerrada. Inicia sesión nuevamente.',
       );
     } finally {
       _handlingUnauthorized = false;

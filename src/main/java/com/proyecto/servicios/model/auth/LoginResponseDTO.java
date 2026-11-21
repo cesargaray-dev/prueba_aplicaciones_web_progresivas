@@ -52,4 +52,10 @@ public class LoginResponseDTO {
 
     @Schema(description = "Rol asignado en la plataforma (ADMIN o CLIENTE)", example = "CLIENTE")
     private String rol;
+
+    @Schema(description = "Indica si existía una sesión activa previa en otro dispositivo que fue cerrada", example = "false")
+    private Boolean sesionPreviaCerrada;
+
+    @Schema(description = "Aviso informativo de seguridad cuando se cerró una sesión previa en otro dispositivo")
+    private String avisoSesion;
 }

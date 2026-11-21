@@ -10,6 +10,7 @@ describe('Navbar Component', () => {
     const setActiveTab = vi.fn();
     const ctx = createMockAuthContext({
       secondsRemaining: 45,
+      sessionNotice: 'Se cerró una sesión activa previa en otro dispositivo por seguridad.',
       user: { ...mockLoginResponse, email: 'demo@ejemplo.com' },
     });
 
@@ -18,6 +19,11 @@ describe('Navbar Component', () => {
         <Navbar activeTab="catalog" setActiveTab={setActiveTab} />
       </MockAuthProvider>
     );
+
+    // Multi-device notice banner renders and can be dismissed
+    expect(screen.getByText(/otro dispositivo por seguridad/i)).toBeInTheDocument();
+    await user.click(screen.getByLabelText('Cerrar aviso de seguridad'));
+    expect(ctx.clearSessionNotice).toHaveBeenCalled();
 
     // Timer is visible (not hidden on mobile) and formats 0:45
     expect(screen.getByText('0:45')).toBeInTheDocument();

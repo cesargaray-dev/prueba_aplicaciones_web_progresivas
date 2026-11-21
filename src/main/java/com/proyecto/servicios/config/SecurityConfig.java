@@ -51,11 +51,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(
                                 "/",
+                                "/BancoDigital.apk",
+                                "/api/v1/app/download",
                                 "/actuator/health",
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/session-status").permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/login",

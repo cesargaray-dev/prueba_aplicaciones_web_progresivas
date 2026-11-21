@@ -44,9 +44,15 @@ import java.util.concurrent.TimeUnit;
 public class AuthServiceImpl implements AuthService {
 
     public static final int MAX_INTENTOS_FALLIDOS = 5;
+    public static final String MENSAJE_SESION_DESPLAZADA =
+            "Se inició sesión con tu cuenta desde otro dispositivo. Por seguridad, esta sesión fue cerrada.";
+    public static final String AVISO_SESION_PREVIA_CERRADA =
+            "Se cerró automáticamente una sesión activa previa en otro dispositivo por seguridad.";
     private static final String REDIS_TOKEN_PREFIX = "auth:session:token:";
     private static final String REDIS_USER_PREFIX = "auth:session:user:";
+    private static final String REDIS_DISPLACED_PREFIX = "auth:session:displaced:";
     private static final long DEFAULT_SESSION_TTL_SECONDS = 300L;
+    private static final long MIN_DISPLACED_TTL_SECONDS = 600L;
 
     private final LoginClienteRepository loginClienteRepository;
     private final CuentaRepository cuentaRepository;
@@ -58,6 +64,7 @@ public class AuthServiceImpl implements AuthService {
     // Almacenamiento concurrente en memoria para sesiones activas con TTL deslizante
     private final Map<String, SessionEntry> tokenStore = new ConcurrentHashMap<>();
     private final Map<String, Set<String>> usuarioToTokens = new ConcurrentHashMap<>();
+    private final Map<String, Instant> displacedTokens = new ConcurrentHashMap<>();
 
     public AuthServiceImpl(
             LoginClienteRepository loginClienteRepository,
@@ -144,7 +151,7 @@ public class AuthServiceImpl implements AuthService {
         BigDecimal saldo = obtenerSaldoCuenta(cuenta);
 
         String token = UUID.randomUUID().toString().replace("-", "");
-        registrarSesion(token, username);
+        boolean sesionPreviaCerrada = registrarSesionUnica(token, username);
 
         log.info("Autenticación exitosa para usuario: {} con clienteId: {}", username, cliente.getId());
         boolean isAdmin = esUsuarioAdmin(username);
@@ -161,6 +168,8 @@ public class AuthServiceImpl implements AuthService {
                 .ultimoAcceso(login.getUltimoAcceso())
                 .esAdmin(isAdmin)
                 .rol(isAdmin ? "ADMIN" : "CLIENTE")
+                .sesionPreviaCerrada(sesionPreviaCerrada)
+                .avisoSesion(sesionPreviaCerrada ? AVISO_SESION_PREVIA_CERRADA : null)
                 .build();
     }
 
@@ -194,7 +203,7 @@ public class AuthServiceImpl implements AuthService {
         BigDecimal saldo = obtenerSaldoCuenta(cuenta);
 
         String token = UUID.randomUUID().toString().replace("-", "");
-        registrarSesion(token, username);
+        boolean sesionPreviaCerrada = registrarSesionUnica(token, username);
 
         log.info("Sesión emitida tras verificación alterna para usuario={} clienteId={}", username, cliente.getId());
         boolean isAdmin = esUsuarioAdmin(username);
@@ -211,6 +220,8 @@ public class AuthServiceImpl implements AuthService {
                 .ultimoAcceso(login.getUltimoAcceso())
                 .esAdmin(isAdmin)
                 .rol(isAdmin ? "ADMIN" : "CLIENTE")
+                .sesionPreviaCerrada(sesionPreviaCerrada)
+                .avisoSesion(sesionPreviaCerrada ? AVISO_SESION_PREVIA_CERRADA : null)
                 .build();
     }
 
@@ -243,7 +254,10 @@ public class AuthServiceImpl implements AuthService {
         }
 
         String username = validarTokenYObtenerUsuario(tokenLimpio)
-                .orElseThrow(() -> new AutenticacionException("Sesión no autorizada o expirada"));
+                .orElseThrow(() -> new AutenticacionException(
+                        fueDesplazadoPorOtroDispositivo(tokenLimpio)
+                                ? MENSAJE_SESION_DESPLAZADA
+                                : "Sesión no autorizada o expirada"));
 
         LoginCliente login = loginClienteRepository.findByUsuario(username.trim())
                 .orElseThrow(() -> new AutenticacionException("Usuario no encontrado"));
@@ -403,6 +417,50 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
+    @Override
+    public boolean fueDesplazadoPorOtroDispositivo(String token) {
+        String tokenLimpio = limpiarToken(token);
+        if (tokenLimpio == null) {
+            return false;
+        }
+        Instant now = Instant.now();
+        Instant until = displacedTokens.get(tokenLimpio);
+        if (until != null) {
+            if (now.isAfter(until)) {
+                displacedTokens.remove(tokenLimpio, until);
+                return false;
+            }
+            return true;
+        }
+        if (redisTemplate != null) {
+            try {
+                var valOps = redisTemplate.opsForValue();
+                if (valOps != null && valOps.get(REDIS_DISPLACED_PREFIX + tokenLimpio) != null) {
+                    return true;
+                }
+            } catch (Exception e) {
+                log.warn("Error consultando desplazamiento en Redis: {}", e.getMessage());
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public boolean verificarSesionActivaSinRefrescar(String token) {
+        String tokenLimpio = limpiarToken(token);
+        if (tokenLimpio == null) {
+            throw new AutenticacionException("Sesión no autorizada o expirada");
+        }
+        if (fueDesplazadoPorOtroDispositivo(tokenLimpio)) {
+            throw new AutenticacionException(MENSAJE_SESION_DESPLAZADA);
+        }
+        String owner = resolverPropietarioTokenSinRefrescar(tokenLimpio);
+        if (owner == null || owner.isBlank()) {
+            throw new AutenticacionException("Sesión no autorizada o expirada");
+        }
+        return true;
+    }
+
     @Scheduled(fixedDelay = 60000)
     public void evictExpiredSessions() {
         Instant now = Instant.now();
@@ -422,6 +480,7 @@ public class AuthServiceImpl implements AuthService {
                 }
             }
         }
+        displacedTokens.entrySet().removeIf(e -> now.isAfter(e.getValue()));
     }
 
     private boolean esHashBCrypt(String hash) {
@@ -473,6 +532,79 @@ public class AuthServiceImpl implements AuthService {
                 }
             } catch (Exception e) {
                 log.warn("Error invalidando token en Redis: {}", e.getMessage());
+            }
+        }
+    }
+
+    private boolean registrarSesionUnica(String token, String usuario) {
+        Instant now = Instant.now();
+        String userKey = usuario.trim();
+        boolean hadActivePrevious = false;
+
+        Set<String> existingTokens = usuarioToTokens.get(userKey);
+        if (existingTokens != null) {
+            List<String> copia = new ArrayList<>(existingTokens);
+            for (String prevToken : copia) {
+                if (!token.equals(prevToken)) {
+                    SessionEntry prevEntry = tokenStore.remove(prevToken);
+                    existingTokens.remove(prevToken);
+                    eliminarTokenRedis(prevToken, userKey);
+                    if (prevEntry != null && !now.isAfter(prevEntry.expiresAt())) {
+                        hadActivePrevious = true;
+                        marcarTokenDesplazado(prevToken, now);
+                    }
+                }
+            }
+            if (existingTokens.isEmpty()) {
+                usuarioToTokens.remove(userKey, existingTokens);
+            }
+        }
+
+        if (redisTemplate != null) {
+            try {
+                var setOps = redisTemplate.opsForSet();
+                if (setOps != null) {
+                    Set<String> redisTokens = setOps.members(REDIS_USER_PREFIX + userKey);
+                    if (redisTokens != null) {
+                        var valOps = redisTemplate.opsForValue();
+                        for (String prevToken : redisTokens) {
+                            if (!token.equals(prevToken)) {
+                                boolean wasActiveInRedis = valOps != null
+                                        && valOps.get(REDIS_TOKEN_PREFIX + prevToken) != null;
+                                redisTemplate.delete(REDIS_TOKEN_PREFIX + prevToken);
+                                setOps.remove(REDIS_USER_PREFIX + userKey, prevToken);
+                                if (wasActiveInRedis) {
+                                    hadActivePrevious = true;
+                                    marcarTokenDesplazado(prevToken, now);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Error revocando sesiones previas en Redis: {}", e.getMessage());
+            }
+        }
+
+        if (hadActivePrevious) {
+            log.warn("Sesión previa cerrada por inicio de sesión en otro dispositivo para usuario: {}", userKey);
+        }
+
+        registrarSesion(token, userKey);
+        return hadActivePrevious;
+    }
+
+    private void marcarTokenDesplazado(String oldToken, Instant now) {
+        long displacedTtl = Math.max(sessionTtlSeconds, MIN_DISPLACED_TTL_SECONDS);
+        displacedTokens.put(oldToken, now.plusSeconds(displacedTtl));
+        if (redisTemplate != null) {
+            try {
+                var valOps = redisTemplate.opsForValue();
+                if (valOps != null) {
+                    valOps.set(REDIS_DISPLACED_PREFIX + oldToken, "1", displacedTtl, TimeUnit.SECONDS);
+                }
+            } catch (Exception e) {
+                log.warn("No se pudo registrar sesión desplazada en Redis: {}", e.getMessage());
             }
         }
     }

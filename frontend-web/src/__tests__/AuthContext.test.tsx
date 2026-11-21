@@ -17,6 +17,7 @@ const ConsumerHarness: React.FC = () => {
       <div data-testid="saldo">{auth.user?.saldo ?? 'none'}</div>
       <div data-testid="seconds">{auth.secondsRemaining}</div>
       <div data-testid="expired">{auth.sessionExpiredMessage ?? 'none'}</div>
+      <div data-testid="notice">{auth.sessionNotice ?? 'none'}</div>
       <button
         type="button"
         onClick={() => auth.login({ usuario: 'cesar123', contrasena: 'Password@123' })}
@@ -76,6 +77,9 @@ const ConsumerHarness: React.FC = () => {
       </button>
       <button type="button" onClick={() => auth.clearSessionExpired()}>
         clearExpired
+      </button>
+      <button type="button" onClick={() => auth.clearSessionNotice()}>
+        clearNotice
       </button>
     </div>
   );
@@ -197,8 +201,13 @@ describe('AuthContext & Session Hardening (F11 / F13)', () => {
 
   it('does NOT reset inactivity countdown on balance update and logs out at 300s inactivity', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
-    vi.spyOn(authApi, 'login').mockResolvedValue(mockLoginResponse);
+    vi.spyOn(authApi, 'login').mockResolvedValue({
+      ...mockLoginResponse,
+      sesionPreviaCerrada: true,
+      avisoSesion: 'Se cerró una sesión activa previa en otro dispositivo por seguridad.',
+    });
     vi.spyOn(authApi, 'getMe').mockResolvedValue(mockUserProfile);
+    vi.spyOn(authApi, 'checkSessionStatus').mockResolvedValue({ activa: true });
     vi.spyOn(authApi, 'logout').mockResolvedValue(undefined);
 
     render(
@@ -212,6 +221,11 @@ describe('AuthContext & Session Hardening (F11 / F13)', () => {
     });
 
     expect(screen.getByTestId('authed').textContent).toBe('true');
+    expect(screen.getByTestId('notice').textContent).toContain('otro dispositivo');
+    await act(async () => {
+      screen.getByText('clearNotice').click();
+    });
+    expect(screen.getByTestId('notice').textContent).toBe('none');
 
     // Advance 200s
     await act(async () => {
@@ -231,5 +245,35 @@ describe('AuthContext & Session Hardening (F11 / F13)', () => {
     });
     expect(screen.getByTestId('authed').textContent).toBe('false');
     expect(screen.getByTestId('expired').textContent).toContain('inactividad');
+  });
+
+  it('closes session with exact message when another device takes over the account', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(authApi, 'login').mockResolvedValue(mockLoginResponse);
+    vi.spyOn(authApi, 'getMe').mockResolvedValue(mockUserProfile);
+
+    render(
+      <AuthProvider>
+        <ConsumerHarness />
+      </AuthProvider>
+    );
+
+    await user.click(screen.getByText('login'));
+    await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('true'));
+
+    setAuthToken('jwt-displaced');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      headers: new Headers({ 'content-type': 'application/json' }),
+      json: async () => ({
+        mensaje:
+          'Se inició sesión con tu cuenta desde otro dispositivo. Por seguridad, esta sesión fue cerrada.',
+      }),
+    } as Response);
+
+    await expect(authApi.checkSessionStatus()).rejects.toThrow('otro dispositivo');
+    await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('false'));
+    expect(screen.getByTestId('expired').textContent).toContain('otro dispositivo');
   });
 });

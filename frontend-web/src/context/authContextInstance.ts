@@ -17,6 +17,8 @@ export interface AuthContextType {
   secondsRemaining: number;
   sessionExpiredMessage: string | null;
   clearSessionExpired: () => void;
+  sessionNotice: string | null;
+  clearSessionNotice: () => void;
   login: (credentials: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;

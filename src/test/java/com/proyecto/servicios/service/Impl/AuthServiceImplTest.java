@@ -279,7 +279,7 @@ class AuthServiceImplTest {
     }
 
     @Test
-    void testLogoutConTokenValido_revocaSoloEseTokenYValidaPropietario() {
+    void testLogoutConTokenValido_revocaSesionPreviaAlIniciarEnOtroDispositivoYValidaPropietario() {
         when(loginClienteRepository.findByUsuario(USUARIO)).thenReturn(Optional.of(loginCliente));
         when(cuentaRepository.findByClienteId(10L)).thenReturn(Optional.of(cuenta));
         when(saldoRepository.findByCuentaId(20L)).thenReturn(Optional.of(saldo));
@@ -287,20 +287,41 @@ class AuthServiceImplTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOperations);
         when(redisTemplate.opsForSet()).thenReturn(setOperations);
 
-        String tok1 = authService.login(new LoginRequestDTO(USUARIO, PASSWORD_RAW)).getToken();
-        String tok2 = authService.login(new LoginRequestDTO(USUARIO, PASSWORD_RAW)).getToken();
+        LoginResponseDTO resp1 = authService.login(new LoginRequestDTO(USUARIO, PASSWORD_RAW));
+        String tok1 = resp1.getToken();
+        assertEquals(Boolean.FALSE, resp1.getSesionPreviaCerrada());
+        assertNull(resp1.getAvisoSesion());
+        assertTrue(authService.verificarSesionActivaSinRefrescar("Bearer " + tok1));
 
-        // Logout con otro usuario en body -> 403 AccessDeniedException
-        assertThrows(AccessDeniedException.class, () -> authService.logout("Bearer " + tok1, "atacante"));
-        assertTrue(authService.validarTokenYObtenerUsuario(tok1).isPresent());
-
-        // Logout exitoso con propietario correcto -> revoca tok1, mantiene tok2
-        assertDoesNotThrow(() -> authService.logout("Bearer " + tok1, USUARIO));
-        verify(redisTemplate).delete("auth:session:token:" + tok1);
-        verify(setOperations).remove("auth:session:user:" + USUARIO, tok1);
-
+        // Segundo inicio de sesión en otro dispositivo cierra la sesión previa (tok1) y avisa
+        LoginResponseDTO resp2 = authService.login(new LoginRequestDTO(USUARIO, PASSWORD_RAW));
+        String tok2 = resp2.getToken();
+        assertEquals(Boolean.TRUE, resp2.getSesionPreviaCerrada());
+        assertNotNull(resp2.getAvisoSesion());
         assertTrue(authService.validarTokenYObtenerUsuario(tok1).isEmpty());
+        assertTrue(authService.fueDesplazadoPorOtroDispositivo(tok1));
+        AutenticacionException displacedEx = assertThrows(
+                AutenticacionException.class,
+                () -> authService.verificarSesionActivaSinRefrescar("Bearer " + tok1));
+        assertTrue(displacedEx.getMessage().contains("otro dispositivo"));
+        AutenticacionException profileDisplacedEx = assertThrows(
+                AutenticacionException.class,
+                () -> authService.obtenerPerfilAutenticado("Bearer " + tok1, null));
+        assertTrue(profileDisplacedEx.getMessage().contains("otro dispositivo"));
+
+        // Logout con otro usuario en body sobre tok2 -> 403 AccessDeniedException
+        assertThrows(AccessDeniedException.class, () -> authService.logout("Bearer " + tok2, "atacante"));
         assertTrue(authService.validarTokenYObtenerUsuario(tok2).isPresent());
+
+        // Logout exitoso con propietario correcto -> revoca tok2 sin marcarlo como desplazado
+        assertDoesNotThrow(() -> authService.logout("Bearer " + tok2, USUARIO));
+        verify(redisTemplate).delete("auth:session:token:" + tok2);
+        verify(setOperations).remove("auth:session:user:" + USUARIO, tok2);
+
+        assertTrue(authService.validarTokenYObtenerUsuario(tok2).isEmpty());
+        assertFalse(authService.fueDesplazadoPorOtroDispositivo(tok2));
+        assertThrows(AutenticacionException.class, () -> authService.verificarSesionActivaSinRefrescar(null));
+        assertThrows(AutenticacionException.class, () -> authService.verificarSesionActivaSinRefrescar("Bearer " + tok2));
     }
 
     @Test
@@ -447,6 +468,8 @@ class AuthServiceImplTest {
         assertFalse(stub.verificarContrasena("a", "b"));
         assertEquals("a", stub.codificarContrasena("a"));
         assertDoesNotThrow(() -> stub.invalidarOtrasSesiones("u", "t"));
+        assertFalse(stub.fueDesplazadoPorOtroDispositivo("t"));
+        assertFalse(stub.verificarSesionActivaSinRefrescar("t"));
     }
 
     @Test

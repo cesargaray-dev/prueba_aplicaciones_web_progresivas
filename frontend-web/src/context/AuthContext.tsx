@@ -13,6 +13,7 @@ import { getAuthToken, setAuthToken, setOnUnauthorizedHandler } from '../api/cli
 import { AuthContext } from './authContextInstance';
 
 const INACTIVITY_TIMEOUT_SECONDS = 300; // 5 minutes
+const SESSION_POLL_INTERVAL_MS = 10_000; // 10 seconds (does not extend inactivity TTL)
 
 const profileToLoginResponse = (profile: UserProfile, token: string): LoginResponse => ({
   token,
@@ -38,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isInitializing, setIsInitializing] = useState<boolean>(() => Boolean(getAuthToken()));
   const [secondsRemaining, setSecondsRemaining] = useState<number>(INACTIVITY_TIMEOUT_SECONDS);
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
   const lastActivityRef = useRef<number>(0);
   const userRef = useRef<LoginResponse | null>(null);
@@ -48,6 +50,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearSessionExpired = useCallback(() => {
     setSessionExpiredMessage(null);
+  }, []);
+
+  const clearSessionNotice = useCallback(() => {
+    setSessionNotice(null);
   }, []);
 
   const resetInactivityTimer = useCallback(() => {
@@ -82,6 +88,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userRef.current = null;
     setUser(null);
     setAuthToken(null);
+    setSessionNotice(null);
     setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
 
     if (hadSession) {
@@ -100,13 +107,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Global 401 unauthorized handler & initial boot hydration from sessionStorage token
   useEffect(() => {
-    setOnUnauthorizedHandler(() => {
+    setOnUnauthorizedHandler((serverMessage?: string) => {
       userRef.current = null;
       setUser(null);
       setAuthToken(null);
+      setSessionNotice(null);
       setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
+      const isDisplaced = Boolean(serverMessage && /otro dispositivo/i.test(serverMessage));
       setSessionExpiredMessage(
-        'Tu sesión ha expirado o fue cerrada por seguridad. Inicia sesión nuevamente.'
+        isDisplaced
+          ? serverMessage!
+          : 'Tu sesión ha expirado o fue cerrada por seguridad. Inicia sesión nuevamente.'
       );
     });
 
@@ -146,10 +157,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (credentials: LoginRequest) => {
     setIsLoading(true);
     setSessionExpiredMessage(null);
+    setSessionNotice(null);
     try {
       const response = await authApi.login(credentials);
       userRef.current = response;
       setUser(response);
+      if (response.sesionPreviaCerrada) {
+        setSessionNotice(
+          response.avisoSesion ||
+            'Se cerró automáticamente una sesión activa previa en otro dispositivo por seguridad.'
+        );
+      }
       resetInactivityTimer();
       try {
         const profile = await authApi.getMe();
@@ -165,6 +183,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (payload: RegisterRequest) => {
     setIsLoading(true);
     setSessionExpiredMessage(null);
+    setSessionNotice(null);
     try {
       const response = await authApi.register(payload);
       userRef.current = response;
@@ -264,6 +283,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [isAuthenticated]);
 
+  // Multi-device single-session watchdog: detects quickly if another device took over the account
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const verifySession = () => {
+      if (!getAuthToken()) return;
+      void authApi.checkSessionStatus().catch(() => {
+        // 401 is handled globally by apiClient -> onUnauthorizedHandler with exact displacement reason
+      });
+    };
+
+    const pollInterval = setInterval(verifySession, SESSION_POLL_INTERVAL_MS);
+    window.addEventListener('focus', verifySession);
+
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', verifySession);
+    };
+  }, [isAuthenticated]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -274,6 +313,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         secondsRemaining,
         sessionExpiredMessage,
         clearSessionExpired,
+        sessionNotice,
+        clearSessionNotice,
         login,
         register,
         logout,

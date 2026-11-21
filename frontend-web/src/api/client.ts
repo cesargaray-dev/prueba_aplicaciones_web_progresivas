@@ -6,7 +6,7 @@ export interface ApiRequestOptions extends RequestInit {
   skipUnauthorizedHandler?: boolean;
 }
 
-type UnauthorizedHandler = () => void;
+type UnauthorizedHandler = (message?: string) => void;
 
 let onUnauthorizedHandler: UnauthorizedHandler | null = null;
 
@@ -173,7 +173,7 @@ async function request<T>(endpoint: string, options: ApiRequestOptions = {}): Pr
         )
       ) {
         setAuthToken(null);
-        onUnauthorizedHandler?.();
+        onUnauthorizedHandler?.(errorMessage);
       }
       throw new ApiError(errorMessage, response.status, data);
     }
@@ -222,7 +222,7 @@ async function requestBlob(endpoint: string, options: ApiRequestOptions = {}): P
         )
       ) {
         setAuthToken(null);
-        onUnauthorizedHandler?.();
+        onUnauthorizedHandler?.(errorMessage);
       }
       throw new ApiError(errorMessage, response.status, data);
     }

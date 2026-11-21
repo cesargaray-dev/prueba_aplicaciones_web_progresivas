@@ -9,6 +9,8 @@ import {
   Wallet,
   UserCog,
   ShieldCheck,
+  ShieldAlert,
+  X,
   Moon,
   Sun,
 } from 'lucide-react';
@@ -22,7 +24,8 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
-  const { user, secondsRemaining, logout, refreshBalance } = useAuth();
+  const { user, secondsRemaining, logout, refreshBalance, sessionNotice, clearSessionNotice } =
+    useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -262,6 +265,28 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
           )}
         </div>
       </header>
+
+      {sessionNotice && (
+        <div
+          role="status"
+          className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2.5 text-xs font-semibold"
+        >
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{sessionNotice}</span>
+            </div>
+            <button
+              type="button"
+              onClick={clearSessionNotice}
+              aria-label="Cerrar aviso de seguridad"
+              className="p-1 rounded-lg hover:bg-amber-100 text-amber-700 transition-colors shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </>

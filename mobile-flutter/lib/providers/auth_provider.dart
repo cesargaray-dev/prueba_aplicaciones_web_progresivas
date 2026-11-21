@@ -15,7 +15,9 @@ class AuthProvider with ChangeNotifier {
   bool _isLoading = false;
   bool _isBiometricBusy = false;
   String? _errorMessage;
+  String? _sessionNotice;
   Timer? _sessionTimer;
+  Timer? _sessionMonitorTimer;
   final ValueNotifier<int> sessionSecondsNotifier = ValueNotifier<int>(300);
 
   // Biometric state
@@ -65,9 +67,14 @@ class AuthProvider with ChangeNotifier {
   String get preferredLoginMethod => _preferredLoginMethod;
   bool get biometricsInitialized => _biometricsInitialized;
   bool get shouldPromptBiometricOnboarding => _shouldPromptBiometricOnboarding;
+  String? get sessionNotice => _sessionNotice;
 
   void consumeBiometricOnboardingPrompt() {
     _shouldPromptBiometricOnboarding = false;
+  }
+
+  void consumeSessionNotice() {
+    _sessionNotice = null;
   }
 
   String get formattedSessionTime {
@@ -136,6 +143,24 @@ class AuthProvider with ChangeNotifier {
         );
       }
     });
+    _startSessionMonitor();
+  }
+
+  void _startSessionMonitor() {
+    _sessionMonitorTimer?.cancel();
+    _sessionMonitorTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _verifySessionAlive();
+    });
+  }
+
+  Future<void> _verifySessionAlive() async {
+    if (_session == null) return;
+    try {
+      await _authService.verificarSesionActiva();
+    } catch (_) {
+      // Si el servidor responde 401 (ej. sesión iniciada en otro dispositivo),
+      // ApiClient invoca onUnauthorized y cierra sesión mostrando el aviso.
+    }
   }
 
   void resetInactivityTimer() {
@@ -200,6 +225,10 @@ class AuthProvider with ChangeNotifier {
     try {
       final session = await _authService.login(usuario, contrasena);
       _session = session;
+      _sessionNotice = session.sesionPreviaCerrada
+          ? (session.avisoSesion ??
+              'Se cerró automáticamente una sesión activa previa en otro dispositivo por seguridad.')
+          : null;
       await _hydrateProfileNonFatal(session);
       _isLoading = false;
       _startInactivityTimer();
@@ -277,6 +306,10 @@ class AuthProvider with ChangeNotifier {
         tokenBiometrico: tokenBio,
       );
       _session = session;
+      _sessionNotice = session.sesionPreviaCerrada
+          ? (session.avisoSesion ??
+              'Se cerró automáticamente una sesión activa previa en otro dispositivo por seguridad.')
+          : null;
       await _hydrateProfileNonFatal(session);
       _biometricEnabledForCurrentUser = true;
       _isBiometricBusy = false;
@@ -569,12 +602,15 @@ class AuthProvider with ChangeNotifier {
   }) async {
     _sessionTimer?.cancel();
     _sessionTimer = null;
+    _sessionMonitorTimer?.cancel();
+    _sessionMonitorTimer = null;
     sessionSecondsNotifier.value = 300;
 
     final currentToken = _session?.token ?? '';
     final currentUser = _session?.usuario ?? '';
 
     _session = null;
+    _sessionNotice = null;
     _isLoading = false;
     _isBiometricBusy = false;
     _biometricEnabledForCurrentUser = false;
@@ -616,6 +652,7 @@ class AuthProvider with ChangeNotifier {
   @override
   void dispose() {
     _sessionTimer?.cancel();
+    _sessionMonitorTimer?.cancel();
     sessionSecondsNotifier.dispose();
     if (identical(_apiClient.onUnauthorized, _handleApiUnauthorized)) {
       _apiClient.onUnauthorized = null;

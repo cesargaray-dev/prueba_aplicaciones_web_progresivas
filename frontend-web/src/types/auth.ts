@@ -19,6 +19,8 @@ export interface LoginResponse {
   ultimoAcceso?: string;
   esAdmin?: boolean;
   rol?: string;
+  sesionPreviaCerrada?: boolean;
+  avisoSesion?: string;
 }
 
 export interface RegisterRequest {
@@ -74,6 +76,8 @@ export interface UserProfile {
   activo?: boolean;
   esAdmin?: boolean;
   rol?: string;
+  sesionPreviaCerrada?: boolean;
+  avisoSesion?: string;
 }
 
 export interface AdminUserItem {

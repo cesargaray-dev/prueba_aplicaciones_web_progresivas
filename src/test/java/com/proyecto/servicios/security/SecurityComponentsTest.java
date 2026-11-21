@@ -90,6 +90,20 @@ class SecurityComponentsTest {
         filter.doFilter(req3, res1, chain);
         assertNotNull(SecurityContextHolder.getContext().getAuthentication());
         assertEquals("cesar", SecurityContextHolder.getContext().getAuthentication().getPrincipal());
+
+        // Header Bearer desplazado por otro dispositivo -> guarda atributo de error para EntryPoint
+        SecurityContextHolder.clearContext();
+        when(authService.validarTokenYObtenerUsuario("tok-displaced")).thenReturn(Optional.empty());
+        when(authService.fueDesplazadoPorOtroDispositivo("tok-displaced")).thenReturn(true);
+        MockHttpServletRequest req4 = new MockHttpServletRequest();
+        req4.addHeader("Authorization", "Bearer tok-displaced");
+        filter.doFilter(req4, res1, chain);
+        assertNull(SecurityContextHolder.getContext().getAuthentication());
+        assertNotNull(req4.getAttribute(BearerTokenAuthenticationFilter.ATTR_AUTH_ERROR_MESSAGE));
+
+        // session-status omite el filtro para no extender el TTL deslizante
+        MockHttpServletRequest reqStatus = new MockHttpServletRequest("GET", "/api/v1/auth/session-status");
+        assertTrue(filter.shouldNotFilter(reqStatus));
     }
 
     @Test
@@ -107,6 +121,15 @@ class SecurityComponentsTest {
         entryPoint.commence(req, resUnauth, new BadCredentialsException("No token"));
         assertEquals(401, resUnauth.getStatus());
         assertTrue(resUnauth.getContentAsString().contains("No autorizado"));
+
+        MockHttpServletRequest reqDisplaced = new MockHttpServletRequest();
+        reqDisplaced.setAttribute(
+                BearerTokenAuthenticationFilter.ATTR_AUTH_ERROR_MESSAGE,
+                "Se inició sesión con tu cuenta desde otro dispositivo.");
+        MockHttpServletResponse resDisplaced = new MockHttpServletResponse();
+        entryPoint.commence(reqDisplaced, resDisplaced, new BadCredentialsException("Displaced"));
+        assertEquals(401, resDisplaced.getStatus());
+        assertTrue(resDisplaced.getContentAsString().contains("otro dispositivo"));
 
         PasswordEncoderConfig encoderConfig = new PasswordEncoderConfig();
         PasswordEncoder encoder = encoderConfig.passwordEncoder();

@@ -86,6 +86,10 @@ class AuthService {
     throw ApiException(statusCode: 500, message: 'No se pudo leer el perfil del usuario');
   }
 
+  Future<void> verificarSesionActiva() async {
+    await _client.get('/api/v1/auth/session-status');
+  }
+
   Future<UserSession> updateContacto({
     required String token,
     required String usuario,

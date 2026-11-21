@@ -73,4 +73,19 @@ public interface AuthService {
     default void invalidarOtrasSesiones(String usuario, String tokenAConservar) {
         // Sin operación por defecto
     }
+
+    /**
+     * Indica si el token fue revocado porque la cuenta inició sesión en otro dispositivo.
+     */
+    default boolean fueDesplazadoPorOtroDispositivo(String token) {
+        return false;
+    }
+
+    /**
+     * Verifica si el token sigue activo sin extender su tiempo de expiración por inactividad.
+     * Lanza AutenticacionException si la sesión expiró o fue cerrada desde otro dispositivo.
+     */
+    default boolean verificarSesionActivaSinRefrescar(String token) {
+        return validarTokenYObtenerUsuario(token).isPresent();
+    }
 }

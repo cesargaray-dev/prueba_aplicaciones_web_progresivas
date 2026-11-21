@@ -220,6 +220,9 @@ class _FakeAuthService extends AuthService {
     required String contrasenaActual,
     required String contrasenaNueva,
   }) async {}
+
+  @override
+  Future<void> verificarSesionActiva() async {}
 }
 
 void main() {
@@ -489,6 +492,22 @@ void main() {
       expect(provider.biometricEnabledForCurrentUser, isTrue);
       expect(provider.preferredLoginMethod, 'biometric');
       provider.dispose();
+    });
+
+    test('UserSession parsea aviso de sesión previa cerrada en otro dispositivo', () {
+      final session = UserSession.fromJson({
+        'token': 'tok-new',
+        'usuario': 'cesar123',
+        'clienteId': 11,
+        'nombreCompleto': 'César Garay',
+        'email': 'cesar@gmail.com',
+        'numeroCuenta': '5915019417993769',
+        'saldo': 500.0,
+        'sesionPreviaCerrada': true,
+        'avisoSesion': 'Se cerró automáticamente una sesión activa previa en otro dispositivo por seguridad.',
+      });
+      expect(session.sesionPreviaCerrada, isTrue);
+      expect(session.avisoSesion, contains('otro dispositivo'));
     });
   });
 }

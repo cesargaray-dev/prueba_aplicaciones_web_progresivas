@@ -102,6 +102,11 @@ class AuthControllerTest {
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertNotNull(response.getBody());
         assertEquals("cesar123", response.getBody().getUsuario());
+
+        when(authService.verificarSesionActivaSinRefrescar("Bearer tok123")).thenReturn(true);
+        ResponseEntity<java.util.Map<String, Object>> statusResp = authController.sessionStatus("Bearer tok123");
+        assertEquals(HttpStatus.OK, statusResp.getStatusCode());
+        assertEquals(Boolean.TRUE, statusResp.getBody().get("activa"));
     }
 
     @Test
@@ -126,5 +131,17 @@ class AuthControllerTest {
         AuthController completo = new AuthController(authService, portalCuentaService, biometriaAuthService);
         assertNotNull(dosArgs);
         assertNotNull(completo.loginBiometrico(new BiometriaLoginRequestDTO("u", "tok")));
+
+        IndexController indexController = new IndexController();
+        assertEquals("redirect:/swagger-ui/index.html", indexController.index());
+        var apkResp = indexController.downloadApk();
+        if (apkResp.getStatusCode() == HttpStatus.OK) {
+            assertEquals("application/vnd.android.package-archive",
+                    apkResp.getHeaders().getContentType().toString());
+            assertEquals("nosniff", apkResp.getHeaders().getFirst("X-Content-Type-Options"));
+            assertTrue(apkResp.getHeaders().getContentDisposition().toString().contains("BancoDigital.apk"));
+        } else {
+            assertEquals(HttpStatus.NOT_FOUND, apkResp.getStatusCode());
+        }
     }
 }

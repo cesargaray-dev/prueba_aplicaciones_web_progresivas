@@ -13,6 +13,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/BancoDigital.apk': {
+        target: process.env.VITE_BACKEND_URL || 'http://localhost:10000',
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
   test: {
