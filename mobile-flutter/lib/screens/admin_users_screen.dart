@@ -4,19 +4,22 @@ import '../services/api_client.dart';
 import '../theme/app_theme.dart';
 
 class AdminUsersScreen extends StatefulWidget {
-  const AdminUsersScreen({super.key});
+  final ApiClient? apiClient;
+
+  const AdminUsersScreen({super.key, this.apiClient});
 
   @override
   State<AdminUsersScreen> createState() => _AdminUsersScreenState();
 }
 
 class _AdminUsersScreenState extends State<AdminUsersScreen> {
-  final ApiClient _api = ApiClient();
+  late final ApiClient _api = widget.apiClient ?? ApiClient();
   final TextEditingController _searchController = TextEditingController();
   final NumberFormat _currency = NumberFormat.currency(locale: 'es_MX', symbol: '\$');
 
   List<Map<String, dynamic>> _users = [];
   bool _isLoading = true;
+  bool _isDeletingAll = false;
   String? _error;
   String _searchQuery = '';
 
@@ -33,6 +36,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _loadUsers() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -54,6 +58,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       }
     }
   }
+
+  int get _nonAdminCount => _users.where((u) => u['esAdmin'] != true).length;
 
   List<Map<String, dynamic>> get _filteredUsers {
     final q = _searchQuery.trim().toLowerCase();
@@ -88,9 +94,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: const Color(0xFF10B981),
-            content: Text(
-              'Estado de @${user['usuario']} actualizado correctamente.',
-            ),
+            content: Text('Estado de @${user['usuario']} actualizado correctamente.'),
           ),
         );
       }
@@ -164,405 +168,119 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 
-  Future<void> _openEditDialog(Map<String, dynamic> user) async {
-    final id = user['clienteId'];
-    final isAdmin = user['esAdmin'] == true;
-    final nombreCtrl = TextEditingController(text: (user['nombre'] ?? '').toString());
-    final segundoCtrl = TextEditingController(text: (user['segundoNombre'] ?? '').toString());
-    final paternoCtrl = TextEditingController(text: (user['apellidoPaterno'] ?? '').toString());
-    final maternoCtrl = TextEditingController(text: (user['apellidoMaterno'] ?? '').toString());
-    final correoCtrl = TextEditingController(text: (user['correo'] ?? '').toString());
-    final telCtrl = TextEditingController(text: (user['telefonoMovil'] ?? '').toString());
-    final usrCtrl = TextEditingController(text: (user['usuario'] ?? '').toString());
-    final saldoCtrl = TextEditingController(text: (user['saldo'] ?? '0').toString());
-    final passCtrl = TextEditingController();
-    bool activo = user['activo'] == true;
-    bool bloqueado = user['bloqueado'] == true;
+  Future<void> _confirmDeleteAll() async {
+    final count = _nonAdminCount;
+    if (count == 0) return;
 
-    await showModalBottomSheet(
+    final confirmed = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.cardBg(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Editar @${user['usuario']}',
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                            color: AppTheme.primaryNavy,
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded),
-                          onPressed: () => Navigator.of(ctx).pop(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: nombreCtrl,
-                            decoration: const InputDecoration(labelText: 'Nombre *'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: segundoCtrl,
-                            decoration: const InputDecoration(labelText: 'Segundo Nombre'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: paternoCtrl,
-                            decoration: const InputDecoration(labelText: 'Apellido Paterno *'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: maternoCtrl,
-                            decoration: const InputDecoration(labelText: 'Apellido Materno *'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      controller: correoCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(labelText: 'Correo Electrónico *'),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: telCtrl,
-                            maxLength: 10,
-                            keyboardType: TextInputType.phone,
-                            decoration: const InputDecoration(
-                              labelText: 'Teléfono (10 díg) *',
-                              counterText: '',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: usrCtrl,
-                            enabled: !isAdmin,
-                            decoration: const InputDecoration(labelText: 'Usuario *'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: saldoCtrl,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            decoration: const InputDecoration(labelText: 'Saldo Disponible (MXN) *'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: passCtrl,
-                            decoration: const InputDecoration(
-                              labelText: 'Nueva Contraseña (opcional)',
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (!isAdmin) ...[
-                      const SizedBox(height: 10),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Cuenta Activa',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        value: activo,
-                        onChanged: (v) => setModalState(() => activo = v),
-                      ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text(
-                          'Acceso Bloqueado',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                        value: bloqueado,
-                        onChanged: (v) => setModalState(() => bloqueado = v),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        icon: const Icon(Icons.save_rounded),
-                        label: const Text('Guardar Cambios'),
-                        onPressed: () async {
-                          final navigator = Navigator.of(ctx);
-                          final messenger = ScaffoldMessenger.of(this.context);
-                          try {
-                            final body = <String, dynamic>{
-                              'nombre': nombreCtrl.text.trim(),
-                              'segundoNombre': segundoCtrl.text.trim(),
-                              'apellidoPaterno': paternoCtrl.text.trim(),
-                              'apellidoMaterno': maternoCtrl.text.trim(),
-                              'correo': correoCtrl.text.trim(),
-                              'telefonoMovil': telCtrl.text.trim(),
-                              'usuario': usrCtrl.text.trim(),
-                              'saldo': double.tryParse(saldoCtrl.text.trim()) ?? 0.0,
-                              'activo': activo,
-                              'bloqueado': bloqueado,
-                            };
-                            if (passCtrl.text.trim().isNotEmpty) {
-                              body['nuevaContrasena'] = passCtrl.text.trim();
-                            }
-                            await _api.put('/api/v1/admin/usuarios/$id', body: body);
-                            navigator.pop();
-                            await _loadUsers();
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                backgroundColor: Color(0xFF10B981),
-                                content: Text('Usuario actualizado exitosamente.'),
-                              ),
-                            );
-                          } catch (e) {
-                            messenger.showSnackBar(
-                              SnackBar(
-                                backgroundColor: AppTheme.errorRed,
-                                content: Text(
-                                  e is ApiException ? e.message : 'Error al guardar cambios',
-                                ),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _openCreateDialog() async {
-    final nombreCtrl = TextEditingController();
-    final segundoCtrl = TextEditingController();
-    final paternoCtrl = TextEditingController();
-    final maternoCtrl = TextEditingController();
-    final fechaCtrl = TextEditingController(text: '1995-05-15');
-    final correoCtrl = TextEditingController();
-    final telCtrl = TextEditingController();
-    final usrCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
-
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.cardBg(context),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_sweep_rounded, color: AppTheme.errorRed),
+            SizedBox(width: 8),
+            Expanded(child: Text('¿Eliminar todos los usuarios?')),
+          ],
+        ),
+        content: Text(
+          'Se eliminarán permanentemente todos los usuarios clientes ($count cuentas), junto con sus saldos, biometría e historial de pagos.\n\nLa cuenta principal @admin se conservará activa.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
           ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Crear Nuevo Usuario',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.textPrimary(ctx),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(ctx).pop(),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: nombreCtrl,
-                        decoration: const InputDecoration(labelText: 'Nombre *'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: segundoCtrl,
-                        decoration: const InputDecoration(labelText: 'Segundo Nombre'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: paternoCtrl,
-                        decoration: const InputDecoration(labelText: 'Apellido Paterno *'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: maternoCtrl,
-                        decoration: const InputDecoration(labelText: 'Apellido Materno *'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: fechaCtrl,
-                        decoration: const InputDecoration(labelText: 'Fecha Nac (YYYY-MM-DD) *'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: telCtrl,
-                        maxLength: 10,
-                        keyboardType: TextInputType.phone,
-                        decoration: const InputDecoration(
-                          labelText: 'Teléfono (10 díg) *',
-                          counterText: '',
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: correoCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Correo Electrónico Real *'),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: usrCtrl,
-                        decoration: const InputDecoration(labelText: 'Usuario *'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: passCtrl,
-                        decoration: const InputDecoration(labelText: 'Contraseña (ej. Venta2026#) *'),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.person_add_alt_1_rounded),
-                    label: const Text('Crear Usuario'),
-                    onPressed: () async {
-                      final navigator = Navigator.of(ctx);
-                      final messenger = ScaffoldMessenger.of(context);
-                      try {
-                        await _api.post('/api/v1/admin/usuarios', body: {
-                          'nombre': nombreCtrl.text.trim(),
-                          'segundoNombre': segundoCtrl.text.trim(),
-                          'apellidoPaterno': paternoCtrl.text.trim(),
-                          'apellidoMaterno': maternoCtrl.text.trim(),
-                          'fechaNacimiento': fechaCtrl.text.trim(),
-                          'sexo': 'HOMBRE',
-                          'correo': correoCtrl.text.trim(),
-                          'telefonoMovil': telCtrl.text.trim(),
-                          'usuario': usrCtrl.text.trim(),
-                          'contrasena': passCtrl.text,
-                        });
-                        navigator.pop();
-                        await _loadUsers();
-                        messenger.showSnackBar(
-                          const SnackBar(
-                            backgroundColor: Color(0xFF10B981),
-                            content: Text('Usuario creado exitosamente.'),
-                          ),
-                        );
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(
-                            backgroundColor: AppTheme.errorRed,
-                            content: Text(
-                              e is ApiException ? e.message : 'Error al crear usuario',
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                ),
-              ],
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.errorRed),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Sí, Eliminar Todos'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeletingAll = true);
+    try {
+      final resp = await _api.delete('/api/v1/admin/usuarios');
+      final msg = (resp is Map && resp['mensaje'] != null)
+          ? resp['mensaje'].toString()
+          : 'Se eliminaron todos los usuarios clientes.';
+      await _loadUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF10B981),
+            content: Text(msg),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.errorRed,
+            content: Text(
+              e is ApiException ? e.message : 'No se pudieron eliminar los usuarios',
             ),
           ),
         );
-      },
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDeletingAll = false);
+      }
+    }
+  }
+
+  Future<void> _openEditDialog(Map<String, dynamic> user) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.cardBg(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _AdminEditUserSheet(api: _api, user: user),
     );
+
+    if (saved == true && mounted) {
+      await _loadUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF10B981),
+            content: Text('Usuario actualizado exitosamente.'),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _openCreateDialog() async {
+    final created = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.cardBg(context),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _AdminCreateUserSheet(api: _api),
+    );
+
+    if (created == true && mounted) {
+      await _loadUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF10B981),
+            content: Text('Usuario creado exitosamente.'),
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -614,31 +332,56 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         ],
                       ),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        FilledButton.tonalIcon(
-                          onPressed: _openCreateDialog,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFFF59E0B),
-                            foregroundColor: const Color(0xFF040914),
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            minimumSize: Size.zero,
-                          ),
-                          icon: const Icon(Icons.person_add_alt_1_rounded, size: 14),
-                          label: const Text(
-                            'Nuevo',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          onPressed: _loadUsers,
-                          icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
-                          tooltip: 'Actualizar lista',
-                        ),
-                      ],
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      onPressed: _loadUsers,
+                      icon: const Icon(Icons.refresh_rounded, color: Colors.white, size: 18),
+                      tooltip: 'Actualizar lista',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: _openCreateDialog,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: const Color(0xFFF59E0B),
+                        foregroundColor: const Color(0xFF040914),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        minimumSize: Size.zero,
+                      ),
+                      icon: const Icon(Icons.person_add_alt_1_rounded, size: 15),
+                      label: const Text(
+                        'Nuevo',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900),
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: (_isLoading || _isDeletingAll || _nonAdminCount == 0)
+                          ? null
+                          : _confirmDeleteAll,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.errorRed,
+                        disabledBackgroundColor: AppTheme.errorRed.withValues(alpha: 0.35),
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white70,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        minimumSize: Size.zero,
+                      ),
+                      icon: _isDeletingAll
+                          ? const SizedBox(
+                              width: 13,
+                              height: 13,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            )
+                          : const Icon(Icons.delete_sweep_rounded, size: 15),
+                      label: const Text(
+                        'Eliminar Todos',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w900),
+                      ),
                     ),
                   ],
                 ),
@@ -703,7 +446,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                               side: BorderSide(
                                 color: isAdmin
                                     ? const Color(0xFFF59E0B).withValues(alpha: 0.5)
-                                    : Colors.grey.shade200,
+                                    : AppTheme.borderCol(context),
                               ),
                             ),
                             child: Padding(
@@ -734,7 +477,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                               ? AppTheme.errorRed.withValues(alpha: 0.12)
                                               : isActive
                                                   ? const Color(0xFF10B981).withValues(alpha: 0.12)
-                                                  : Colors.grey.shade200,
+                                                  : AppTheme.elevatedBg(context),
                                           borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: Text(
@@ -750,7 +493,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                                 ? AppTheme.errorRed
                                                 : isActive
                                                     ? const Color(0xFF10B981)
-                                                    : Colors.grey.shade700,
+                                                    : AppTheme.textSecondary(context),
                                           ),
                                         ),
                                       ),
@@ -759,7 +502,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                   const SizedBox(height: 4),
                                   Text(
                                     '@${u['usuario']} • ${u['correo']} • ${u['telefonoMovil']}',
-                                    style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700),
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: AppTheme.textSecondary(context),
+                                    ),
                                   ),
                                   const SizedBox(height: 8),
                                   Row(
@@ -767,10 +513,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                     children: [
                                       Text(
                                         'Cuenta: ${u['numeroCuenta'] ?? 'N/A'}',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           fontFamily: 'monospace',
                                           fontSize: 11.5,
                                           fontWeight: FontWeight.w600,
+                                          color: AppTheme.textPrimary(context),
                                         ),
                                       ),
                                       Text(
@@ -784,8 +531,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                     ],
                                   ),
                                   const Divider(height: 18),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
+                                  Wrap(
+                                    alignment: WrapAlignment.end,
+                                    spacing: 4,
                                     children: [
                                       TextButton.icon(
                                         onPressed: () => _openEditDialog(u),
@@ -828,6 +576,538 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                       ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AdminEditUserSheet extends StatefulWidget {
+  final ApiClient api;
+  final Map<String, dynamic> user;
+
+  const _AdminEditUserSheet({required this.api, required this.user});
+
+  @override
+  State<_AdminEditUserSheet> createState() => _AdminEditUserSheetState();
+}
+
+class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
+  late final TextEditingController _nombreCtrl;
+  late final TextEditingController _segundoCtrl;
+  late final TextEditingController _paternoCtrl;
+  late final TextEditingController _maternoCtrl;
+  late final TextEditingController _correoCtrl;
+  late final TextEditingController _telCtrl;
+  late final TextEditingController _usrCtrl;
+  late final TextEditingController _saldoCtrl;
+  late final TextEditingController _passCtrl;
+
+  late bool _activo;
+  late bool _bloqueado;
+  bool _isSaving = false;
+  bool _didClose = false;
+  String? _modalError;
+
+  @override
+  void initState() {
+    super.initState();
+    final u = widget.user;
+    _nombreCtrl = TextEditingController(text: (u['nombre'] ?? '').toString());
+    _segundoCtrl = TextEditingController(text: (u['segundoNombre'] ?? '').toString());
+    _paternoCtrl = TextEditingController(text: (u['apellidoPaterno'] ?? '').toString());
+    _maternoCtrl = TextEditingController(text: (u['apellidoMaterno'] ?? '').toString());
+    _correoCtrl = TextEditingController(text: (u['correo'] ?? '').toString());
+    _telCtrl = TextEditingController(text: (u['telefonoMovil'] ?? '').toString());
+    _usrCtrl = TextEditingController(text: (u['usuario'] ?? '').toString());
+    _saldoCtrl = TextEditingController(text: (u['saldo'] ?? '0').toString());
+    _passCtrl = TextEditingController();
+    _activo = u['activo'] == true;
+    _bloqueado = u['bloqueado'] == true;
+  }
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _segundoCtrl.dispose();
+    _paternoCtrl.dispose();
+    _maternoCtrl.dispose();
+    _correoCtrl.dispose();
+    _telCtrl.dispose();
+    _usrCtrl.dispose();
+    _saldoCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  void _closeSheet(bool result) {
+    if (!mounted || _didClose) return;
+    final route = ModalRoute.of(context);
+    if (route != null && route.isActive && route.isCurrent) {
+      _didClose = true;
+      Navigator.of(context).pop(result);
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    if (_isSaving) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isSaving = true;
+      _modalError = null;
+    });
+
+    final id = widget.user['clienteId'];
+    final body = <String, dynamic>{
+      'nombre': _nombreCtrl.text.trim(),
+      'segundoNombre': _segundoCtrl.text.trim(),
+      'apellidoPaterno': _paternoCtrl.text.trim(),
+      'apellidoMaterno': _maternoCtrl.text.trim(),
+      'correo': _correoCtrl.text.trim(),
+      'telefonoMovil': _telCtrl.text.trim(),
+      'usuario': _usrCtrl.text.trim(),
+      'saldo': double.tryParse(_saldoCtrl.text.trim()) ?? 0.0,
+      'activo': _activo,
+      'bloqueado': _bloqueado,
+    };
+    if (_passCtrl.text.trim().isNotEmpty) {
+      body['nuevaContrasena'] = _passCtrl.text.trim();
+    }
+
+    try {
+      await widget.api.put('/api/v1/admin/usuarios/$id', body: body);
+      _closeSheet(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _modalError = e is ApiException ? e.message : 'Error al guardar cambios';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = widget.user['esAdmin'] == true;
+
+    return PopScope(
+      canPop: !_isSaving,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Editar @${widget.user['usuario']}',
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.textPrimary(context),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: _isSaving ? null : () => _closeSheet(false),
+                  ),
+                ],
+              ),
+              if (_modalError != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorRed.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    _modalError!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.errorRed,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nombreCtrl,
+                      decoration: const InputDecoration(labelText: 'Nombre *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _segundoCtrl,
+                      decoration: const InputDecoration(labelText: 'Segundo Nombre'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _paternoCtrl,
+                      decoration: const InputDecoration(labelText: 'Apellido Paterno *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _maternoCtrl,
+                      decoration: const InputDecoration(labelText: 'Apellido Materno *'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _correoCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Correo Electrónico *'),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _telCtrl,
+                      maxLength: 10,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Teléfono (10 díg) *',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _usrCtrl,
+                      enabled: !isAdmin,
+                      decoration: const InputDecoration(labelText: 'Usuario *'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _saldoCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(labelText: 'Saldo Disponible (MXN) *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _passCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Nueva Contraseña (opcional)',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (!isAdmin) ...[
+                const SizedBox(height: 10),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Cuenta Activa',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  value: _activo,
+                  onChanged: _isSaving ? null : (v) => setState(() => _activo = v),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Acceso Bloqueado',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  value: _bloqueado,
+                  onChanged: _isSaving ? null : (v) => setState(() => _bloqueado = v),
+                ),
+              ],
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.save_rounded),
+                  label: Text(_isSaving ? 'Guardando...' : 'Guardar Cambios'),
+                  onPressed: _isSaving ? null : _saveChanges,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AdminCreateUserSheet extends StatefulWidget {
+  final ApiClient api;
+
+  const _AdminCreateUserSheet({required this.api});
+
+  @override
+  State<_AdminCreateUserSheet> createState() => _AdminCreateUserSheetState();
+}
+
+class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
+  final _nombreCtrl = TextEditingController();
+  final _segundoCtrl = TextEditingController();
+  final _paternoCtrl = TextEditingController();
+  final _maternoCtrl = TextEditingController();
+  final _fechaCtrl = TextEditingController(text: '1995-05-15');
+  final _correoCtrl = TextEditingController();
+  final _telCtrl = TextEditingController();
+  final _usrCtrl = TextEditingController();
+  final _passCtrl = TextEditingController();
+
+  bool _isSaving = false;
+  bool _didClose = false;
+  String? _modalError;
+
+  @override
+  void dispose() {
+    _nombreCtrl.dispose();
+    _segundoCtrl.dispose();
+    _paternoCtrl.dispose();
+    _maternoCtrl.dispose();
+    _fechaCtrl.dispose();
+    _correoCtrl.dispose();
+    _telCtrl.dispose();
+    _usrCtrl.dispose();
+    _passCtrl.dispose();
+    super.dispose();
+  }
+
+  void _closeSheet(bool result) {
+    if (!mounted || _didClose) return;
+    final route = ModalRoute.of(context);
+    if (route != null && route.isActive && route.isCurrent) {
+      _didClose = true;
+      Navigator.of(context).pop(result);
+    }
+  }
+
+  Future<void> _createUser() async {
+    if (_isSaving) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isSaving = true;
+      _modalError = null;
+    });
+
+    try {
+      await widget.api.post('/api/v1/admin/usuarios', body: {
+        'nombre': _nombreCtrl.text.trim(),
+        'segundoNombre': _segundoCtrl.text.trim(),
+        'apellidoPaterno': _paternoCtrl.text.trim(),
+        'apellidoMaterno': _maternoCtrl.text.trim(),
+        'fechaNacimiento': _fechaCtrl.text.trim(),
+        'sexo': 'HOMBRE',
+        'correo': _correoCtrl.text.trim(),
+        'telefonoMovil': _telCtrl.text.trim(),
+        'usuario': _usrCtrl.text.trim(),
+        'contrasena': _passCtrl.text,
+      });
+      _closeSheet(true);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+          _modalError = e is ApiException ? e.message : 'Error al crear usuario';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSaving,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Crear Nuevo Usuario',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: AppTheme.textPrimary(context),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: _isSaving ? null : () => _closeSheet(false),
+                  ),
+                ],
+              ),
+              if (_modalError != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorRed.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    _modalError!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.errorRed,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nombreCtrl,
+                      decoration: const InputDecoration(labelText: 'Nombre *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _segundoCtrl,
+                      decoration: const InputDecoration(labelText: 'Segundo Nombre'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _paternoCtrl,
+                      decoration: const InputDecoration(labelText: 'Apellido Paterno *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _maternoCtrl,
+                      decoration: const InputDecoration(labelText: 'Apellido Materno *'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _fechaCtrl,
+                      decoration: const InputDecoration(labelText: 'Fecha Nac (YYYY-MM-DD) *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _telCtrl,
+                      maxLength: 10,
+                      keyboardType: TextInputType.phone,
+                      decoration: const InputDecoration(
+                        labelText: 'Teléfono (10 díg) *',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _correoCtrl,
+                keyboardType: TextInputType.emailAddress,
+                decoration: const InputDecoration(labelText: 'Correo Electrónico Real *'),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _usrCtrl,
+                      decoration: const InputDecoration(labelText: 'Usuario *'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _passCtrl,
+                      decoration: const InputDecoration(labelText: 'Contraseña (ej. Venta2026#) *'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.person_add_alt_1_rounded),
+                  label: Text(_isSaving ? 'Creando...' : 'Crear Usuario'),
+                  onPressed: _isSaving ? null : _createUser,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

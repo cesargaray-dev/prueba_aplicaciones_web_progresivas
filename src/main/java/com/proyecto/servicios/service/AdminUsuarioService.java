@@ -13,5 +13,8 @@ public interface AdminUsuarioService {
     AdminUsuarioDTO crearUsuarioComoAdmin(String adminAutenticado, RegisterRequestDTO request);
     AdminUsuarioDTO actualizarUsuarioComoAdmin(String adminAutenticado, Long clienteId, AdminActualizarUsuarioRequestDTO request);
     GenericResponse eliminarUsuarioComoAdmin(String adminAutenticado, Long clienteId);
+    default GenericResponse eliminarTodosLosUsuariosComoAdmin(String adminAutenticado) {
+        throw new UnsupportedOperationException("Eliminacion masiva no soportada en esta implementacion");
+    }
     void asegurarUsuarioAdminInicial();
 }

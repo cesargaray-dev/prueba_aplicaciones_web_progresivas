@@ -59,6 +59,10 @@ export const AdminUsersPage: React.FC = () => {
   const [deletingUser, setDeletingUser] = useState<AdminUserItem | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Bulk delete all non-admin users State
+  const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -219,6 +223,23 @@ export const AdminUsersPage: React.FC = () => {
     }
   };
 
+  const handleConfirmDeleteAll = async () => {
+    setIsDeletingAll(true);
+    setFeedback(null);
+    try {
+      const res = await adminApi.eliminarTodosUsuarios();
+      setUsers((prev) => prev.filter((item) => item.esAdmin));
+      setIsDeleteAllOpen(false);
+      setFeedback({ type: 'success', msg: res.mensaje });
+    } catch (err: unknown) {
+      setFeedback({ type: 'error', msg: extractMsg(err) });
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
+  const nonAdminCount = useMemo(() => users.filter((u) => !u.esAdmin).length, [users]);
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsCreating(true);
@@ -267,7 +288,7 @@ export const AdminUsersPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           <button
             type="button"
             onClick={() => setIsCreateOpen(true)}
@@ -275,6 +296,16 @@ export const AdminUsersPage: React.FC = () => {
           >
             <UserPlus className="w-4 h-4" />
             <span>Nuevo Usuario</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsDeleteAllOpen(true)}
+            disabled={isLoading || nonAdminCount === 0}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-red-600/90 hover:bg-red-500 disabled:opacity-45 border border-red-400/50 text-white text-xs font-black shadow-lg transition-all"
+            title="Eliminar todos los usuarios clientes (conserva la cuenta admin)"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>Eliminar Todos</span>
           </button>
           <button
             type="button"
@@ -918,6 +949,48 @@ export const AdminUsersPage: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
               >
                 {isDeleting ? 'Eliminando...' : 'Sí, Eliminar Usuario'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Delete All Non-Admin Users Modal */}
+      {isDeleteAllOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirmar eliminación masiva"
+        >
+          <div className="bg-white rounded-3xl shadow-2xl border border-red-200 w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center gap-3 text-red-700">
+              <div className="p-3 rounded-2xl bg-red-100">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-black">¿Eliminar todos los usuarios?</h3>
+                <p className="text-xs text-slate-500">Esta acción eliminará {nonAdminCount} cuentas cliente.</p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-700 leading-relaxed">
+              Se eliminarán permanentemente <strong>todos los usuarios clientes ({nonAdminCount})</strong>, sus cuentas bancarias, saldos, biometría e historial de pagos. La cuenta principal <strong>@admin</strong> se conservará intacta para mantener el acceso administrativo.
+            </p>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeletingAll}
+                onClick={() => setIsDeleteAllOpen(false)}
+                className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-bold text-slate-700"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAll}
+                onClick={handleConfirmDeleteAll}
+                className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md disabled:opacity-50"
+              >
+                {isDeletingAll ? 'Eliminando...' : 'Sí, Eliminar Todos'}
               </button>
             </div>
           </div>

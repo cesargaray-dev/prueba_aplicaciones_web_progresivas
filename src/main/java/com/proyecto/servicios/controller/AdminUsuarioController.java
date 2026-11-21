@@ -70,4 +70,11 @@ public class AdminUsuarioController {
         String admin = auth != null ? auth.getName() : null;
         return ResponseEntity.ok(adminUsuarioService.eliminarUsuarioComoAdmin(admin, clienteId));
     }
+
+    @DeleteMapping
+    @Operation(summary = "Eliminar permanentemente todos los usuarios clientes (conservando @admin)")
+    public ResponseEntity<GenericResponse> eliminarTodosLosUsuarios(Authentication auth) {
+        String admin = auth != null ? auth.getName() : null;
+        return ResponseEntity.ok(adminUsuarioService.eliminarTodosLosUsuariosComoAdmin(admin));
+    }
 }

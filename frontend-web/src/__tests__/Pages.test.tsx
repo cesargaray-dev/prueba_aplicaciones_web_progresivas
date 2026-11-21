@@ -546,6 +546,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         codigo: 0,
         mensaje: 'Usuario eliminado permanentemente.',
       });
+      vi.spyOn(adminApi, 'eliminarTodosUsuarios').mockResolvedValue({
+        codigo: 0,
+        mensaje: 'Se eliminaron permanentemente 1 usuarios clientes (se conserva la cuenta @admin).',
+      });
 
       render(<AdminUsersPage />);
 
@@ -606,6 +610,14 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.click(screen.getByRole('button', { name: /Sí, Eliminar Usuario/i }));
       await waitFor(() =>
         expect(screen.getByText(/Usuario eliminado permanentemente/i)).toBeInTheDocument()
+      );
+
+      // Delete all users modal
+      await user.click(screen.getByRole('button', { name: /Eliminar Todos/i }));
+      expect(screen.getByRole('dialog', { name: /Confirmar eliminación masiva/i })).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /Sí, Eliminar Todos/i }));
+      await waitFor(() =>
+        expect(screen.getByText(/Se eliminaron permanentemente 1 usuarios clientes/i)).toBeInTheDocument()
       );
 
       // Refresh & error branches

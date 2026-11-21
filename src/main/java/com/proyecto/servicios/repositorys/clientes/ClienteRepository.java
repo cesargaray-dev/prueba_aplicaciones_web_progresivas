@@ -3,6 +3,7 @@ package com.proyecto.servicios.repositorys.clientes;
 import com.proyecto.servicios.entity.clientes.Cliente;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
@@ -64,4 +65,90 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long>, JpaSpec
     List<Cliente> findByActivoTrueOrderByFechaRegistroAsc();
 
     List<Cliente> findByFechaRegistroBetweenOrderByFechaRegistroAsc(LocalDateTime inicio, LocalDateTime fin);
+
+    @Query(value = """
+            SELECT l.usuario
+            FROM login_clientes l
+            WHERE LOWER(TRIM(l.usuario)) <> 'admin'
+            """, nativeQuery = true)
+    List<String> findNonAdminUsernamesRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM pagos_servicios
+            WHERE cuenta_id IN (
+                SELECT ct.id
+                FROM cuentas ct
+                LEFT JOIN login_clientes lc ON lc.cliente_id = ct.cliente_id
+                WHERE LOWER(COALESCE(TRIM(lc.usuario), '')) <> 'admin'
+            )
+            """, nativeQuery = true)
+    int deleteNonAdminPagosRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM saldos
+            WHERE cuenta_id IN (
+                SELECT ct.id
+                FROM cuentas ct
+                LEFT JOIN login_clientes lc ON lc.cliente_id = ct.cliente_id
+                WHERE LOWER(COALESCE(TRIM(lc.usuario), '')) <> 'admin'
+            )
+            """, nativeQuery = true)
+    int deleteNonAdminSaldosRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM datos_biometricos
+            WHERE cliente_id IN (
+                SELECT c.id
+                FROM clientes c
+                LEFT JOIN login_clientes lc ON lc.cliente_id = c.id
+                WHERE LOWER(COALESCE(TRIM(lc.usuario), '')) <> 'admin'
+            )
+            """, nativeQuery = true)
+    int deleteNonAdminBiometriaRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM domicilios
+            WHERE cliente_id IN (
+                SELECT c.id
+                FROM clientes c
+                LEFT JOIN login_clientes lc ON lc.cliente_id = c.id
+                WHERE LOWER(COALESCE(TRIM(lc.usuario), '')) <> 'admin'
+            )
+            """, nativeQuery = true)
+    int deleteNonAdminDomiciliosRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM cuentas
+            WHERE cliente_id IN (
+                SELECT c.id
+                FROM clientes c
+                LEFT JOIN login_clientes lc ON lc.cliente_id = c.id
+                WHERE LOWER(COALESCE(TRIM(lc.usuario), '')) <> 'admin'
+            )
+            """, nativeQuery = true)
+    int deleteNonAdminCuentasRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM login_clientes
+            WHERE LOWER(TRIM(usuario)) <> 'admin'
+            """, nativeQuery = true)
+    int deleteNonAdminLoginsRaw();
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            DELETE FROM clientes
+            WHERE id NOT IN (
+                SELECT cliente_id
+                FROM login_clientes
+                WHERE LOWER(TRIM(usuario)) = 'admin'
+                  AND cliente_id IS NOT NULL
+            )
+            """, nativeQuery = true)
+    int deleteNonAdminClientesRaw();
 }

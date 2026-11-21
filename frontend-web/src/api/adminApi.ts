@@ -20,4 +20,8 @@ export const adminApi = {
   eliminarUsuario: async (clienteId: number): Promise<{ codigo: number; mensaje: string }> => {
     return apiClient.delete<{ codigo: number; mensaje: string }>(`/admin/usuarios/${clienteId}`);
   },
+
+  eliminarTodosUsuarios: async (): Promise<{ codigo: number; mensaje: string }> => {
+    return apiClient.delete<{ codigo: number; mensaje: string }>('/admin/usuarios');
+  },
 };

@@ -1,8 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:mobile_flutter/models/history_item.dart';
 import 'package:mobile_flutter/models/user_session.dart';
 import 'package:mobile_flutter/providers/auth_provider.dart';
+import 'package:mobile_flutter/screens/admin_users_screen.dart';
 import 'package:mobile_flutter/screens/login_screen.dart';
 import 'package:mobile_flutter/services/api_client.dart';
 import 'package:mobile_flutter/services/auth_service.dart';
@@ -528,6 +532,111 @@ void main() {
       } finally {
         client.resetForTest();
       }
+    });
+
+    testWidgets(
+        'AdminUsersScreen guarda edición sin doble-pop (pantalla negra) y elimina todos los usuarios',
+        (WidgetTester tester) async {
+      final users = <Map<String, dynamic>>[
+        {
+          'clienteId': 1,
+          'usuario': 'admin',
+          'esAdmin': true,
+          'nombre': 'ADMIN',
+          'segundoNombre': '',
+          'apellidoPaterno': 'BANCO',
+          'apellidoMaterno': 'DIGITAL',
+          'nombreCompleto': 'ADMIN BANCO DIGITAL',
+          'correo': 'admin@bancodigital.com.mx',
+          'telefonoMovil': '5523456789',
+          'numeroCuenta': '4000000000000001',
+          'saldo': 10000.0,
+          'activo': true,
+          'bloqueado': false,
+        },
+        {
+          'clienteId': 2,
+          'usuario': 'carlos98',
+          'esAdmin': false,
+          'nombre': 'CARLOS',
+          'segundoNombre': '',
+          'apellidoPaterno': 'GARAY',
+          'apellidoMaterno': 'LOPEZ',
+          'nombreCompleto': 'CARLOS GARAY LOPEZ',
+          'correo': 'carlos@gmail.com',
+          'telefonoMovil': '5512345678',
+          'numeroCuenta': '5225253189113705',
+          'saldo': 350.0,
+          'activo': true,
+          'bloqueado': false,
+        },
+      ];
+      int putCalls = 0;
+      bool deleteAllCalled = false;
+
+      final mockHttp = MockClient((req) async {
+        if (req.method == 'GET' && req.url.path == '/api/v1/admin/usuarios') {
+          return http.Response(jsonEncode(users), 200);
+        }
+        if (req.method == 'PUT' && req.url.path == '/api/v1/admin/usuarios/2') {
+          putCalls++;
+          await Future<void>.delayed(const Duration(milliseconds: 80));
+          users[1]['nombreCompleto'] = 'CARLOS EDITADO';
+          users[1]['saldo'] = 900.0;
+          return http.Response(jsonEncode(users[1]), 200);
+        }
+        if (req.method == 'DELETE' && req.url.path == '/api/v1/admin/usuarios') {
+          deleteAllCalled = true;
+          users.removeWhere((u) => u['esAdmin'] != true);
+          return http.Response(
+            jsonEncode({
+              'codigo': 0,
+              'mensaje': 'Se eliminaron permanentemente 1 usuarios clientes (se conserva la cuenta @admin).',
+            }),
+            200,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      final client = ApiClient.withClient(mockHttp, baseUrl: 'http://localhost:10000');
+      client.setAuthToken('admin-jwt');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: AdminUsersScreen(apiClient: client)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('CARLOS GARAY LOPEZ'), findsOneWidget);
+
+      // Abrir edición del segundo usuario y pulsar Guardar Cambios dos veces seguidas
+      await tester.tap(find.text('Editar').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Editar @carlos98'), findsOneWidget);
+
+      final saveBtn = find.text('Guardar Cambios');
+      await tester.tap(saveBtn);
+      await tester.tap(saveBtn, warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      // Solo una petición PUT y AdminUsersScreen sigue visible (sin pantalla negra)
+      expect(putCalls, 1);
+      expect(find.text('GESTIÓN TOTAL DE USUARIOS'), findsOneWidget);
+      expect(find.text('CARLOS EDITADO'), findsOneWidget);
+
+      // Botón Eliminar Todos solicita confirmación y borra solo clientes
+      await tester.tap(find.text('Eliminar Todos'));
+      await tester.pumpAndSettle();
+      expect(find.text('¿Eliminar todos los usuarios?'), findsOneWidget);
+
+      await tester.tap(find.text('Sí, Eliminar Todos'));
+      await tester.pumpAndSettle();
+
+      expect(deleteAllCalled, isTrue);
+      expect(find.text('ADMIN BANCO DIGITAL'), findsOneWidget);
+      expect(find.text('CARLOS EDITADO'), findsNothing);
     });
   });
 }

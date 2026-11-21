@@ -468,6 +468,39 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
         return new GenericResponse(0, "Usuario '" + usr + "' eliminado permanentemente.");
     }
 
+    @Override
+    @Transactional
+    public GenericResponse eliminarTodosLosUsuariosComoAdmin(String adminAutenticado) {
+        ownershipValidator.validarPrivilegiosAdmin(adminAutenticado);
+
+        List<String> usuariosNoAdmin = clienteRepo.findNonAdminUsernamesRaw();
+        if (usuariosNoAdmin != null) {
+            for (String usr : usuariosNoAdmin) {
+                if (usr != null && !usr.isBlank()) {
+                    authService.invalidarOtrasSesiones(usr, null);
+                }
+            }
+        }
+
+        clienteRepo.deleteNonAdminPagosRaw();
+        clienteRepo.deleteNonAdminSaldosRaw();
+        clienteRepo.deleteNonAdminBiometriaRaw();
+        clienteRepo.deleteNonAdminDomiciliosRaw();
+        clienteRepo.deleteNonAdminCuentasRaw();
+        clienteRepo.deleteNonAdminLoginsRaw();
+        int eliminados = clienteRepo.deleteNonAdminClientesRaw();
+
+        log.info("Eliminacion masiva ejecutada por @{}: {} clientes eliminados (cuenta admin conservada)",
+                adminAutenticado, eliminados);
+
+        if (eliminados == 0) {
+            return new GenericResponse(0, "No habia usuarios clientes por eliminar (se conserva la cuenta @admin).");
+        }
+        return new GenericResponse(
+                0,
+                "Se eliminaron permanentemente " + eliminados + " usuarios clientes (se conserva la cuenta @admin).");
+    }
+
     private LoginCliente resolveLogin(Cliente c) {
         if (c.getLoginCliente() != null) return c.getLoginCliente();
         return c.getId() != null ? loginRepo.findByClienteId(c.getId()).orElse(null) : null;

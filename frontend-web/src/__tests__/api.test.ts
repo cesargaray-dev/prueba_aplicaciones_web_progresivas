@@ -327,6 +327,11 @@ describe('Frontend API Client Suite', () => {
           ok: true,
           headers: new Headers({ 'content-type': 'application/json' }),
           json: async () => ({ codigo: 0, mensaje: 'Eliminado' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ codigo: 0, mensaje: 'Todos eliminados' }),
         } as Response);
 
       const list = await adminApi.listarUsuarios();
@@ -349,6 +354,9 @@ describe('Frontend API Client Suite', () => {
 
       const deleted = await adminApi.eliminarUsuario(2);
       expect(deleted.codigo).toBe(0);
+
+      const deletedAll = await adminApi.eliminarTodosUsuarios();
+      expect(deletedAll.mensaje).toBe('Todos eliminados');
     });
   });
 });

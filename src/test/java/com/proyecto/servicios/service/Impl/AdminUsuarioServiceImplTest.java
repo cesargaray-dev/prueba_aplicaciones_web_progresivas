@@ -213,5 +213,24 @@ class AdminUsuarioServiceImplTest {
         ResponseEntity<GenericResponse> delResp = controller.eliminarUsuario(2L, auth);
         assertEquals(0, delResp.getBody().getCodigo());
         verify(clienteRepo).delete(user);
+
+        when(clienteRepo.findNonAdminUsernamesRaw()).thenReturn(List.of("carlos98", "pedro1"));
+        when(clienteRepo.deleteNonAdminClientesRaw()).thenReturn(2);
+        ResponseEntity<GenericResponse> delAllResp = controller.eliminarTodosLosUsuarios(auth);
+        assertEquals(0, delAllResp.getBody().getCodigo());
+        assertTrue(delAllResp.getBody().getMensaje().contains("2 usuarios clientes"));
+        verify(authService, atLeastOnce()).invalidarOtrasSesiones("carlos98", null);
+        verify(authService).invalidarOtrasSesiones("pedro1", null);
+        verify(clienteRepo).deleteNonAdminPagosRaw();
+        verify(clienteRepo).deleteNonAdminSaldosRaw();
+        verify(clienteRepo).deleteNonAdminBiometriaRaw();
+        verify(clienteRepo).deleteNonAdminDomiciliosRaw();
+        verify(clienteRepo).deleteNonAdminCuentasRaw();
+        verify(clienteRepo).deleteNonAdminLoginsRaw();
+
+        when(clienteRepo.findNonAdminUsernamesRaw()).thenReturn(List.of());
+        when(clienteRepo.deleteNonAdminClientesRaw()).thenReturn(0);
+        ResponseEntity<GenericResponse> delEmptyResp = controller.eliminarTodosLosUsuarios(auth);
+        assertTrue(delEmptyResp.getBody().getMensaje().contains("No habia usuarios"));
     }
 }
