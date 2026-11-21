@@ -6,6 +6,7 @@ import com.proyecto.servicios.entity.clientes.Domicilio;
 import com.proyecto.servicios.entity.clientes.LoginCliente;
 import com.proyecto.servicios.entity.clientes.Saldo;
 import com.proyecto.servicios.enums.EstatusCuentaEnum;
+import com.proyecto.servicios.exception.Autenticacion2FAException;
 import com.proyecto.servicios.exception.CorreoDuplicadoException;
 import com.proyecto.servicios.exception.CuentaNoEncontradaException;
 import com.proyecto.servicios.exception.CurpDuplicadaException;
@@ -14,10 +15,13 @@ import com.proyecto.servicios.exception.ValidacionException;
 import com.proyecto.servicios.model.auth.AbonoSaldoRequestDTO;
 import com.proyecto.servicios.model.auth.ActualizarContactoRequestDTO;
 import com.proyecto.servicios.model.auth.CambiarContrasenaRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.LoginRequestDTO;
 import com.proyecto.servicios.model.auth.LoginResponseDTO;
 import com.proyecto.servicios.model.auth.RegisterRequestDTO;
 import com.proyecto.servicios.model.auth.UserProfileDTO;
+import com.proyecto.servicios.model.brevo.EmailEnvioResultadoDTO;
 import com.proyecto.servicios.repositorys.clientes.ClienteRepository;
 import com.proyecto.servicios.repositorys.clientes.CuentaRepository;
 import com.proyecto.servicios.repositorys.clientes.LoginClienteRepository;
@@ -59,6 +63,10 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String ALFANUM = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     private static final DateTimeFormatter CURP_DATE_FMT = DateTimeFormatter.ofPattern("yyMMdd");
+    private static final long VIGENCIA_CODIGO_REGISTRO_SEGUNDOS = 300L;
+    private static final int MAX_INTENTOS_OTP_REGISTRO = 5;
+
+    private final java.util.Map<String, CodigoRegistroTemporal> codigosRegistro = new java.util.concurrent.ConcurrentHashMap<>();
 
     private final ClienteRepository clienteRepository;
     private final LoginClienteRepository loginClienteRepository;
@@ -113,6 +121,98 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         this.comprobanteEmailService = comprobanteEmailService;
         this.transactionManager = transactionManager;
         this.passwordEncoder = passwordEncoder != null ? passwordEncoder : new BCryptPasswordEncoder();
+    }
+
+    @Override
+    public EnviarCodigoRegistroResponseDTO enviarCodigoVerificacionRegistro(EnviarCodigoRegistroRequestDTO request) {
+        if (request == null || request.getCorreo() == null || request.getCorreo().isBlank()) {
+            throw new ValidacionException("El correo electrónico es obligatorio para enviar el código de verificación.");
+        }
+        String correo = request.getCorreo().trim().toLowerCase(Locale.ROOT);
+        if (!TelefonoUtil.esCorreoSintaxisValida(correo)) {
+            throw new ValidacionException("El formato del correo electrónico no es válido.");
+        }
+        if (TelefonoUtil.esCorreoPlaceholder(correo)) {
+            throw new ValidacionException(
+                    "Ingresa un correo electrónico real para recibir tu código 2FA (no se permiten dominios de ejemplo).");
+        }
+        if (clienteRepository.existsByCorreo(correo)) {
+            throw new CorreoDuplicadoException("El correo electrónico ya está registrado en otra cuenta.");
+        }
+        if (request.getUsuario() != null && !request.getUsuario().isBlank()) {
+            String usuario = request.getUsuario().trim();
+            if (loginClienteRepository.findByUsuario(usuario).isPresent()) {
+                throw new ValidacionException("El nombre de usuario '" + usuario + "' ya se encuentra en uso.");
+            }
+        }
+
+        String codigo = String.valueOf(RANDOM.nextInt(900_000) + 100_000);
+        String nombreSaludo = request.getNombre() != null ? request.getNombre().trim() : "";
+
+        EmailEnvioResultadoDTO envio = comprobanteEmailService != null
+                ? comprobanteEmailService.enviarCodigoRegistro2FA(correo, nombreSaludo, codigo, VIGENCIA_CODIGO_REGISTRO_SEGUNDOS)
+                : null;
+
+        if (envio == null || !envio.isEnviado()) {
+            String detalle = (envio != null && envio.getMensaje() != null && !envio.getMensaje().isBlank())
+                    ? envio.getMensaje()
+                    : "No fue posible enviar el código de verificación 2FA al correo proporcionado.";
+            throw new ValidacionException(detalle);
+        }
+
+        codigosRegistro.put(
+                correo,
+                new CodigoRegistroTemporal(
+                        codigo,
+                        LocalDateTime.now().plusSeconds(VIGENCIA_CODIGO_REGISTRO_SEGUNDOS),
+                        0
+                )
+        );
+        log.info("Código 2FA de registro enviado vía Brevo a {}", TelefonoUtil.enmascararCorreo(correo));
+
+        return EnviarCodigoRegistroResponseDTO.builder()
+                .codigo(0)
+                .mensaje("Código de verificación 2FA enviado a tu correo electrónico.")
+                .correoEnviado(true)
+                .correoDestino(correo)
+                .expiraEnSegundos(VIGENCIA_CODIGO_REGISTRO_SEGUNDOS)
+                .build();
+    }
+
+    @Override
+    public LoginResponseDTO registrarClientePortalConVerificacion(RegisterRequestDTO request) {
+        if (request == null) {
+            throw new ValidacionException("La solicitud de registro es obligatoria.");
+        }
+        String correo = request.getCorreo() != null ? request.getCorreo().trim().toLowerCase(Locale.ROOT) : "";
+        String codigoRecibido = request.getCodigoVerificacion() != null ? request.getCodigoVerificacion().trim() : "";
+
+        if (!codigoRecibido.matches("^\\d{6}$")) {
+            throw new Autenticacion2FAException(
+                    "Debes ingresar el código de verificación 2FA de 6 dígitos enviado a tu correo electrónico.");
+        }
+
+        CodigoRegistroTemporal guardado = codigosRegistro.get(correo);
+        if (guardado == null || LocalDateTime.now().isAfter(guardado.expiraEn())) {
+            codigosRegistro.remove(correo);
+            throw new Autenticacion2FAException(
+                    "No existe un código de verificación activo o ha expirado para este correo. Solicita uno nuevo.");
+        }
+
+        if (!guardado.codigo().equals(codigoRecibido)) {
+            int intentos = guardado.intentosFallidos() + 1;
+            if (intentos >= MAX_INTENTOS_OTP_REGISTRO) {
+                codigosRegistro.remove(correo);
+                throw new Autenticacion2FAException(
+                        "Demasiados intentos incorrectos. Solicita un nuevo código de verificación 2FA.");
+            }
+            codigosRegistro.put(correo, new CodigoRegistroTemporal(guardado.codigo(), guardado.expiraEn(), intentos));
+            throw new Autenticacion2FAException("Código de verificación 2FA incorrecto. Verifica el código enviado a tu correo.");
+        }
+
+        LoginResponseDTO resp = registrarClientePortal(request);
+        codigosRegistro.remove(correo);
+        return resp;
     }
 
     @Override
@@ -549,5 +649,8 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
     }
 
     private record RegistroPersistido(Cliente cliente, Cuenta cuenta, BigDecimal saldoInicialAplicado) {
+    }
+
+    private record CodigoRegistroTemporal(String codigo, LocalDateTime expiraEn, int intentosFallidos) {
     }
 }

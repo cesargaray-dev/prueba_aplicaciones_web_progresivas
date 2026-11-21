@@ -1,16 +1,25 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mobile_flutter/models/payment_response.dart';
 import 'package:mobile_flutter/models/product_item.dart';
+import 'package:mobile_flutter/providers/catalog_provider.dart';
+import 'package:mobile_flutter/services/catalog_service.dart';
 import 'package:mobile_flutter/utils/validation_utils.dart';
+
+class _FakeCatalogService extends CatalogService {
+  final List<ProductItem> items;
+  _FakeCatalogService(this.items);
+
+  @override
+  Future<List<ProductItem>> getProducts() async => items;
+}
 
 void main() {
   group('ValidationUtils - Validación Telefónica Mexicana (IFT)', () {
-    test('rechaza dígitos repetidos, secuencias y prefijos 0 o 1', () {
+    test('rechaza dígitos repetidos, secuencias y prefijos 0 o 1 (excepto 1111111111)', () {
       for (final invalido in [
         '',
         '55123',
         '0000000000',
-        '1111111111',
         '5555555555',
         '1234567890',
         '0123456789',
@@ -27,11 +36,49 @@ void main() {
       }
     });
 
-    test('acepta teléfonos reales mexicanos de 10 dígitos iniciando en 2-9', () {
-      for (final valido in ['5512345678', '3319876543', '8182345679']) {
+    test('acepta teléfonos reales mexicanos de 10 dígitos y el número de prueba GestoPago 1111111111', () {
+      for (final valido in ['1111111111', '5512345678', '3319876543', '8182345679']) {
         expect(ValidationUtils.esTelefonoMexicanoValido(valido), isTrue);
         expect(ValidationUtils.diagnosticarTelefono(valido), isNull);
       }
+    });
+
+    test('normalizarBusquedaCatalogo empareja AT&T con el nombre GestoPago AT-T', () async {
+      expect(ValidationUtils.normalizarBusquedaCatalogo('AT&T'), 'att');
+      expect(ValidationUtils.normalizarBusquedaCatalogo('AT-T'), 'att');
+      expect(ValidationUtils.normalizarBusquedaCatalogo('  At&t  '), 'att');
+
+      final attRecharge = ProductItem(
+        id: '374',
+        name: 'Recarga \$100',
+        service: 'AT-T',
+        serviceId: '115',
+        price: 100,
+        referenceType: 'a',
+        frontType: '1',
+        hasVerificationDigit: false,
+        categoryId: '3',
+      );
+      final telcelRecharge = ProductItem(
+        id: '403',
+        name: 'Recarga \$20',
+        service: 'Telcel',
+        serviceId: '133',
+        price: 20,
+        referenceType: 'a',
+        frontType: '1',
+        hasVerificationDigit: false,
+        categoryId: '3',
+      );
+
+      final provider = CatalogProvider(
+        catalogService: _FakeCatalogService([attRecharge, telcelRecharge]),
+      );
+      await provider.loadProducts();
+      provider.setSearchQuery('AT&T');
+      expect(provider.filteredProducts.length, 1);
+      expect(provider.filteredProducts.first.service, 'AT-T');
+      expect(provider.filteredProducts.first.isRecarga, isTrue);
     });
   });
 

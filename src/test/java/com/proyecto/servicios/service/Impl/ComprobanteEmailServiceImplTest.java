@@ -170,4 +170,19 @@ class ComprobanteEmailServiceImplTest {
 
         assertDoesNotThrow(() -> emailService.enviarComprobantePago(cuenta, cliente, pago));
     }
+
+    @Test
+    void enviarCodigoRegistro2FA_enviaHtmlYRechazaCorreoInvalido() {
+        var invalido = emailService.enviarCodigoRegistro2FA("correo-invalido", "Cesar", "654321", 300L);
+        assertFalse(invalido.isEnviado());
+
+        var okBrevo = new com.proyecto.servicios.model.brevo.BrevoEmailResponseDTO();
+        okBrevo.setMessageId("msg-reg-2fa");
+        when(brevoEmailClient.sendEmail(any(), any())).thenReturn(okBrevo);
+
+        var ok = emailService.enviarCodigoRegistro2FA("cesar.real@gmail.com", "Cesar", "654321", 300L);
+        assertTrue(ok.isEnviado());
+        assertEquals("msg-reg-2fa", ok.getMessageId());
+        assertEquals("cesar.real@gmail.com", ok.getCorreoDestino());
+    }
 }

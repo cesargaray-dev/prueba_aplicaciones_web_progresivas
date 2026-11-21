@@ -16,7 +16,9 @@ class TelefonoUtilTest {
         assertTrue(TelefonoUtil.esTelefonoMexicanoValido("5512345678"));
         assertTrue(TelefonoUtil.esTelefonoMexicanoValido(" 8119876543 "));
         assertTrue(TelefonoUtil.esTelefonoMexicanoValido("3323456789"));
+        assertTrue(TelefonoUtil.esTelefonoMexicanoValido("1111111111"));
         assertNull(TelefonoUtil.diagnosticarTelefonoInvalido("5512345678"));
+        assertNull(TelefonoUtil.diagnosticarTelefonoInvalido("1111111111"));
     }
 
     @Test
@@ -28,7 +30,6 @@ class TelefonoUtilTest {
         assertFalse(TelefonoUtil.esTelefonoMexicanoValido("55ABCDEFGH"));
         assertFalse(TelefonoUtil.esTelefonoMexicanoValido("0512345678"));
         assertFalse(TelefonoUtil.esTelefonoMexicanoValido("1512345678"));
-        assertFalse(TelefonoUtil.esTelefonoMexicanoValido("1111111111"));
         assertFalse(TelefonoUtil.esTelefonoMexicanoValido("0000000000"));
         assertFalse(TelefonoUtil.esTelefonoMexicanoValido("5555555555"));
         assertFalse(TelefonoUtil.esTelefonoMexicanoValido("1234567890"));
@@ -81,8 +82,9 @@ class TelefonoUtilTest {
         TelefonoMexicanoValidator requiredValidator = new TelefonoMexicanoValidator();
         requiredValidator.initialize(crearAnotacion(false));
         assertTrue(requiredValidator.isValid("5512345678", null));
+        assertTrue(requiredValidator.isValid("1111111111", null));
         assertFalse(requiredValidator.isValid(null, null));
-        assertFalse(requiredValidator.isValid("1111111111", null));
+        assertFalse(requiredValidator.isValid("0000000000", null));
 
         TelefonoMexicanoValidator optionalValidator = new TelefonoMexicanoValidator();
         optionalValidator.initialize(crearAnotacion(true));

@@ -28,9 +28,12 @@ class ValidationUtils {
   static final RegExp _usuarioPattern = RegExp(r'^[A-Za-z0-9_.\-]{4,50}$');
   static final RegExp _fechaIsoPattern = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
 
+  static const String telefonoPruebaGestoPago = '1111111111';
+
   static bool esTelefonoMexicanoValido(String? raw) {
     if (raw == null) return false;
     final tel = raw.trim();
+    if (tel == telefonoPruebaGestoPago) return true;
     if (!_soloDiezDigitos.hasMatch(tel)) return false;
     if (!_telefonoMexicoPattern.hasMatch(tel)) return false;
     if (_todosDigitosIguales.hasMatch(tel)) return false;
@@ -42,6 +45,7 @@ class ValidationUtils {
       return 'El número de teléfono es obligatorio y debe contener 10 dígitos.';
     }
     final tel = raw.trim();
+    if (tel == telefonoPruebaGestoPago) return null;
     if (!_soloDiezDigitos.hasMatch(tel)) {
       return 'El número de teléfono debe contener exactamente 10 dígitos numéricos.';
     }
@@ -52,6 +56,25 @@ class ValidationUtils {
       return 'Ingresa un número telefónico real de 10 dígitos (sin dígitos repetidos ni secuencias).';
     }
     return null;
+  }
+
+  /// Normaliza texto de búsqueda removiendo acentos, espacios y símbolos como & o -
+  /// (ej. "AT&T", "AT-T" y "ATT" coinciden como "att").
+  static String normalizarBusquedaCatalogo(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    const map = {
+      'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n',
+      'Á': 'a', 'É': 'e', 'Í': 'i', 'Ó': 'o', 'Ú': 'u', 'Ü': 'u', 'Ñ': 'n',
+    };
+    final sb = StringBuffer();
+    for (final rune in raw.toLowerCase().runes) {
+      final ch = String.fromCharCode(rune);
+      final mapped = map[ch] ?? ch;
+      if (RegExp(r'[a-z0-9]').hasMatch(mapped)) {
+        sb.write(mapped);
+      }
+    }
+    return sb.toString();
   }
 
   static bool esRecargaTelefonica({

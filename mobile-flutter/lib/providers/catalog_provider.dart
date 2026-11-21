@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import '../models/product_item.dart';
 import '../services/api_client.dart';
 import '../services/catalog_service.dart';
+import '../utils/validation_utils.dart';
 
 class CatalogProvider with ChangeNotifier {
   final CatalogService _catalogService;
@@ -56,16 +57,22 @@ class CatalogProvider with ChangeNotifier {
 
       if (_searchQuery.trim().isNotEmpty) {
         final q = _searchQuery.toLowerCase().trim();
+        final qNorm = ValidationUtils.normalizarBusquedaCatalogo(_searchQuery);
         final matchService = item.service.toLowerCase().contains(q);
         final matchProduct = item.name.toLowerCase().contains(q);
         final matchCat = item.categoryName.toLowerCase().contains(q);
         final matchServiceId = item.serviceId.toLowerCase().contains(q);
         final matchProductId = item.id.toLowerCase().contains(q);
+        final matchNorm = qNorm.isNotEmpty &&
+            (ValidationUtils.normalizarBusquedaCatalogo(item.service).contains(qNorm) ||
+                ValidationUtils.normalizarBusquedaCatalogo(item.name).contains(qNorm) ||
+                ValidationUtils.normalizarBusquedaCatalogo(item.categoryName).contains(qNorm));
         if (!matchService &&
             !matchProduct &&
             !matchCat &&
             !matchServiceId &&
-            !matchProductId) {
+            !matchProductId &&
+            !matchNorm) {
           return false;
         }
       }

@@ -18,6 +18,7 @@ class AuthProvider with ChangeNotifier {
   String? _sessionNotice;
   Timer? _sessionTimer;
   Timer? _sessionMonitorTimer;
+  DateTime _lastKeepAliveAt = DateTime.now();
   final ValueNotifier<int> sessionSecondsNotifier = ValueNotifier<int>(300);
 
   // Biometric state
@@ -131,6 +132,7 @@ class AuthProvider with ChangeNotifier {
 
   void _startInactivityTimer() {
     _sessionTimer?.cancel();
+    _lastKeepAliveAt = DateTime.now();
     sessionSecondsNotifier.value = 300;
     _sessionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       final current = sessionSecondsNotifier.value;
@@ -164,11 +166,21 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  void resetInactivityTimer() {
-    if (_session != null && sessionSecondsNotifier.value < 299) {
+  void recordUserActivity() {
+    if (_session == null) return;
+    if (sessionSecondsNotifier.value != 300) {
       sessionSecondsNotifier.value = 300;
     }
+    final now = DateTime.now();
+    if (now.difference(_lastKeepAliveAt).inSeconds >= 60) {
+      _lastKeepAliveAt = now;
+      _authService.keepAlive().catchError((_) {
+        // 401 es manejado por ApiClient; ignoramos errores de red transitorios
+      });
+    }
   }
+
+  void resetInactivityTimer() => recordUserActivity();
 
   void clearError() {
     _errorMessage = null;
@@ -433,6 +445,38 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<int?> enviarCodigoRegistro({
+    required String correo,
+    String? nombre,
+    String? usuario,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final resp = await _authService.enviarCodigoRegistro(
+        correo: correo,
+        nombre: nombre,
+        usuario: usuario,
+      );
+      _isLoading = false;
+      notifyListeners();
+      final exp = resp['expiraEnSegundos'];
+      return exp is num ? exp.toInt() : 300;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _errorMessage = 'No fue posible enviar el código de verificación al correo.';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<bool> register({
     required String nombre,
     String? segundoNombre,
@@ -444,6 +488,7 @@ class AuthProvider with ChangeNotifier {
     required String telefonoMovil,
     required String usuario,
     required String contrasena,
+    String? codigoVerificacion,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -461,6 +506,7 @@ class AuthProvider with ChangeNotifier {
         telefonoMovil: telefonoMovil,
         usuario: usuario,
         contrasena: contrasena,
+        codigoVerificacion: codigoVerificacion,
       );
       _session = session;
       await _hydrateProfileNonFatal(session);

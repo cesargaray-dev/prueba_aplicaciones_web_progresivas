@@ -456,6 +456,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                         ),
                         onPressed: () {
                           final tel = session.telefonoMovil!.trim();
+                          Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
                           setState(() {
                             _phoneController.text = tel;
                             _phoneValidateAttempted = false;
@@ -475,6 +476,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                       LengthLimitingTextInputFormatter(10),
                     ],
                     onChanged: (val) {
+                      Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
                       setState(() {});
                       payment.setTelefono(val);
                     },
@@ -498,7 +500,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     inputFormatters: [
                       LengthLimitingTextInputFormatter(100),
                     ],
-                    onChanged: (val) => payment.setReferencia(val),
+                    onChanged: (val) {
+                      Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
+                      payment.setReferencia(val);
+                    },
                     decoration: InputDecoration(
                       labelText: widget.product.isFront1VoucherOrTag
                           ? 'Referencia / No. de Cuenta o TAG'
@@ -518,6 +523,7 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     controller: _montoController,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                     onChanged: (val) {
+                      Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
                       final p = double.tryParse(val) ?? 0.0;
                       payment.setMonto(p);
                     },
@@ -879,7 +885,10 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(6),
                   ],
-                  onChanged: (val) => payment.setEnteredOtp(val),
+                  onChanged: (val) {
+                    Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
+                    payment.setEnteredOtp(val);
+                  },
                   decoration: InputDecoration(
                     labelText: 'Ingresa el código 2FA (6 dígitos)',
                     hintText: '123456',

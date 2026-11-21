@@ -63,6 +63,7 @@ public class SecurityConfig {
                                 HttpMethod.POST,
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/register",
+                                "/api/v1/auth/register/enviar-codigo",
                                 "/api/v1/auth/login/biometrico"
                         ).permitAll()
                         .requestMatchers("/api/v1/gestopago/**").permitAll()
@@ -70,6 +71,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/v1/auth/me",
                                 "/api/v1/auth/me/**",
+                                "/api/v1/auth/keep-alive",
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/biometria/**"
                         ).authenticated()

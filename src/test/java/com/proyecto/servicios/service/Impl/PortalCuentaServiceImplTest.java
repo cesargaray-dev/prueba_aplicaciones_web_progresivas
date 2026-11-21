@@ -4,6 +4,7 @@ import com.proyecto.servicios.entity.clientes.Cliente;
 import com.proyecto.servicios.entity.clientes.Cuenta;
 import com.proyecto.servicios.entity.clientes.LoginCliente;
 import com.proyecto.servicios.entity.clientes.Saldo;
+import com.proyecto.servicios.exception.Autenticacion2FAException;
 import com.proyecto.servicios.exception.AutenticacionException;
 import com.proyecto.servicios.exception.CorreoDuplicadoException;
 import com.proyecto.servicios.exception.CuentaNoEncontradaException;
@@ -13,6 +14,8 @@ import com.proyecto.servicios.exception.ValidacionException;
 import com.proyecto.servicios.model.auth.AbonoSaldoRequestDTO;
 import com.proyecto.servicios.model.auth.ActualizarContactoRequestDTO;
 import com.proyecto.servicios.model.auth.CambiarContrasenaRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.LoginRequestDTO;
 import com.proyecto.servicios.model.auth.LoginResponseDTO;
 import com.proyecto.servicios.model.auth.RegisterRequestDTO;
@@ -144,7 +147,7 @@ class PortalCuentaServiceImplTest {
     @Test
     void registrarClientePortal_rechazaValidacionesYDuplicados() {
         RegisterRequestDTO telInvalido = crearRegistroValido();
-        telInvalido.setTelefonoMovil("1111111111");
+        telInvalido.setTelefonoMovil("0000000000");
         assertThrows(ValidacionException.class, () -> service.registrarClientePortal(telInvalido));
 
         RegisterRequestDTO correoEjemplo = crearRegistroValido();
@@ -319,6 +322,79 @@ class PortalCuentaServiceImplTest {
     }
 
     @Test
+    void flujoRegistro2FA_enviaCodigoValidaYCreaCuenta() {
+        // Rechaza entradas invalidas y duplicados al solicitar codigo
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(null));
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("mal-correo", "Cesar", "cesar1")));
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("demo@ejemplo.com", "Cesar", "cesar1")));
+
+        when(clienteRepository.existsByCorreo("nuevo.otp@gmail.com")).thenReturn(true);
+        assertThrows(CorreoDuplicadoException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp")));
+
+        when(clienteRepository.existsByCorreo("nuevo.otp@gmail.com")).thenReturn(false);
+        when(loginClienteRepository.findByUsuario("cesar_otp")).thenReturn(Optional.of(new LoginCliente()));
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp")));
+
+        // Falla controlada cuando Brevo no logra entregar
+        when(loginClienteRepository.findByUsuario("cesar_otp")).thenReturn(Optional.empty());
+        when(comprobanteEmailService.enviarCodigoRegistro2FA(eq("nuevo.otp@gmail.com"), eq("Cesar"), anyString(), eq(300L)))
+                .thenReturn(EmailEnvioResultadoDTO.builder().enviado(false).mensaje("Brevo error").build());
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp")));
+
+        // Envio exitoso captura el codigo real enviado a Brevo
+        final String[] codigoEnviado = new String[1];
+        when(comprobanteEmailService.enviarCodigoRegistro2FA(eq("nuevo.otp@gmail.com"), eq("Cesar"), anyString(), eq(300L)))
+                .thenAnswer(inv -> {
+                    codigoEnviado[0] = inv.getArgument(2);
+                    return EmailEnvioResultadoDTO.builder()
+                            .enviado(true).correoDestino("nuevo.otp@gmail.com").mensaje("Enviado").build();
+                });
+
+        EnviarCodigoRegistroResponseDTO envResp = service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp"));
+        assertTrue(envResp.isCorreoEnviado());
+        assertEquals("nuevo.otp@gmail.com", envResp.getCorreoDestino());
+        assertEquals(300L, envResp.getExpiraEnSegundos());
+        assertNotNull(codigoEnviado[0]);
+        assertEquals(6, codigoEnviado[0].length());
+
+        // Registro sin codigo o con codigo erroneo falla con Autenticacion2FAException
+        RegisterRequestDTO req = crearRegistroValido();
+        req.setCorreo("nuevo.otp@gmail.com");
+        req.setUsuario("cesar_otp");
+        req.setTelefonoMovil("1111111111");
+        assertThrows(Autenticacion2FAException.class, () -> service.registrarClientePortalConVerificacion(req));
+
+        req.setCodigoVerificacion("000000".equals(codigoEnviado[0]) ? "999999" : "000000");
+        assertThrows(Autenticacion2FAException.class, () -> service.registrarClientePortalConVerificacion(req));
+
+        // Registro con codigo correcto crea la cuenta y consume el codigo (un solo uso)
+        req.setCodigoVerificacion(codigoEnviado[0]);
+        when(clienteRepository.existsByCurp(any())).thenReturn(false);
+        when(clienteRepository.existsByRfc(any())).thenReturn(false);
+        when(cuentaRepository.existsByNumeroCuenta(anyString())).thenReturn(false);
+        when(clienteRepository.save(any(Cliente.class))).thenAnswer(inv -> {
+            Cliente c = inv.getArgument(0);
+            c.setId(201L);
+            return c;
+        });
+        when(authService.login(any())).thenReturn(
+                LoginResponseDTO.builder().clienteId(201L).usuario("cesar_otp").token("jwt-otp").build());
+
+        LoginResponseDTO okResp = service.registrarClientePortalConVerificacion(req);
+        assertNotNull(okResp);
+        assertEquals("1111111111", okResp.getTelefonoMovil());
+
+        // Reutilizar el mismo codigo ya consumido falla
+        assertThrows(Autenticacion2FAException.class, () -> service.registrarClientePortalConVerificacion(req));
+    }
+
+    @Test
     void validarEntradasYFallosRegistroYContactoYCambioContrasena() {
         assertThrows(ValidacionException.class, () -> service.registrarClientePortal(null));
         assertThrows(ValidacionException.class, () -> service.actualizarContacto("Bearer t", null, null));
@@ -367,7 +443,7 @@ class PortalCuentaServiceImplTest {
         when(authService.obtenerPerfilAutenticado("Bearer t", null))
                 .thenReturn(UserProfileDTO.builder().clienteId(10L).numeroCuenta("5225").build());
         assertThrows(ValidacionException.class, () -> service.actualizarContacto(
-                "Bearer t", null, new ActualizarContactoRequestDTO("ok@gmail.com", "1111111111")));
+                "Bearer t", null, new ActualizarContactoRequestDTO("ok@gmail.com", "0000000000")));
         assertThrows(ValidacionException.class, () -> service.actualizarContacto(
                 "Bearer t", null, new ActualizarContactoRequestDTO("mal-correo", "5512345678")));
         assertThrows(ValidacionException.class, () -> service.actualizarContacto(

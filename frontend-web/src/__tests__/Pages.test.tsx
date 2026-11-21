@@ -71,15 +71,26 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(loginMock).toHaveBeenCalledTimes(2);
     });
 
-    it('validates all registration fields and submits registration', async () => {
+    it('validates all registration fields, sends 2FA code, and completes registration', async () => {
       const user = userEvent.setup();
+      const enviarCodigoMock = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('El correo ya está registrado'))
+        .mockResolvedValue({
+          codigo: 0,
+          mensaje: 'Código enviado',
+          correoEnviado: true,
+          correoDestino: 'cesar@gmail.com',
+          expiraEnSegundos: 300,
+        });
       const registerMock = vi
         .fn()
-        .mockRejectedValueOnce(new Error('Usuario duplicado'))
+        .mockRejectedValueOnce(new Error('Código 2FA inválido'))
         .mockResolvedValueOnce(undefined);
       const ctx = createMockAuthContext({
         user: null,
         isAuthenticated: false,
+        enviarCodigoRegistro: enviarCodigoMock,
         register: registerMock,
       });
 
@@ -92,69 +103,102 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.click(screen.getByRole('button', { name: /Crear Cuenta/i }));
       await user.click(screen.getByRole('button', { name: /Iniciar Sesión/i }));
       await user.click(screen.getByRole('button', { name: /Crear Cuenta/i }));
-      const submitBtn = () =>
-        screen.getByRole('button', { name: /Crear Cuenta y Acceder/i });
+      const sendCodeBtn = () =>
+        screen.getByRole('button', { name: /Enviar Código 2FA al Correo/i });
 
       // 1. Invalid nombre
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/El nombre debe tener entre 2 y 50/i)).toBeInTheDocument();
       await user.type(screen.getByLabelText(/^Nombre \*/i), 'Cesar');
 
       // 2. Invalid apellidoPaterno
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/El apellido paterno debe tener/i)).toBeInTheDocument();
       await user.type(screen.getByLabelText(/Apellido\(s\) \/ Paterno/i), 'Garay');
 
       // 3. Invalid & placeholder email
       const emailInput = screen.getByLabelText(/Correo electrónico real/i);
       await user.type(emailInput, 'correo-invalido');
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/formato válido/i)).toBeInTheDocument();
       await user.clear(emailInput);
       await user.type(emailInput, 'user@ejemplo.com');
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/Ingresa un correo electrónico real/i)).toBeInTheDocument();
       await user.clear(emailInput);
       await user.type(emailInput, 'cesar@gmail.com');
 
-      // 7. Invalid phone
+      // 4. Invalid phone (0000000000 rejected; 1111111111 accepted as GestoPago test number)
       const telInput = screen.getByLabelText(/Teléfono móvil México/i);
-      await user.type(telInput, '1111111111');
-      await user.click(submitBtn());
+      await user.type(telInput, '0000000000');
+      await user.click(sendCodeBtn());
       await user.clear(telInput);
-      await user.type(telInput, '5512345678');
+      await user.type(telInput, '1111111111');
 
-      // 8. Invalid usuario
+      // 5. Invalid usuario
       const usrInput = screen.getByLabelText(/^Usuario \*/i);
       await user.type(usrInput, 'ab');
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/El usuario debe tener entre 4 y 50/i)).toBeInTheDocument();
       await user.clear(usrInput);
       await user.type(usrInput, 'cesar_nuevo');
 
-      // 9. Weak password & mismatch + toggle register password visibility
+      // 6. Weak password & mismatch + toggle register password visibility
       await user.click(screen.getByLabelText('Mostrar contraseña'));
       const passInput = screen.getByLabelText(/^Contraseña \*/i);
       const confInput = screen.getByLabelText(/Confirmar contraseña/i);
       await user.type(passInput, 'debil');
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/La contraseña debe tener al menos 8/i)).toBeInTheDocument();
 
       await user.clear(passInput);
       await user.type(passInput, 'Venta2026#');
       await user.type(confInput, 'Otra2026#');
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
       expect(screen.getByText(/Las contraseñas no coinciden/i)).toBeInTheDocument();
 
       await user.clear(confInput);
       await user.type(confInput, 'Venta2026#');
 
-      // First submit rejects, second succeeds
-      await user.click(submitBtn());
-      await waitFor(() => expect(screen.getByText('Usuario duplicado')).toBeInTheDocument());
+      // Step 1: First OTP send rejects, second transitions to Step 2
+      await user.click(sendCodeBtn());
+      await waitFor(() =>
+        expect(screen.getByText('El correo ya está registrado')).toBeInTheDocument()
+      );
 
-      await user.click(submitBtn());
+      await user.click(sendCodeBtn());
+      await waitFor(() =>
+        expect(screen.getByText(/Verifica tu correo \(2FA\)/i)).toBeInTheDocument()
+      );
+
+      // Step 2: Resend code, edit back & return, then verify OTP
+      await user.click(screen.getByRole('button', { name: /Reenviar código/i }));
+      await waitFor(() =>
+        expect(screen.getByText(/Se envió un nuevo código/i)).toBeInTheDocument()
+      );
+
+      await user.click(screen.getByRole('button', { name: /Editar datos/i }));
+      expect(sendCodeBtn()).toBeInTheDocument();
+      await user.click(sendCodeBtn());
+      await waitFor(() =>
+        expect(screen.getByLabelText(/Código de verificación/i)).toBeInTheDocument()
+      );
+
+      const otpInput = screen.getByLabelText(/Código de verificación/i);
+      await user.type(otpInput, '123456');
+
+      const verifyBtn = screen.getByRole('button', { name: /Verificar y Crear Cuenta/i });
+      await user.click(verifyBtn);
+      await waitFor(() => expect(screen.getByText('Código 2FA inválido')).toBeInTheDocument());
+
+      await user.click(verifyBtn);
       expect(registerMock).toHaveBeenCalledTimes(2);
+      expect(registerMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          telefonoMovil: '1111111111',
+          codigoVerificacion: '123456',
+        })
+      );
     }, 20000);
   });
 
@@ -212,6 +256,16 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         frontType: '1',
         categoryId: '10',
       },
+      {
+        ...mockTelcelProduct,
+        id: '374',
+        name: 'Recarga $100',
+        service: 'AT-T',
+        serviceId: '115',
+        price: '100',
+        frontType: '1',
+        categoryId: '3',
+      },
     ];
 
     it('loads products, filters by frontType, category, popular brand, search, and opens ReferenceModal', async () => {
@@ -250,7 +304,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         await user.click(screen.getByRole('button', { name: catLabel }));
       }
 
-      // Popular brand chip
+      // Popular brand chip (AT&T must match GestoPago service "AT-T")
+      await user.click(screen.getByRole('button', { name: 'AT&T' }));
+      expect(screen.getByText('Recarga $100')).toBeInTheDocument();
+
       await user.click(screen.getByRole('button', { name: 'CFE' }));
       expect(screen.getByText('Pago Recibo CFE')).toBeInTheDocument();
 

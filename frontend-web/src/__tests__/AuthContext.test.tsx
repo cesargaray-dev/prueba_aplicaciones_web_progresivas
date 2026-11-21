@@ -27,6 +27,18 @@ const ConsumerHarness: React.FC = () => {
       <button
         type="button"
         onClick={() =>
+          auth.enviarCodigoRegistro({
+            correo: 'cesar@gmail.com',
+            nombre: 'Cesar',
+            usuario: 'cesar123',
+          })
+        }
+      >
+        sendRegCode
+      </button>
+      <button
+        type="button"
+        onClick={() =>
           auth.register({
             nombre: 'Cesar',
             apellidoPaterno: 'Garay',
@@ -36,6 +48,7 @@ const ConsumerHarness: React.FC = () => {
             telefonoMovil: '5512345678',
             usuario: 'cesar123',
             contrasena: 'Password@123',
+            codigoVerificacion: '123456',
           })
         }
       >
@@ -138,6 +151,13 @@ describe('AuthContext & Session Hardening (F11 / F13)', () => {
   it('handles login, register, profile updates, deposit, password change, and logout', async () => {
     const user = userEvent.setup();
     vi.spyOn(authApi, 'login').mockResolvedValue(mockLoginResponse);
+    vi.spyOn(authApi, 'enviarCodigoRegistro').mockResolvedValue({
+      codigo: 0,
+      mensaje: 'Código enviado',
+      correoEnviado: true,
+      correoDestino: 'cesar@gmail.com',
+      expiraEnSegundos: 300,
+    });
     vi.spyOn(authApi, 'register').mockResolvedValue(mockLoginResponse);
     vi.spyOn(authApi, 'getMe').mockResolvedValue({ ...mockUserProfile, saldo: 550 });
     vi.spyOn(authApi, 'updateContacto').mockResolvedValue({ ...mockUserProfile, saldo: 550 });
@@ -164,6 +184,7 @@ describe('AuthContext & Session Hardening (F11 / F13)', () => {
     await user.click(screen.getByText('logout'));
     await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('false'));
 
+    await user.click(screen.getByText('sendRegCode'));
     await user.click(screen.getByText('register'));
     await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('true'));
   });
@@ -275,5 +296,42 @@ describe('AuthContext & Session Hardening (F11 / F13)', () => {
     await expect(authApi.checkSessionStatus()).rejects.toThrow('otro dispositivo');
     await waitFor(() => expect(screen.getByTestId('authed').textContent).toBe('false'));
     expect(screen.getByTestId('expired').textContent).toContain('otro dispositivo');
+  });
+
+  it('resets inactivity timer on modal scroll/pointer activity and sends throttled keepAlive', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    vi.spyOn(authApi, 'login').mockResolvedValue(mockLoginResponse);
+    vi.spyOn(authApi, 'getMe').mockResolvedValue(mockUserProfile);
+    vi.spyOn(authApi, 'checkSessionStatus').mockResolvedValue({ activa: true });
+    const keepAliveSpy = vi.spyOn(authApi, 'keepAlive').mockResolvedValue({ activa: true });
+
+    setAuthToken('jwt-active-modal');
+    render(
+      <AuthProvider>
+        <ConsumerHarness />
+      </AuthProvider>
+    );
+
+    await act(async () => {
+      screen.getByText('login').click();
+    });
+    expect(screen.getByTestId('authed').textContent).toBe('true');
+
+    // Advance 90s (> 60s keep-alive throttle window)
+    await act(async () => {
+      vi.advanceTimersByTime(90_000);
+    });
+    expect(Number(screen.getByTestId('seconds').textContent)).toBeLessThanOrEqual(210);
+
+    // Simulate user interacting inside a modal (non-bubbling scroll captured on window)
+    const modalContainer = document.createElement('div');
+    document.body.appendChild(modalContainer);
+    await act(async () => {
+      modalContainer.dispatchEvent(new Event('scroll', { bubbles: false }));
+    });
+    document.body.removeChild(modalContainer);
+
+    expect(Number(screen.getByTestId('seconds').textContent)).toBe(300);
+    expect(keepAliveSpy).toHaveBeenCalledTimes(1);
   });
 });

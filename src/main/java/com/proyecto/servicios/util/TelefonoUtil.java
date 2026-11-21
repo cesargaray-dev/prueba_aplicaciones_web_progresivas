@@ -12,6 +12,7 @@ public final class TelefonoUtil {
     private static final Pattern SOLO_DIEZ_DIGITOS = Pattern.compile("^\\d{10}$");
     private static final Pattern TELEFONO_MEXICO_PATTERN = Pattern.compile("^[2-9]\\d{9}$");
     private static final Pattern TODOS_DIGITOS_IGUALES = Pattern.compile("^(\\d)\\1{9}$");
+    public static final String TELEFONO_PRUEBA_GESTOPAGO = "1111111111";
     private static final Pattern EMAIL_PATTERN = Pattern.compile(
             "^[A-Za-z0-9+_-][A-Za-z0-9+_.-]{0,63}@[A-Za-z0-9-][A-Za-z0-9.-]{0,188}\\.[A-Za-z]{2,12}$"
     );
@@ -57,6 +58,9 @@ public final class TelefonoUtil {
             return false;
         }
         String tel = raw.trim();
+        if (TELEFONO_PRUEBA_GESTOPAGO.equals(tel)) {
+            return true;
+        }
         if (!SOLO_DIEZ_DIGITOS.matcher(tel).matches()) {
             return false;
         }
@@ -81,6 +85,9 @@ public final class TelefonoUtil {
             return "El número de teléfono es obligatorio y debe contener 10 dígitos.";
         }
         String tel = raw.trim();
+        if (TELEFONO_PRUEBA_GESTOPAGO.equals(tel)) {
+            return null;
+        }
         if (!SOLO_DIEZ_DIGITOS.matcher(tel).matches()) {
             return "El número de teléfono debe contener exactamente 10 dígitos numéricos";
         }

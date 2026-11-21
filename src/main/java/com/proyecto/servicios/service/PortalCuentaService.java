@@ -3,6 +3,8 @@ package com.proyecto.servicios.service;
 import com.proyecto.servicios.model.auth.AbonoSaldoRequestDTO;
 import com.proyecto.servicios.model.auth.ActualizarContactoRequestDTO;
 import com.proyecto.servicios.model.auth.CambiarContrasenaRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.LoginResponseDTO;
 import com.proyecto.servicios.model.auth.RegisterRequestDTO;
 import com.proyecto.servicios.model.auth.UserProfileDTO;
@@ -12,6 +14,20 @@ import com.proyecto.servicios.model.auth.UserProfileDTO;
  * auto-registro de clientes, actualización de contacto, fondeo de cuenta y enriquecimiento de sesión.
  */
 public interface PortalCuentaService {
+
+    /**
+     * Envía un código temporal 2FA de 6 dígitos al correo electrónico para validar la creación de cuenta.
+     */
+    default EnviarCodigoRegistroResponseDTO enviarCodigoVerificacionRegistro(EnviarCodigoRegistroRequestDTO request) {
+        throw new UnsupportedOperationException("Envío de código 2FA de registro no disponible en esta implementación");
+    }
+
+    /**
+     * Valida el código 2FA enviado al correo y registra al nuevo cliente en el portal comercial.
+     */
+    default LoginResponseDTO registrarClientePortalConVerificacion(RegisterRequestDTO request) {
+        return registrarClientePortal(request);
+    }
 
     /**
      * Registra un nuevo cliente con su domicilio, cuenta digital de 16 dígitos, saldo inicial

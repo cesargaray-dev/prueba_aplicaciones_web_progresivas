@@ -69,4 +69,16 @@ public interface ComprobanteEmailService {
                 .mensaje("Envío de correo de bienvenida no habilitado")
                 .build();
     }
+
+    /**
+     * Envía un código temporal 2FA de 6 dígitos al correo proporcionado durante la creación de cuenta.
+     */
+    default EmailEnvioResultadoDTO enviarCodigoRegistro2FA(
+            String correoDestino, String nombre, String codigo2FA, long vigenciaSegundos) {
+        return EmailEnvioResultadoDTO.builder()
+                .enviado(false)
+                .correoDestino(correoDestino)
+                .mensaje("Envío de código 2FA de registro por correo no habilitado")
+                .build();
+    }
 }

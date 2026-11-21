@@ -3,6 +3,8 @@ import type {
   AbonoSaldoRequest,
   ActualizarContactoRequest,
   CambiarContrasenaRequest,
+  EnviarCodigoRegistroRequest,
+  EnviarCodigoRegistroResponse,
   LoginRequest,
   LoginResponse,
   RegisterRequest,
@@ -14,6 +16,7 @@ import { AuthContext } from './authContextInstance';
 
 const INACTIVITY_TIMEOUT_SECONDS = 300; // 5 minutes
 const SESSION_POLL_INTERVAL_MS = 10_000; // 10 seconds (does not extend inactivity TTL)
+const KEEP_ALIVE_THROTTLE_MS = 60_000; // Refresca TTL en backend máx. 1 vez por minuto si hay actividad real
 
 const profileToLoginResponse = (profile: UserProfile, token: string): LoginResponse => ({
   token,
@@ -42,6 +45,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
 
   const lastActivityRef = useRef<number>(0);
+  const lastKeepAliveRef = useRef<number>(0);
   const userRef = useRef<LoginResponse | null>(null);
 
   useEffect(() => {
@@ -180,6 +184,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const enviarCodigoRegistro = async (
+    payload: EnviarCodigoRegistroRequest
+  ): Promise<EnviarCodigoRegistroResponse> => {
+    setIsLoading(true);
+    setSessionExpiredMessage(null);
+    try {
+      return await authApi.enviarCodigoRegistro(payload);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const register = async (payload: RegisterRequest) => {
     setIsLoading(true);
     setSessionExpiredMessage(null);
@@ -243,21 +259,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Inactivity tracking: bound strictly to session lifecycle so balance/profile updates do NOT reset timer
   useEffect(() => {
     if (!isAuthenticated) return;
-    lastActivityRef.current = Date.now();
+    const nowInit = Date.now();
+    lastActivityRef.current = nowInit;
+    lastKeepAliveRef.current = nowInit;
 
     const handleUserActivity = () => {
       const now = Date.now();
       if (now - lastActivityRef.current > 1000) {
         lastActivityRef.current = now;
         setSecondsRemaining(INACTIVITY_TIMEOUT_SECONDS);
+        if (now - lastKeepAliveRef.current >= KEEP_ALIVE_THROTTLE_MS && getAuthToken()) {
+          lastKeepAliveRef.current = now;
+          void authApi.keepAlive().catch(() => {
+            // 401 es manejado globalmente por apiClient; errores transitorios se ignoran
+          });
+        }
       }
     };
 
-    window.addEventListener('mousemove', handleUserActivity);
+    const scrollOptions: AddEventListenerOptions = { capture: true, passive: true };
+    window.addEventListener('mousemove', handleUserActivity, { passive: true });
+    window.addEventListener('mousedown', handleUserActivity, { passive: true });
+    window.addEventListener('pointerdown', handleUserActivity, { passive: true });
     window.addEventListener('keydown', handleUserActivity);
+    window.addEventListener('input', handleUserActivity, { passive: true });
     window.addEventListener('click', handleUserActivity);
-    window.addEventListener('scroll', handleUserActivity);
-    window.addEventListener('touchstart', handleUserActivity);
+    window.addEventListener('scroll', handleUserActivity, scrollOptions);
+    window.addEventListener('touchstart', handleUserActivity, { passive: true });
+    window.addEventListener('focusin', handleUserActivity, { passive: true });
 
     const interval = setInterval(() => {
       const elapsedSeconds = Math.floor((Date.now() - lastActivityRef.current) / 1000);
@@ -275,10 +304,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       window.removeEventListener('mousemove', handleUserActivity);
+      window.removeEventListener('mousedown', handleUserActivity);
+      window.removeEventListener('pointerdown', handleUserActivity);
       window.removeEventListener('keydown', handleUserActivity);
+      window.removeEventListener('input', handleUserActivity);
       window.removeEventListener('click', handleUserActivity);
-      window.removeEventListener('scroll', handleUserActivity);
+      window.removeEventListener('scroll', handleUserActivity, scrollOptions);
       window.removeEventListener('touchstart', handleUserActivity);
+      window.removeEventListener('focusin', handleUserActivity);
       clearInterval(interval);
     };
   }, [isAuthenticated]);
@@ -316,6 +349,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sessionNotice,
         clearSessionNotice,
         login,
+        enviarCodigoRegistro,
         register,
         logout,
         updateBalance,

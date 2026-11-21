@@ -44,6 +44,9 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
       s.includes('TELCEL') ||
       s.includes('MOVISTAR') ||
       s.includes('AT&T') ||
+      s.includes('AT-T') ||
+      s.includes('ATT') ||
+      s.includes('UNEFON') ||
       s.includes('BAIT') ||
       s.includes('RECARGA')
     ) {

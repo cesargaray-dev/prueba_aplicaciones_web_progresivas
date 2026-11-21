@@ -4,6 +4,8 @@ import type {
   AbonoSaldoRequest,
   ActualizarContactoRequest,
   CambiarContrasenaRequest,
+  EnviarCodigoRegistroRequest,
+  EnviarCodigoRegistroResponse,
   LoginRequest,
   LoginResponse,
   RegisterRequest,
@@ -21,6 +23,14 @@ export const authApi = {
     return response;
   },
 
+  enviarCodigoRegistro: async (
+    payload: EnviarCodigoRegistroRequest
+  ): Promise<EnviarCodigoRegistroResponse> => {
+    return apiClient.post<EnviarCodigoRegistroResponse>('/auth/register/enviar-codigo', payload, {
+      skipUnauthorizedHandler: true,
+    });
+  },
+
   register: async (payload: RegisterRequest): Promise<LoginResponse> => {
     const response = await apiClient.post<LoginResponse>('/auth/register', payload, {
       skipUnauthorizedHandler: true,
@@ -29,6 +39,10 @@ export const authApi = {
       setAuthToken(response.token);
     }
     return response;
+  },
+
+  keepAlive: async (): Promise<{ activa: boolean }> => {
+    return apiClient.post<{ activa: boolean }>('/auth/keep-alive', {});
   },
 
   logout: async (): Promise<void> => {

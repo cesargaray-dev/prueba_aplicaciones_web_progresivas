@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -33,8 +34,14 @@ class _LoginScreenState extends State<LoginScreen> {
   final _regUsuarioController = TextEditingController();
   final _regContrasenaController = TextEditingController();
   final _regConfirmContrasenaController = TextEditingController();
+  final _regOtpController = TextEditingController();
   bool _obscureRegPassword = true;
   bool _obscureRegConfirmPassword = true;
+  int _regStep = 1;
+  Timer? _regOtpTimer;
+  int _regOtpSecondsRemaining = 0;
+  String _regOtpSentTo = '';
+  String? _regOtpFeedback;
 
   final _apiUrlController = TextEditingController(text: ApiClient.defaultBaseUrl);
 
@@ -56,6 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _regOtpTimer?.cancel();
     _usuarioController.dispose();
     _contrasenaController.dispose();
     _nombreController.dispose();
@@ -65,6 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
     _regUsuarioController.dispose();
     _regContrasenaController.dispose();
     _regConfirmContrasenaController.dispose();
+    _regOtpController.dispose();
     _apiUrlController.dispose();
     super.dispose();
   }
@@ -90,8 +99,62 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _startRegOtpCountdown(int seconds) {
+    _regOtpTimer?.cancel();
+    _regOtpSecondsRemaining = seconds > 0 ? seconds : 300;
+    _regOtpTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_regOtpSecondsRemaining > 1) {
+        setState(() => _regOtpSecondsRemaining--);
+      } else {
+        setState(() => _regOtpSecondsRemaining = 0);
+        timer.cancel();
+      }
+    });
+  }
+
+  String _formatCountdown(int secs) {
+    final m = (secs ~/ 60).toString().padLeft(2, '0');
+    final s = (secs % 60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  Future<void> _sendRegistrationCode({bool isResend = false}) async {
+    if (!isResend && !_regFormKey.currentState!.validate()) return;
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    final email = _correoController.text.trim();
+    final expiresIn = await auth.enviarCodigoRegistro(
+      correo: email,
+      nombre: _nombreController.text.trim(),
+      usuario: _regUsuarioController.text.trim(),
+    );
+    if (!mounted) return;
+    if (expiresIn != null) {
+      setState(() {
+        _regStep = 2;
+        _regOtpSentTo = email;
+        _regOtpController.clear();
+        _regOtpFeedback = isResend
+            ? 'Se envió un nuevo código 2FA de 6 dígitos a tu correo.'
+            : null;
+      });
+      _startRegOtpCountdown(expiresIn);
+    } else {
+      _showError(
+        auth.errorMessage ?? 'No fue posible enviar el código de verificación al correo.',
+      );
+    }
+  }
+
   Future<void> _submitRegister() async {
-    if (!_regFormKey.currentState!.validate()) return;
+    final code = _regOtpController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      _showError('Ingresa el código de verificación de 6 dígitos enviado a tu correo.');
+      return;
+    }
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final success = await auth.register(
       nombre: _nombreController.text.trim(),
@@ -100,9 +163,12 @@ class _LoginScreenState extends State<LoginScreen> {
       telefonoMovil: _telefonoController.text.trim(),
       usuario: _regUsuarioController.text.trim(),
       contrasena: _regContrasenaController.text,
+      codigoVerificacion: code,
     );
     if (!success && mounted) {
       _showError(auth.errorMessage ?? 'No fue posible registrar la cuenta');
+    } else if (success) {
+      _regOtpTimer?.cancel();
     }
   }
 
@@ -413,7 +479,14 @@ class _LoginScreenState extends State<LoginScreen> {
                       selected: {_isRegisterMode},
                       onSelectionChanged: (sel) {
                         auth.clearError();
-                        setState(() => _isRegisterMode = sel.first);
+                        _regOtpTimer?.cancel();
+                        setState(() {
+                          _isRegisterMode = sel.first;
+                          _regStep = 1;
+                          _regOtpController.clear();
+                          _regOtpFeedback = null;
+                          _regOtpSecondsRemaining = 0;
+                        });
                       },
                     ),
 
@@ -762,23 +835,247 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Widget _buildRegisterForm(AuthProvider auth) {
     final pwd = _regContrasenaController.text;
+    final accent = AppTheme.brandAccent(context);
+
+    if (_regStep == 2) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Verifica tu correo (2FA)',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary(context),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: accent.withValues(alpha: 0.35)),
+                ),
+                child: Text(
+                  'Paso 2 de 2',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Ingresa el código de 6 dígitos que enviamos a tu correo para crear tu cuenta bancaria.',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: accent.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.mark_email_read_outlined, size: 18, color: accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _regOtpSentTo.isNotEmpty ? _regOtpSentTo : _correoController.text.trim(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.textPrimary(context),
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _regOtpSecondsRemaining > 0
+                            ? AppTheme.cardBg(context)
+                            : Colors.amber.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: _regOtpSecondsRemaining > 0
+                              ? AppTheme.borderCol(context)
+                              : Colors.amber,
+                        ),
+                      ),
+                      child: Text(
+                        _regOtpSecondsRemaining > 0
+                            ? _formatCountdown(_regOtpSecondsRemaining)
+                            : 'Expirado',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          fontFamily: 'monospace',
+                          color: _regOtpSecondsRemaining > 0
+                              ? accent
+                              : Colors.amber.shade700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Revisa tu bandeja de entrada o carpeta de spam.',
+                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary(context)),
+                ),
+              ],
+            ),
+          ),
+          if (_regOtpFeedback != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.accentEmerald.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.accentEmerald.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline_rounded,
+                      size: 16, color: AppTheme.accentEmerald),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _regOtpFeedback!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.accentEmerald,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          TextField(
+            controller: _regOtpController,
+            keyboardType: TextInputType.number,
+            maxLength: 6,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 8,
+              color: AppTheme.textPrimary(context),
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              LengthLimitingTextInputFormatter(6),
+            ],
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              labelText: 'Código 2FA (6 dígitos)',
+              hintText: '000000',
+              counterText: '',
+              prefixIcon: Icon(Icons.pin_rounded),
+            ),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: (auth.isLoading || _regOtpController.text.trim().length < 6)
+                ? null
+                : _submitRegister,
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
+            child: auth.isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  )
+                : const Text('Verificar y Crear Cuenta'),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: auth.isLoading
+                      ? null
+                      : () {
+                          _regOtpTimer?.cancel();
+                          auth.clearError();
+                          setState(() {
+                            _regStep = 1;
+                            _regOtpController.clear();
+                            _regOtpFeedback = null;
+                          });
+                        },
+                  icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                  label: const Text('Editar datos', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: auth.isLoading ? null : () => _sendRegistrationCode(isResend: true),
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Reenviar código', style: TextStyle(fontSize: 12)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
 
     return Form(
       key: _regFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Abre tu cuenta digital',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.textPrimary(context),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Abre tu cuenta digital',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary(context),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: accent.withValues(alpha: 0.35)),
+                ),
+                child: Text(
+                  'Paso 1 de 2',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: accent,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Mismo usuario y contraseña para la aplicación Web y Móvil.',
+            'Te enviaremos un código 2FA a tu correo para validar tu registro.',
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary(context)),
           ),
           const SizedBox(height: 14),
@@ -900,16 +1197,19 @@ class _LoginScreenState extends State<LoginScreen> {
             },
           ),
           const SizedBox(height: 18),
-          ElevatedButton(
-            onPressed: auth.isLoading ? null : _submitRegister,
+          ElevatedButton.icon(
+            onPressed: auth.isLoading ? null : () => _sendRegistrationCode(isResend: false),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
-            child: auth.isLoading
+            icon: auth.isLoading
                 ? const SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 18,
+                    height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Crear Cuenta y Acceder'),
+                : const Icon(Icons.mark_email_unread_outlined, size: 19),
+            label: Text(
+              auth.isLoading ? 'Enviando código 2FA...' : 'Enviar Código 2FA al Correo',
+            ),
           ),
         ],
       ),
@@ -920,10 +1220,14 @@ class _LoginScreenState extends State<LoginScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: ok ? AppTheme.accentEmerald.withValues(alpha: 0.1) : AppTheme.backgroundSlate,
+        color: ok
+            ? AppTheme.accentEmerald.withValues(alpha: 0.14)
+            : AppTheme.elevatedBg(context),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: ok ? AppTheme.accentEmerald.withValues(alpha: 0.4) : AppTheme.borderSlate,
+          color: ok
+              ? AppTheme.accentEmerald.withValues(alpha: 0.45)
+              : AppTheme.borderCol(context),
         ),
       ),
       child: Row(
@@ -932,7 +1236,7 @@ class _LoginScreenState extends State<LoginScreen> {
           Icon(
             ok ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
             size: 13,
-            color: ok ? AppTheme.accentEmerald : AppTheme.textLight,
+            color: ok ? AppTheme.accentEmerald : AppTheme.textSecondary(context),
           ),
           const SizedBox(width: 4),
           Text(
@@ -940,7 +1244,7 @@ class _LoginScreenState extends State<LoginScreen> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: ok ? AppTheme.accentEmerald : AppTheme.textMuted,
+              color: ok ? AppTheme.accentEmerald : AppTheme.textSecondary(context),
             ),
           ),
         ],

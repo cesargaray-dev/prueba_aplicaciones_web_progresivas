@@ -62,7 +62,14 @@ class PortalControllersExtendedTest {
         ResponseEntity<LoginResponseDTO> loginRes = controller.login(new LoginRequestDTO("cesar", "pass"));
         assertEquals("5512345678", loginRes.getBody().getTelefonoMovil());
 
-        when(portalCuentaService.registrarClientePortal(any())).thenReturn(enrichedLogin);
+        when(portalCuentaService.enviarCodigoVerificacionRegistro(any())).thenReturn(
+                com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO.builder()
+                        .codigo(0).correoEnviado(true).correoDestino("cesar@gmail.com").expiraEnSegundos(300L).build());
+        assertTrue(controller.enviarCodigoRegistro(
+                new com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO("cesar@gmail.com", "Cesar", "cesar"))
+                .getBody().isCorreoEnviado());
+
+        when(portalCuentaService.registrarClientePortalConVerificacion(any())).thenReturn(enrichedLogin);
         ResponseEntity<LoginResponseDTO> regRes = controller.register(new RegisterRequestDTO());
         assertEquals(HttpStatus.CREATED, regRes.getStatusCode());
 

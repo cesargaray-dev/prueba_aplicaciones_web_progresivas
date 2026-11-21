@@ -166,6 +166,11 @@ describe('Frontend API Client Suite', () => {
       expect(loginRes.usuario).toBe('cesar123');
       expect(getAuthToken()).toBe('auth-token-12345');
 
+      await authApi.enviarCodigoRegistro({
+        correo: 'cesar@gmail.com',
+        nombre: 'Cesar',
+        usuario: 'cesar123',
+      });
       await authApi.register({
         nombre: 'Cesar',
         apellidoPaterno: 'Garay',
@@ -175,8 +180,10 @@ describe('Frontend API Client Suite', () => {
         telefonoMovil: '5512345678',
         usuario: 'cesar123',
         contrasena: 'Password@123',
+        codigoVerificacion: '123456',
       });
       await authApi.getMe();
+      await authApi.keepAlive();
       await authApi.updateContacto({ correo: 'nuevo@gmail.com', telefonoMovil: '5512345678' });
       await authApi.cambiarContrasena({ contrasenaActual: 'Old12345', contrasenaNueva: 'New12345' });
       await authApi.abonarSaldo({ monto: 100 });

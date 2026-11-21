@@ -129,6 +129,13 @@ export const createMockAuthContext = (
   sessionNotice: null,
   clearSessionNotice: vi.fn(),
   login: vi.fn().mockResolvedValue(undefined),
+  enviarCodigoRegistro: vi.fn().mockResolvedValue({
+    codigo: 0,
+    mensaje: 'Código de verificación 2FA enviado a tu correo electrónico.',
+    correoEnviado: true,
+    correoDestino: 'cesar@gmail.com',
+    expiraEnSegundos: 300,
+  }),
   register: vi.fn().mockResolvedValue(undefined),
   logout: vi.fn().mockResolvedValue(undefined),
   updateBalance: vi.fn(),

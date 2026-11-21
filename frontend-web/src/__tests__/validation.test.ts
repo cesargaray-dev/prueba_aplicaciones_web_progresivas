@@ -12,6 +12,7 @@ import {
   esUsuarioValido,
   getMaxBirthDateIso,
   getProductCategoryName,
+  normalizarBusquedaCatalogo,
 } from '../utils/validation';
 
 describe('Validation & Catalog Classification Suite', () => {
@@ -19,7 +20,7 @@ describe('Validation & Catalog Classification Suite', () => {
     expect(esTelefonoMexicanoValido('')).toBe(false);
     expect(esTelefonoMexicanoValido('5512345678')).toBe(true);
     expect(esTelefonoMexicanoValido('8119876543')).toBe(true);
-    expect(esTelefonoMexicanoValido('1111111111')).toBe(false);
+    expect(esTelefonoMexicanoValido('1111111111')).toBe(true);
     expect(esTelefonoMexicanoValido('2222222222')).toBe(false);
     expect(esTelefonoMexicanoValido('1234567890')).toBe(false);
     expect(esTelefonoMexicanoValido('0512345678')).toBe(false);
@@ -30,6 +31,11 @@ describe('Validation & Catalog Classification Suite', () => {
     expect(diagnosticarTelefono('2222222222')).toContain('dígitos repetidos');
     expect(diagnosticarTelefono('2345678901')).toContain('secuencias');
     expect(diagnosticarTelefono('5512345678')).toBeNull();
+    expect(diagnosticarTelefono('1111111111')).toBeNull();
+
+    expect(normalizarBusquedaCatalogo('AT&T')).toBe('att');
+    expect(normalizarBusquedaCatalogo('AT-T')).toBe('att');
+    expect(normalizarBusquedaCatalogo('Telefonía')).toBe('telefonia');
   });
 
   it('classifies recargas, frontType=1 vouchers, inquiry items, and category names', () => {

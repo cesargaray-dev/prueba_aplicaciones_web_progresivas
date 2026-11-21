@@ -85,6 +85,30 @@ class _FakeBiometricService extends BiometricService {
 class _FakeAuthService extends AuthService {
   bool biometricRegisteredOnServer = false;
   String? lastRegisteredToken;
+  String? lastRegistrationCode;
+  int sendCodeCalls = 0;
+  int keepAliveCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> enviarCodigoRegistro({
+    required String correo,
+    String? nombre,
+    String? usuario,
+  }) async {
+    sendCodeCalls++;
+    return {
+      'codigo': 0,
+      'mensaje': 'Código enviado',
+      'correoEnviado': true,
+      'correoDestino': correo,
+      'expiraEnSegundos': 300,
+    };
+  }
+
+  @override
+  Future<void> keepAlive() async {
+    keepAliveCalls++;
+  }
 
   @override
   Future<UserSession> login(String usuario, String contrasena) async {
@@ -112,7 +136,9 @@ class _FakeAuthService extends AuthService {
     required String telefonoMovil,
     required String usuario,
     required String contrasena,
+    String? codigoVerificacion,
   }) async {
+    lastRegistrationCode = codigoVerificacion;
     return UserSession(
       token: 'jwt-reg-1',
       usuario: usuario,
@@ -737,6 +763,169 @@ void main() {
       expect(find.text('Nacionalidad'), findsNothing);
       expect(find.text('Nacimiento *'), findsNothing);
       expect(find.text('Sexo'), findsNothing);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    });
+
+    testWidgets(
+        'LoginScreen ejecuta registro en 2 pasos con 2FA al correo y acepta teléfono 1111111111',
+        (WidgetTester tester) async {
+      final fakeBio = _FakeBiometricService(
+        availability: const BiometricAvailability(
+          isSupported: false,
+          hasEnrolledBiometrics: false,
+          hasFingerprint: false,
+          label: 'Huella Digital',
+        ),
+      );
+      final fakeAuthSvc = _FakeAuthService();
+      final auth = AuthProvider(authService: fakeAuthSvc, biometricService: fakeBio);
+      await auth.initBiometrics();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AuthProvider>.value(
+          value: auth,
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            darkTheme: AppTheme.darkTheme,
+            home: const LoginScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crear Cuenta'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'Cesar');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido(s) *'), 'Garay');
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Correo electrónico real (para 2FA y recibos) *'),
+        'cesar@gmail.com',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Teléfono móvil México (10 dígitos) *'),
+        '1111111111',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Usuario (mín. 4 caracteres) *'),
+        'cesar2fa',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña (8+ car., Mayús, Minús, Núm) *'),
+        'Venta2026#',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Confirmar contraseña *'),
+        'Venta2026#',
+      );
+
+      final sendBtn = find.text('Enviar Código 2FA al Correo');
+      await tester.ensureVisible(sendBtn);
+      await tester.tap(sendBtn);
+      await tester.pumpAndSettle();
+
+      expect(fakeAuthSvc.sendCodeCalls, 1);
+      expect(find.text('Verifica tu correo (2FA)'), findsOneWidget);
+      expect(find.text('cesar@gmail.com'), findsOneWidget);
+
+      await tester.enterText(find.widgetWithText(TextField, 'Código 2FA (6 dígitos)'), '654321');
+      await tester.pump();
+
+      final verifyBtn = find.text('Verificar y Crear Cuenta');
+      await tester.ensureVisible(verifyBtn);
+      await tester.tap(verifyBtn);
+      await tester.pumpAndSettle();
+
+      expect(fakeAuthSvc.lastRegistrationCode, '654321');
+      expect(auth.isAuthenticated, isTrue);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    });
+
+    testWidgets(
+        'Interactuar dentro de PaymentFlowDialog reinicia el temporizador de inactividad',
+        (WidgetTester tester) async {
+      final fakeBio = _FakeBiometricService(
+        availability: const BiometricAvailability(
+          isSupported: false,
+          hasEnrolledBiometrics: false,
+          hasFingerprint: false,
+          label: 'Huella Digital',
+        ),
+      );
+      final auth = AuthProvider(authService: _FakeAuthService(), biometricService: fakeBio);
+      await auth.initBiometrics();
+      await auth.login('cesar_app', 'Venta2026#');
+
+      final product = ProductItem(
+        id: '374',
+        name: 'Recarga \$100',
+        service: 'AT-T',
+        serviceId: '115',
+        price: 100,
+        referenceType: 'a',
+        frontType: '1',
+        hasVerificationDigit: false,
+        categoryId: '3',
+      );
+      final paymentProvider = PaymentProvider()..initForProduct(product);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<PaymentProvider>.value(value: paymentProvider),
+          ],
+          child: MaterialApp(
+            builder: (context, child) {
+              return Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) => auth.recordUserActivity(),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () {
+                    showDialog<void>(
+                      context: ctx,
+                      builder: (_) => PaymentFlowDialog(product: product, onViewHistory: () {}),
+                    );
+                  },
+                  child: const Text('Abrir Pago'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Abrir Pago'));
+      await tester.pumpAndSettle();
+      expect(find.byType(PaymentFlowDialog), findsOneWidget);
+
+      // Simular que transcurrieron 120s de inactividad
+      auth.sessionSecondsNotifier.value = 180;
+      expect(auth.secondsRemaining, 180);
+
+      // Escribir el teléfono 1111111111 dentro del diálogo modal reinicia a 300s
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Número Celular (10 dígitos)'),
+        '1111111111',
+      );
+      await tester.pump();
+      expect(auth.secondsRemaining, 300);
+
+      // Incluso un toque sobre el diálogo encima del Navigator reinicia a 300s
+      auth.sessionSecondsNotifier.value = 120;
+      await tester.tap(find.text('Validar Referencia'));
+      await tester.pump();
+      expect(auth.secondsRemaining, 300);
 
       await tester.pumpWidget(const SizedBox.shrink());
       auth.dispose();

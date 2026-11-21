@@ -3,6 +3,8 @@ import type {
   AbonoSaldoRequest,
   ActualizarContactoRequest,
   CambiarContrasenaRequest,
+  EnviarCodigoRegistroRequest,
+  EnviarCodigoRegistroResponse,
   LoginRequest,
   LoginResponse,
   RegisterRequest,
@@ -20,6 +22,9 @@ export interface AuthContextType {
   sessionNotice: string | null;
   clearSessionNotice: () => void;
   login: (credentials: LoginRequest) => Promise<void>;
+  enviarCodigoRegistro: (
+    payload: EnviarCodigoRegistroRequest
+  ) => Promise<EnviarCodigoRegistroResponse>;
   register: (payload: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   updateBalance: (newBalance: number) => void;

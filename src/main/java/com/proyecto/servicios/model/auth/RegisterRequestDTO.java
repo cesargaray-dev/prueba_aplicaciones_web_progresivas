@@ -68,4 +68,7 @@ public class RegisterRequestDTO {
 
     @Pattern(regexp = "^(HOMBRE|MUJER)$", message = "Valores permitidos para sexo: HOMBRE, MUJER")
     private String sexo;
+
+    @Pattern(regexp = "^$|^\\d{6}$", message = "El código de verificación 2FA debe tener 6 dígitos numéricos")
+    private String codigoVerificacion;
 }

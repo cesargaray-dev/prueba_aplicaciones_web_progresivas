@@ -23,6 +23,25 @@ class AuthService {
     throw ApiException(statusCode: 500, message: 'Formato de respuesta inesperado del servidor');
   }
 
+  Future<Map<String, dynamic>> enviarCodigoRegistro({
+    required String correo,
+    String? nombre,
+    String? usuario,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/register/enviar-codigo',
+      body: {
+        'correo': correo.trim(),
+        if (nombre != null && nombre.trim().isNotEmpty) 'nombre': nombre.trim(),
+        if (usuario != null && usuario.trim().isNotEmpty) 'usuario': usuario.trim(),
+      },
+    );
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'Formato de respuesta inesperado del servidor');
+  }
+
   Future<UserSession> register({
     required String nombre,
     String? segundoNombre,
@@ -34,11 +53,13 @@ class AuthService {
     required String telefonoMovil,
     required String usuario,
     required String contrasena,
+    String? codigoVerificacion,
   }) async {
     final cleanSegundo = segundoNombre?.trim();
     final cleanMaterno = apellidoMaterno.trim();
     final cleanFecha = fechaNacimiento.trim();
     final cleanSexo = sexo.trim();
+    final cleanCode = codigoVerificacion?.trim();
     final response = await _client.post(
       '/api/v1/auth/register',
       body: {
@@ -52,6 +73,7 @@ class AuthService {
         'telefonoMovil': telefonoMovil.trim(),
         'usuario': usuario.trim(),
         'contrasena': contrasena,
+        if (cleanCode != null && cleanCode.isNotEmpty) 'codigoVerificacion': cleanCode,
       },
     );
 
@@ -91,6 +113,10 @@ class AuthService {
 
   Future<void> verificarSesionActiva() async {
     await _client.get('/api/v1/auth/session-status');
+  }
+
+  Future<void> keepAlive() async {
+    await _client.post('/api/v1/auth/keep-alive', body: {});
   }
 
   Future<UserSession> updateContacto({

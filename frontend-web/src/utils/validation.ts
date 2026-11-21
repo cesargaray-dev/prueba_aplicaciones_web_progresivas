@@ -17,9 +17,12 @@ export const SECUENCIAS_TELEFONO_INVALIDAS = new Set([
   '5555555555',
 ]);
 
+export const TELEFONO_PRUEBA_GESTOPAGO = '1111111111';
+
 export function esTelefonoMexicanoValido(raw: string): boolean {
   if (!raw) return false;
   const tel = raw.trim();
+  if (tel === TELEFONO_PRUEBA_GESTOPAGO) return true;
   if (!/^\d{10}$/.test(tel)) return false;
   if (!/^[2-9]\d{9}$/.test(tel)) return false;
   if (/^(\d)\1{9}$/.test(tel)) return false;
@@ -31,6 +34,7 @@ export function diagnosticarTelefono(raw: string): string | null {
     return 'El número de teléfono es obligatorio y debe contener 10 dígitos.';
   }
   const tel = raw.trim();
+  if (tel === TELEFONO_PRUEBA_GESTOPAGO) return null;
   if (!/^\d{10}$/.test(tel)) {
     return 'El número telefónico debe contener exactamente 10 dígitos numéricos (ej. 5512345678).';
   }
@@ -41,6 +45,19 @@ export function diagnosticarTelefono(raw: string): string | null {
     return 'Ingresa un número telefónico real de 10 dígitos (no se permiten dígitos repetidos ni secuencias como 1234567890).';
   }
   return null;
+}
+
+/**
+ * Normaliza texto para búsquedas del catálogo ignorando acentos, guiones,
+ * símbolos (&) y espacios (ej. "AT&T", "AT-T" y "ATT" coinciden como "att").
+ */
+export function normalizarBusquedaCatalogo(raw: string): string {
+  if (!raw) return '';
+  return raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 export function esRecargaTelefonica(product: {

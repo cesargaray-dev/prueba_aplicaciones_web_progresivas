@@ -2,7 +2,12 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { catalogApi } from '../api/catalogApi';
 import type { ProductDTO } from '../types/catalog';
 import type { ValidarReferenciaResponse, PagoServicioResponse } from '../types/payment';
-import { esConsultaSaldo, esRecargaTelefonica, getProductCategoryName } from '../utils/validation';
+import {
+  esConsultaSaldo,
+  esRecargaTelefonica,
+  getProductCategoryName,
+  normalizarBusquedaCatalogo,
+} from '../utils/validation';
 import { ServiceCard } from '../components/ServiceCard';
 import { CategoryChips } from '../components/CategoryChips';
 import type { CategoryFilterType } from '../components/CategoryChips';
@@ -191,17 +196,26 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onGoToHistory }) => {
 
   const filteredProducts = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
+    const qNorm = normalizarBusquedaCatalogo(searchQuery);
     return frontTypeFilteredProducts.filter((p) => {
       if (!matchesCategory(p, selectedCategory)) return false;
       if (!q) return true;
       const categoryLabel = getProductCategoryName(p).toLowerCase();
-      return (
+      if (
         (p.name && p.name.toLowerCase().includes(q)) ||
         (p.service && p.service.toLowerCase().includes(q)) ||
         (p.legend && p.legend.toLowerCase().includes(q)) ||
         categoryLabel.includes(q) ||
         (p.serviceId && p.serviceId.includes(q)) ||
         (p.id && p.id.includes(q))
+      ) {
+        return true;
+      }
+      if (!qNorm) return false;
+      return (
+        normalizarBusquedaCatalogo(p.service || '').includes(qNorm) ||
+        normalizarBusquedaCatalogo(p.name || '').includes(qNorm) ||
+        normalizarBusquedaCatalogo(categoryLabel).includes(qNorm)
       );
     });
   }, [frontTypeFilteredProducts, searchQuery, selectedCategory]);

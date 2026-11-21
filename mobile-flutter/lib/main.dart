@@ -56,6 +56,16 @@ class BancoDigitalApp extends StatelessWidget {
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: currentThemeMode,
+            builder: (context, child) {
+              final auth = Provider.of<AuthProvider>(context, listen: false);
+              return Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) => auth.recordUserActivity(),
+                onPointerMove: (_) => auth.recordUserActivity(),
+                onPointerSignal: (_) => auth.recordUserActivity(),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
             home: const AuthGate(),
           );
         },

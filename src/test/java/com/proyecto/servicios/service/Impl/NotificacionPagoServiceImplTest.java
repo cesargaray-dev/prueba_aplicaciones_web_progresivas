@@ -113,9 +113,17 @@ class NotificacionPagoServiceImplTest {
         PagoServicioRequestDTO recargaFalsa = PagoServicioRequestDTO.builder()
                 .numeroCuenta("5225253189113705")
                 .idServicio(133).idProducto(582)
-                .referencia("1111111111")
+                .referencia("0000000000")
                 .monto(new BigDecimal("100.00")).codigo2FA("123456").build();
         assertThrows(ValidacionException.class, () -> service.validarAntesDePagar(recargaFalsa));
+
+        PagoServicioRequestDTO recargaPruebaGestoPago = PagoServicioRequestDTO.builder()
+                .numeroCuenta("5225253189113705")
+                .idServicio(133).idProducto(582)
+                .referencia("1111111111")
+                .monto(new BigDecimal("100.00")).codigo2FA("123456").build();
+        service.validarAntesDePagar(recargaPruebaGestoPago);
+        assertEquals("1111111111", recargaPruebaGestoPago.getTelefono());
 
         PagoServicioRequestDTO recargaValida = PagoServicioRequestDTO.builder()
                 .numeroCuenta("5225253189113705")

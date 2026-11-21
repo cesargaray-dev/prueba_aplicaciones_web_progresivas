@@ -103,6 +103,7 @@ const isSessionUnauthorized = (
   if (
     normalizedPath === '/auth/login' ||
     normalizedPath === '/auth/register' ||
+    normalizedPath.startsWith('/auth/register/') ||
     normalizedPath === '/auth/login/biometrico'
   ) {
     return false;

@@ -140,6 +140,23 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
         return enviarCorreoBrevo(correoDestino, nombreCliente, asunto, htmlContent, "bienvenida");
     }
 
+    @Override
+    public EmailEnvioResultadoDTO enviarCodigoRegistro2FA(
+            String correoDestino, String nombre, String codigo2FA, long vigenciaSegundos) {
+        if (correoDestino == null || !TelefonoUtil.esCorreoSintaxisValida(correoDestino)) {
+            return EmailEnvioResultadoDTO.builder()
+                    .enviado(false)
+                    .correoDestino(correoDestino)
+                    .mensaje("El formato del correo electrónico no es válido.")
+                    .build();
+        }
+        String nombreDestinatario = (nombre != null && !nombre.isBlank()) ? nombre.trim() : "Futuro(a) Cliente";
+        String asunto = "Código de Verificación de Cuenta (" + codigo2FA + ") - Banco Digital";
+        String htmlContent = construirHtmlCodigoRegistro(nombreDestinatario, codigo2FA, vigenciaSegundos);
+
+        return enviarCorreoBrevo(correoDestino.trim(), nombreDestinatario, asunto, htmlContent, "código 2FA de registro");
+    }
+
     private EmailEnvioResultadoDTO enviarCorreoBrevo(
             String destinatario,
             String nombreDestinatario,
@@ -230,6 +247,40 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
 
     private String esc(String val) {
         return val == null ? "N/A" : HtmlUtils.htmlEscape(val);
+    }
+
+    private String construirHtmlCodigoRegistro(String nombreCliente, String codigo2FA, long vigenciaSegundos) {
+        long minutos = Math.max(1, vigenciaSegundos / 60);
+        return """
+            <!DOCTYPE html>
+            <html lang="es">
+            <head><meta charset="UTF-8"><title>Verificación de Correo - Registro</title></head>
+            <body style="margin:0;padding:0;background-color:#f4f6f9;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
+              <div style="width:100%%;padding:30px 12px;">
+                <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(15,23,42,0.08);">
+                  <div style="background:linear-gradient(135deg,#0f172a 0%%,#059669 100%%);padding:26px;text-align:center;color:#ffffff;">
+                    <div style="font-size:20px;font-weight:800;letter-spacing:1px;">&#127974; BANCO DIGITAL</div>
+                    <div style="font-size:12px;color:#d1fae5;margin-top:4px;">Verificación de Correo Electrónico (2FA)</div>
+                  </div>
+                  <div style="padding:28px;">
+                    <p style="font-size:15px;margin-top:0;">Hola <strong>%s</strong>,</p>
+                    <p style="font-size:14px;color:#475569;line-height:1.5;">
+                      Ingresa el siguiente código de verificación de 6 dígitos para confirmar tu correo electrónico y completar la apertura de tu cuenta en <strong>Banco Digital</strong>:
+                    </p>
+                    <div style="background:#f8fafc;border:2px dashed #059669;border-radius:12px;padding:22px;text-align:center;margin:22px 0;">
+                      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:#64748b;font-weight:700;">Código de Verificación de Registro</div>
+                      <div style="font-size:36px;font-weight:900;letter-spacing:10px;color:#0f172a;font-family:monospace;margin-top:6px;">%s</div>
+                      <div style="font-size:12px;color:#047857;font-weight:600;margin-top:8px;">Vigencia: %d minuto(s) &bull; Un solo uso</div>
+                    </div>
+                    <div style="background:#fef3c7;border-left:4px solid #d97706;padding:12px 14px;border-radius:0 8px 8px 0;font-size:12px;color:#78350f;line-height:1.5;">
+                      <strong>Seguridad:</strong> Nunca compartas este código con nadie. Si no solicitaste crear una cuenta en Banco Digital, puedes ignorar este mensaje.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </body>
+            </html>
+            """.formatted(esc(nombreCliente), esc(codigo2FA), minutos);
     }
 
     private String construirHtml2FA(String nombreCliente, String cuentaEnmascarada, String codigo2FA, long vigenciaSegundos) {

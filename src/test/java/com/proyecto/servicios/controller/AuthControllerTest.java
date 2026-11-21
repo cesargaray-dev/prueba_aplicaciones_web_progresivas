@@ -107,11 +107,18 @@ class AuthControllerTest {
         ResponseEntity<java.util.Map<String, Object>> statusResp = authController.sessionStatus("Bearer tok123");
         assertEquals(HttpStatus.OK, statusResp.getStatusCode());
         assertEquals(Boolean.TRUE, statusResp.getBody().get("activa"));
+
+        when(authService.validarTokenYObtenerUsuario("Bearer tok123")).thenReturn(java.util.Optional.of("cesar123"));
+        ResponseEntity<java.util.Map<String, Object>> keepResp = authController.keepAlive("Bearer tok123");
+        assertEquals(HttpStatus.OK, keepResp.getStatusCode());
+        assertEquals(Boolean.TRUE, keepResp.getBody().get("activa"));
     }
 
     @Test
     void testServiciosNoDisponiblesLanzanIllegalState() {
         AuthController soloAuth = new AuthController(authService, null, null);
+        assertThrows(IllegalStateException.class, () -> soloAuth.enviarCodigoRegistro(
+                new com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO("a@gmail.com", "A", "usr1")));
         assertThrows(IllegalStateException.class, () -> soloAuth.register(new RegisterRequestDTO()));
         assertThrows(IllegalStateException.class, () -> soloAuth.actualizarContacto(
                 "Bearer t", new ActualizarContactoRequestDTO("a@gmail.com", "5512345678")));

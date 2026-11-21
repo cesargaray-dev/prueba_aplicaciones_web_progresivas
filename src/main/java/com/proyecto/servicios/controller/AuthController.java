@@ -8,6 +8,8 @@ import com.proyecto.servicios.model.auth.BiometriaEstadoResponseDTO;
 import com.proyecto.servicios.model.auth.BiometriaLoginRequestDTO;
 import com.proyecto.servicios.model.auth.BiometriaRegistroRequestDTO;
 import com.proyecto.servicios.model.auth.CambiarContrasenaRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO;
+import com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.LoginRequestDTO;
 import com.proyecto.servicios.model.auth.LoginResponseDTO;
 import com.proyecto.servicios.model.auth.LogoutRequestDTO;
@@ -128,17 +130,41 @@ public class AuthController {
         return ResponseEntity.ok(java.util.Map.of("activa", activa));
     }
 
+    @PostMapping("/keep-alive")
+    @Operation(
+            summary = "Mantener viva la sesión ante actividad del usuario",
+            description = "Extiende el TTL deslizante de inactividad en el servidor cuando el usuario interactúa activamente (incluyendo dentro de ventanas modales de compra)."
+    )
+    public ResponseEntity<java.util.Map<String, Object>> keepAlive(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        boolean activa = authService.validarTokenYObtenerUsuario(authHeader).isPresent();
+        return ResponseEntity.ok(java.util.Map.of("activa", activa));
+    }
+
+    @PostMapping("/register/enviar-codigo")
+    @Operation(
+            summary = "Enviar código 2FA al correo antes de crear la cuenta",
+            description = "Valida que el correo sea real y disponible, genera un código temporal de 6 dígitos (5 min) y lo envía vía Brevo para confirmar el correo del nuevo usuario."
+    )
+    public ResponseEntity<EnviarCodigoRegistroResponseDTO> enviarCodigoRegistro(
+            @Valid @RequestBody EnviarCodigoRegistroRequestDTO request) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de registro no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.enviarCodigoVerificacionRegistro(request));
+    }
+
     @PostMapping("/register")
     @Operation(
             summary = "Registrar nuevo cliente y cuenta digital",
-            description = "Crea un nuevo cliente, su cuenta de 16 dígitos, saldo inicial de bienvenida y credenciales de acceso, iniciando sesión automáticamente."
+            description = "Valida el código 2FA enviado al correo, crea el nuevo cliente, su cuenta de 16 dígitos, saldo inicial de bienvenida y credenciales de acceso, iniciando sesión automáticamente."
     )
     public ResponseEntity<LoginResponseDTO> register(@Valid @RequestBody RegisterRequestDTO request) {
         log.info("REST request de auto-registro comercial para usuario: {}", request.getUsuario());
         if (portalCuentaService == null) {
             throw new IllegalStateException("El servicio de registro no está disponible en este contexto");
         }
-        return ResponseEntity.status(HttpStatus.CREATED).body(portalCuentaService.registrarClientePortal(request));
+        return ResponseEntity.status(HttpStatus.CREATED).body(portalCuentaService.registrarClientePortalConVerificacion(request));
     }
 
     @PutMapping({"/me/contacto", "/me/perfil"})

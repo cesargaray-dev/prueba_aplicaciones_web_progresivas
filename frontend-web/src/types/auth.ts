@@ -34,6 +34,21 @@ export interface RegisterRequest {
   usuario: string;
   contrasena: string;
   sexo?: 'HOMBRE' | 'MUJER';
+  codigoVerificacion?: string;
+}
+
+export interface EnviarCodigoRegistroRequest {
+  correo: string;
+  nombre?: string;
+  usuario?: string;
+}
+
+export interface EnviarCodigoRegistroResponse {
+  codigo: number;
+  mensaje: string;
+  correoEnviado: boolean;
+  correoDestino: string;
+  expiraEnSegundos: number;
 }
 
 export interface ActualizarContactoRequest {
