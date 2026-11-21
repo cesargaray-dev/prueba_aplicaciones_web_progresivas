@@ -68,6 +68,7 @@ class AuthProvider with ChangeNotifier {
   bool get biometricsInitialized => _biometricsInitialized;
   bool get shouldPromptBiometricOnboarding => _shouldPromptBiometricOnboarding;
   String? get sessionNotice => _sessionNotice;
+  String get apiServerLabel => _apiClient.serverLabel;
 
   void consumeBiometricOnboardingPrompt() {
     _shouldPromptBiometricOnboarding = false;

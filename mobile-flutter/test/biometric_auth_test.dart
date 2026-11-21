@@ -4,6 +4,7 @@ import 'package:mobile_flutter/models/history_item.dart';
 import 'package:mobile_flutter/models/user_session.dart';
 import 'package:mobile_flutter/providers/auth_provider.dart';
 import 'package:mobile_flutter/screens/login_screen.dart';
+import 'package:mobile_flutter/services/api_client.dart';
 import 'package:mobile_flutter/services/auth_service.dart';
 import 'package:mobile_flutter/services/biometric_service.dart';
 import 'package:mobile_flutter/widgets/profile_sheet.dart';
@@ -508,6 +509,25 @@ void main() {
       });
       expect(session.sesionPreviaCerrada, isTrue);
       expect(session.avisoSesion, contains('otro dispositivo'));
+    });
+
+    test('ApiClient muestra etiqueta de servidor y diagnostica Connection reset en Render', () {
+      final client = ApiClient();
+      try {
+        client.setBaseUrl('https://prueba-aplicaciones-web-progresivas.onrender.com');
+        expect(client.serverLabel, 'Nube (Render)');
+        final wrapped = client.wrapNetworkError(
+          Exception('ClientException: Connection reset by peer'),
+        );
+        expect(wrapped.statusCode, 0);
+        expect(wrapped.message, contains('Wi-Fi'));
+        expect(wrapped.message, contains('Datos Móviles'));
+
+        client.setBaseUrl('http://10.31.5.23:10000');
+        expect(client.serverLabel, 'Wi-Fi (10.31.5.23:10000)');
+      } finally {
+        client.resetForTest();
+      }
     });
   });
 }

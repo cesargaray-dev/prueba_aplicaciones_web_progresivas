@@ -348,7 +348,24 @@ class _LoginScreenState extends State<LoginScreen> {
                       style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
                     ),
 
-                    const SizedBox(height: 22),
+                    const SizedBox(height: 10),
+
+                    Center(
+                      child: ActionChip(
+                        avatar: Icon(
+                          Icons.dns_rounded,
+                          size: 15,
+                          color: AppTheme.secondaryBlue,
+                        ),
+                        label: Text(
+                          'Servidor: ${auth.apiServerLabel} · Cambiar',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                        onPressed: _showApiConfigDialog,
+                      ),
+                    ),
+
+                    const SizedBox(height: 14),
 
                     if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) ...[
                       Container(
@@ -359,26 +376,48 @@ class _LoginScreenState extends State<LoginScreen> {
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.4)),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.info_outline_rounded, color: AppTheme.errorRed, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                auth.errorMessage!,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.errorRed,
+                            Row(
+                              children: [
+                                const Icon(Icons.info_outline_rounded, color: AppTheme.errorRed, size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    auth.errorMessage!,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppTheme.errorRed,
+                                    ),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close_rounded, size: 16, color: AppTheme.errorRed),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => auth.clearError(),
+                                ),
+                              ],
+                            ),
+                            if (auth.errorMessage!.toLowerCase().contains('conexión') ||
+                                auth.errorMessage!.toLowerCase().contains('wi-fi') ||
+                                auth.errorMessage!.toLowerCase().contains('render')) ...[
+                              const SizedBox(height: 8),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: TextButton.icon(
+                                  onPressed: _showApiConfigDialog,
+                                  icon: const Icon(Icons.settings_ethernet_rounded, size: 16),
+                                  label: const Text('Cambiar servidor', style: TextStyle(fontSize: 12)),
+                                  style: TextButton.styleFrom(
+                                    visualDensity: VisualDensity.compact,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  ),
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close_rounded, size: 16, color: AppTheme.errorRed),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                              onPressed: () => auth.clearError(),
-                            ),
+                            ],
                           ],
                         ),
                       ),

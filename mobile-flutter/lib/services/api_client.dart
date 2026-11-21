@@ -121,6 +121,49 @@ class ApiClient {
     baseUrl = normalizeBaseUrl(url);
   }
 
+  String get serverLabel {
+    final uri = Uri.tryParse(baseUrl);
+    final host = uri?.host.toLowerCase() ?? '';
+    if (host.contains('onrender.com')) return 'Nube (Render)';
+    if (host == 'localhost' || host == '127.0.0.1' || host == '10.0.2.2') {
+      return 'USB Local ($host)';
+    }
+    if (host.isNotEmpty) {
+      return 'Wi-Fi ($host:${uri?.hasPort == true ? uri!.port : ''})';
+    }
+    return baseUrl;
+  }
+
+  @visibleForTesting
+  ApiException wrapNetworkError(Object error) {
+    if (error is ApiException) return error;
+    final raw = error.toString();
+    final lower = raw.toLowerCase();
+    final host = Uri.tryParse(baseUrl)?.host ?? baseUrl;
+
+    if (host.contains('onrender.com') &&
+        (lower.contains('connection reset') ||
+            lower.contains('econnreset') ||
+            lower.contains('connection closed'))) {
+      return ApiException(
+        statusCode: 0,
+        message:
+            'Tu red Wi-Fi bloqueó o reinició la conexión con Render ($host). Prueba con Datos Móviles o cambia a Wi-Fi PC en "Cambiar servidor".',
+      );
+    }
+    if (lower.contains('timeout') || lower.contains('timed out')) {
+      return ApiException(
+        statusCode: 0,
+        message:
+            'El servidor ($host) tardó demasiado en responder. Si usa Render en reposo puede tardar ~45s; intenta de nuevo o cambia de servidor.',
+      );
+    }
+    return ApiException(
+      statusCode: 0,
+      message: 'Error de conexión con $host: $raw',
+    );
+  }
+
   Map<String, String> _buildHeaders({Map<String, String>? extra}) {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -187,11 +230,7 @@ class ApiClient {
 
       return _processResponse(response, path: path);
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        statusCode: 0,
-        message: 'Error de conexión con el servidor: $e',
-      );
+      throw wrapNetworkError(e);
     }
   }
 
@@ -216,11 +255,7 @@ class ApiClient {
       _processResponse(response, path: path);
       return response.bodyBytes;
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        statusCode: 0,
-        message: 'Error de conexión con el servidor: $e',
-      );
+      throw wrapNetworkError(e);
     }
   }
 
@@ -239,11 +274,7 @@ class ApiClient {
       final parsed = _processResponse(response, path: path);
       return (statusCode: response.statusCode, body: parsed);
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        statusCode: 0,
-        message: 'Error de conexión con el servidor: $e',
-      );
+      throw wrapNetworkError(e);
     }
   }
 
@@ -263,11 +294,7 @@ class ApiClient {
 
       return _processResponse(response, path: path);
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        statusCode: 0,
-        message: 'Error de conexión con el servidor: $e',
-      );
+      throw wrapNetworkError(e);
     }
   }
 
@@ -284,11 +311,7 @@ class ApiClient {
 
       return _processResponse(response, path: path);
     } catch (e) {
-      if (e is ApiException) rethrow;
-      throw ApiException(
-        statusCode: 0,
-        message: 'Error de conexión con el servidor: $e',
-      );
+      throw wrapNetworkError(e);
     }
   }
 
