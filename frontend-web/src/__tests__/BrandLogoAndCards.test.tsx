@@ -16,6 +16,9 @@ describe('BrandLogo, CategoryChips, and ServiceCard', () => {
       'src',
       'https://gestopago.portalventas.net/sistema/images/gestopago/servicios/76%2Ftest.png'
     );
+    // Uses dedicated pearl medallion class instead of bg-white so dark mode never turns logo background dark
+    expect(screen.getByTestId('brand-logo-tile')).toHaveClass('brand-logo-tile');
+    expect(screen.getByTestId('brand-logo-tile')).not.toHaveClass('bg-white');
 
     // External https logoUrl takes precedence
     rerender(

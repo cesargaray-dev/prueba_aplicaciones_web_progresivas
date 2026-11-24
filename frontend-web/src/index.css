@@ -34,10 +34,39 @@ html.dark .bg-slate-50 {
   color: #f8fafc;
 }
 
-html.dark .bg-white {
+html.dark .bg-white:not(.brand-logo-tile) {
   background-color: #0f172a !important;
   color: #f8fafc;
   box-shadow: 0 14px 32px -10px rgba(2, 6, 23, 0.72), 0 0 0 1px rgba(148, 163, 184, 0.12);
+}
+
+.brand-logo-tile {
+  background: linear-gradient(145deg, #ffffff 0%, #f1f5f9 100%);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+}
+
+html.dark .brand-logo-tile {
+  background: linear-gradient(145deg, #ffffff 0%, #e2e8f0 100%) !important;
+  border: 1px solid rgba(226, 232, 240, 0.92) !important;
+  box-shadow:
+    0 6px 16px -4px rgba(2, 6, 23, 0.65),
+    0 0 0 2px rgba(59, 130, 246, 0.18) !important;
+}
+
+.brand-logo-tile img {
+  filter: drop-shadow(0 1px 1.5px rgba(15, 23, 42, 0.26));
+}
+
+.brand-logo-fallback {
+  background: linear-gradient(145deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  color: #1e293b;
+}
+
+html.dark .brand-logo-fallback {
+  background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%) !important;
+  border: 1px solid rgba(148, 163, 184, 0.32) !important;
+  color: #f8fafc !important;
 }
 
 html.dark .bg-white\/90 {

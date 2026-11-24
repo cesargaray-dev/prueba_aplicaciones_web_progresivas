@@ -22,16 +22,25 @@ class BrandAvatar extends StatelessWidget {
     return label.substring(0, label.length >= 2 ? 2 : 1).toUpperCase();
   }
 
-  Widget _buildFallback() {
+  Widget _buildFallback(bool isDark) {
     return Container(
-      color: AppTheme.primaryNavy.withValues(alpha: 0.08),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF1E293B), Color(0xFF0F172A)]
+              : const [Color(0xFFF8FAFC), Color(0xFFE2E8F0)],
+        ),
+      ),
       alignment: Alignment.center,
       child: Text(
         _initials,
         style: TextStyle(
-          color: AppTheme.primaryNavy,
-          fontWeight: FontWeight.bold,
-          fontSize: size * 0.35,
+          color: isDark ? Colors.white : AppTheme.primaryNavy,
+          fontWeight: FontWeight.w800,
+          fontSize: size * 0.34,
+          letterSpacing: 0.4,
         ),
       ),
     );
@@ -40,28 +49,52 @@ class BrandAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final trimmedUrl = imageUrl.trim();
+    final isDark = AppTheme.isDark(context);
+    final pad = (size * 0.12).clamp(4.0, 8.0);
+
     return Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(size * 0.25),
-        border: Border.all(color: AppTheme.borderSlate, width: 1),
+        gradient: trimmedUrl.isEmpty
+            ? null
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFFFFFF), Color(0xFFE2E8F0)],
+              ),
+        borderRadius: BorderRadius.circular(size * 0.26),
+        border: Border.all(
+          color: isDark
+              ? (trimmedUrl.isEmpty
+                  ? Colors.white.withValues(alpha: 0.22)
+                  : const Color(0xFFE2E8F0))
+              : AppTheme.borderSlate,
+          width: isDark && trimmedUrl.isNotEmpty ? 1.2 : 1.0,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 4,
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.38)
+                : Colors.black.withValues(alpha: 0.05),
+            blurRadius: isDark ? 8 : 4,
             offset: const Offset(0, 2),
           ),
         ],
       ),
       clipBehavior: Clip.antiAlias,
       child: trimmedUrl.isEmpty
-          ? _buildFallback()
+          ? _buildFallback(isDark)
           : Image.network(
               trimmedUrl,
               fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => _buildFallback(),
+              frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                return Padding(
+                  padding: EdgeInsets.all(pad),
+                  child: child,
+                );
+              },
+              errorBuilder: (context, error, stackTrace) => _buildFallback(isDark),
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) return child;
                 return Center(
