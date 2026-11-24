@@ -225,4 +225,228 @@ class ValidationUtils {
     final min = frontType.trim() == '1' ? 0.01 : 10.0;
     return monto >= min && monto <= 50000.0;
   }
+
+  static const List<MapEntry<String, String>> estadosMexico = [
+    MapEntry('AS', 'Aguascalientes'),
+    MapEntry('BC', 'Baja California'),
+    MapEntry('BS', 'Baja California Sur'),
+    MapEntry('CC', 'Campeche'),
+    MapEntry('CL', 'Coahuila'),
+    MapEntry('CM', 'Colima'),
+    MapEntry('CS', 'Chiapas'),
+    MapEntry('CH', 'Chihuahua'),
+    MapEntry('DF', 'Ciudad de México'),
+    MapEntry('DG', 'Durango'),
+    MapEntry('GT', 'Guanajuato'),
+    MapEntry('GR', 'Guerrero'),
+    MapEntry('HG', 'Hidalgo'),
+    MapEntry('JC', 'Jalisco'),
+    MapEntry('MC', 'Estado de México'),
+    MapEntry('MN', 'Michoacán'),
+    MapEntry('MS', 'Morelos'),
+    MapEntry('NT', 'Nayarit'),
+    MapEntry('NL', 'Nuevo León'),
+    MapEntry('OC', 'Oaxaca'),
+    MapEntry('PL', 'Puebla'),
+    MapEntry('QT', 'Querétaro'),
+    MapEntry('QR', 'Quintana Roo'),
+    MapEntry('SP', 'San Luis Potosí'),
+    MapEntry('SL', 'Sinaloa'),
+    MapEntry('SR', 'Sonora'),
+    MapEntry('TC', 'Tabasco'),
+    MapEntry('TS', 'Tamaulipas'),
+    MapEntry('TL', 'Tlaxcala'),
+    MapEntry('VZ', 'Veracruz'),
+    MapEntry('YN', 'Yucatán'),
+    MapEntry('ZS', 'Zacatecas'),
+    MapEntry('NE', 'Nacido en el Extranjero'),
+  ];
+
+  static const Set<String> _palabrasInconvenientesCurp = {
+    'BACA', 'BAKA', 'BUEI', 'BUEY', 'CACA', 'CACO', 'CAGA', 'CAGO', 'CAKA', 'CAKO',
+    'COGE', 'COGI', 'COJA', 'COJE', 'COJI', 'COJO', 'COLA', 'CULO', 'FALO', 'FETO',
+    'GETA', 'GUEI', 'GUEY', 'JETA', 'JOTO', 'KACA', 'KACO', 'KAGA', 'KAGO', 'KAKA',
+    'KAKO', 'KOGE', 'KOGI', 'KOJA', 'KOJE', 'KOJI', 'KOJO', 'KOLA', 'KULO', 'LILO',
+    'LOCA', 'LOCO', 'LOKA', 'LOKO', 'MAME', 'MAMO', 'MEAR', 'MEAS', 'MEON', 'MIAR',
+    'MION', 'MOCO', 'MOKO', 'MULA', 'MULO', 'NACA', 'NACO', 'PEDA', 'PEDO', 'PENE',
+    'PIPI', 'PITO', 'POPO', 'PUTA', 'PUTO', 'QULO', 'RATA', 'ROBA', 'ROBE', 'ROBO',
+    'RUIN', 'SENO', 'TETA', 'VACA', 'VAGA', 'VAGO', 'VAKA', 'VUEI', 'VUEY', 'WUEI', 'WUEY',
+  };
+
+  static final RegExp _curpPattern = RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$');
+  static final RegExp _rfcPattern = RegExp(r'^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$');
+  static final RegExp _cpPattern = RegExp(r'^(0[1-9]|[1-9][0-9])\d{3}$');
+
+  static bool esCurpValida(String? raw) {
+    if (raw == null) return false;
+    return _curpPattern.hasMatch(raw.trim().toUpperCase());
+  }
+
+  static String? diagnosticarCurp(String? raw) {
+    final c = (raw ?? '').trim().toUpperCase();
+    if (c.isEmpty) return 'La CURP es obligatoria (18 caracteres oficiales).';
+    if (c.length != 18) return 'La CURP debe tener exactamente 18 caracteres (${c.length}/18).';
+    if (!esCurpValida(c)) {
+      return 'Formato de CURP inválido (4 letras + 6 dígitos + H/M + 5 letras + 2 homoclave).';
+    }
+    return null;
+  }
+
+  static bool esRfcValido(String? raw) {
+    if (raw == null) return false;
+    return _rfcPattern.hasMatch(raw.trim().toUpperCase());
+  }
+
+  static String? diagnosticarRfc(String? raw) {
+    final r = (raw ?? '').trim().toUpperCase();
+    if (r.isEmpty) return 'El RFC con homoclave es obligatorio (13 caracteres).';
+    if (r.length < 12 || r.length > 13) {
+      return 'El RFC debe contener 13 caracteres con homoclave (${r.length}).';
+    }
+    if (!esRfcValido(r)) {
+      return 'Formato de RFC inválido (4 letras + 6 dígitos YYMMDD + 3 homoclave).';
+    }
+    return null;
+  }
+
+  static bool esCodigoPostalValido(String? raw) {
+    if (raw == null) return false;
+    return _cpPattern.hasMatch(raw.trim());
+  }
+
+  static String _limpiarTextoRenapo(String raw) {
+    const map = {
+      'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U', 'Ü': 'U', 'Ñ': 'X',
+    };
+    final upper = raw.toUpperCase();
+    final sb = StringBuffer();
+    for (final rune in upper.runes) {
+      final ch = String.fromCharCode(rune);
+      final m = map[ch] ?? ch;
+      if (RegExp(r'[A-Z\s]').hasMatch(m)) {
+        sb.write(m);
+      } else {
+        sb.write(' ');
+      }
+    }
+    return sb.toString().trim();
+  }
+
+  static String _primeraVocalInterna(String palabra) {
+    for (var i = 1; i < palabra.length; i++) {
+      if ('AEIOU'.contains(palabra[i])) return palabra[i];
+    }
+    return 'X';
+  }
+
+  static String _primeraConsonanteInterna(String palabra) {
+    for (var i = 1; i < palabra.length; i++) {
+      final c = palabra[i];
+      if (!'AEIOU'.contains(c) && RegExp(r'[A-Z]').hasMatch(c)) return c;
+    }
+    return 'X';
+  }
+
+  static String _calcularDigitoCurp(String curp17) {
+    const dic = '0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+    var suma = 0;
+    for (var i = 0; i < 17; i++) {
+      final idx = dic.indexOf(curp17[i]);
+      suma += (idx >= 0 ? idx : 0) * (18 - i);
+    }
+    final res = 10 - (suma % 10);
+    return (res == 10 ? 0 : res).toString();
+  }
+
+  static ({String curp, String rfc})? generarCurpYRfcSugeridos({
+    required String nombre,
+    String? segundoNombre,
+    required String apellidoPaterno,
+    String? apellidoMaterno,
+    required String fechaNacimiento,
+    String sexo = 'HOMBRE',
+    String estadoCodigo = 'DF',
+  }) {
+    if (nombre.trim().isEmpty ||
+        apellidoPaterno.trim().isEmpty ||
+        !_fechaIsoPattern.hasMatch(fechaNacimiento.trim())) {
+      return null;
+    }
+    final nombres = _limpiarTextoRenapo('$nombre ${segundoNombre ?? ''}')
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList();
+    var nombreBase = nombres.isNotEmpty ? nombres.first : 'X';
+    if (nombres.length > 1 &&
+        (nombreBase == 'JOSE' ||
+            nombreBase == 'MARIA' ||
+            nombreBase == 'MA' ||
+            nombreBase == 'J')) {
+      nombreBase = nombres[1];
+    }
+
+    final patTokens = _limpiarTextoRenapo(apellidoPaterno)
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final matTokens = _limpiarTextoRenapo(apellidoMaterno ?? '')
+        .split(RegExp(r'\s+'))
+        .where((e) => e.isNotEmpty)
+        .toList();
+    final pat = patTokens.isNotEmpty ? patTokens.first : 'X';
+    final mat = matTokens.isNotEmpty ? matTokens.first : 'X';
+
+    var prefijo =
+        '${pat[0]}${_primeraVocalInterna(pat)}${matTokens.isNotEmpty ? mat[0] : 'X'}${nombreBase[0]}';
+    if (_palabrasInconvenientesCurp.contains(prefijo)) {
+      prefijo = '${prefijo[0]}X${prefijo.substring(2)}';
+    }
+
+    final parts = fechaNacimiento.trim().split('-');
+    final yyyy = parts[0];
+    final fecha6 = '${yyyy.substring(2)}${parts[1]}${parts[2]}';
+    final gen = sexo.toUpperCase().startsWith('M') ? 'M' : 'H';
+    final ent = RegExp(r'^[A-Z]{2}$').hasMatch(estadoCodigo.toUpperCase())
+        ? estadoCodigo.toUpperCase()
+        : 'DF';
+
+    final cons =
+        '${_primeraConsonanteInterna(pat)}${matTokens.isNotEmpty ? _primeraConsonanteInterna(mat) : 'X'}${_primeraConsonanteInterna(nombreBase)}';
+    final siglo = (int.tryParse(yyyy) ?? 1995) >= 2000 ? 'A' : '0';
+    final curp17 = '$prefijo$fecha6$gen$ent$cons$siglo';
+    final curp = '$curp17${_calcularDigitoCurp(curp17)}';
+
+    final seed = '$pat|$mat|$nombreBase|$fechaNacimiento';
+    var hash = 0;
+    for (final code in seed.codeUnits) {
+      hash = ((hash * 31) + code) & 0x7fffffff;
+    }
+    const alfa = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+    final h1 = alfa[hash % alfa.length];
+    final h2 = alfa[(hash ~/ 37) % alfa.length];
+    final h3 = ((hash % 9) + 1).toString();
+    final rfc = '$prefijo$fecha6$h1$h2$h3';
+
+    return (curp: curp, rfc: rfc);
+  }
+
+  static bool esItemHistorialRecarga({
+    required String telefono,
+    required String referencia,
+    String? servicio,
+    String? producto,
+  }) {
+    final tel = telefono.trim();
+    final ref = referencia.trim();
+    if (tel.isEmpty) return false;
+    if (ref.isNotEmpty && ref == tel) return true;
+    if (ref.isEmpty && tel != telefonoPruebaGestoPago) return true;
+    if (ref.isEmpty && tel == telefonoPruebaGestoPago) {
+      final combined = '${servicio ?? ''} ${producto ?? ''}'.toLowerCase();
+      return RegExp(
+        r'recarga|tiempo aire|paquete|telcel|at-t|at&t|att|movistar|unefon|bait|virgin|pillofon',
+      ).hasMatch(combined);
+    }
+    return false;
+  }
 }

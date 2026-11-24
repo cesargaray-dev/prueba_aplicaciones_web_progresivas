@@ -16,6 +16,12 @@ public class AdminActualizarUsuarioRequestDTO {
     private String segundoNombre;
     private String apellidoPaterno;
     private String apellidoMaterno;
+    private String curp;
+    private String rfc;
+    private String fechaNacimiento;
+    private String sexo;
+    private String nacionalidad;
+    private String estadoCivil;
     private String correo;
     private String telefonoMovil;
     private String usuario;

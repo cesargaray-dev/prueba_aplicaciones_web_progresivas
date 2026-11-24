@@ -71,11 +71,11 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(loginMock).toHaveBeenCalledTimes(2);
     });
 
-    it('validates all registration fields, sends 2FA code, and completes registration', async () => {
+    it('validates all 4 KYC registration steps (Identity, CURP/RFC/Address, Access, 2FA OTP) and submits registration', async () => {
       const user = userEvent.setup();
       const enviarCodigoMock = vi
         .fn()
-        .mockRejectedValueOnce(new Error('El correo ya está registrado'))
+        .mockRejectedValueOnce(new Error('La CURP ingresada ya se encuentra registrada'))
         .mockResolvedValue({
           codigo: 0,
           mensaje: 'Código enviado',
@@ -100,23 +100,81 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         </MockAuthProvider>
       );
 
+      // Toggle dark mode on LoginPage
+      await user.click(screen.getByLabelText('Cambiar tema'));
+
       await user.click(screen.getByRole('button', { name: /Crear Cuenta/i }));
       await user.click(screen.getByRole('button', { name: /Iniciar Sesión/i }));
-      await user.click(screen.getByRole('button', { name: /Crear Cuenta/i }));
+      await user.click(screen.getByRole('button', { name: /Abrir cuenta digital/i }));
+
+      // --- STEP 1: Identity ---
+      const step1Next = () =>
+        screen.getByRole('button', { name: /Continuar a Datos Fiscales y Domicilio/i });
+
+      await user.click(step1Next());
+      expect(screen.getByText(/El nombre debe tener entre 2 y 50/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/^Nombre \*/i), 'Cesar');
+      await user.type(screen.getByLabelText(/Segundo nombre/i), 'Enrique');
+
+      await user.click(step1Next());
+      expect(screen.getByText(/El apellido paterno debe tener/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Apellido paterno \*/i), 'Garay');
+
+      await user.click(step1Next());
+      expect(screen.getByText(/El apellido materno debe tener/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Apellido materno \*/i), 'Garcia');
+
+      const birthInput = screen.getByLabelText(/Fecha de nacimiento/i);
+      fireEvent.change(birthInput, { target: { value: '2020-01-01' } });
+      await user.click(step1Next());
+      expect(screen.getByText(/mayor de 18 años/i)).toBeInTheDocument();
+      fireEvent.change(birthInput, { target: { value: '1999-05-15' } });
+
+      await user.click(step1Next());
+
+      // --- STEP 2: Fiscal (CURP & RFC), Economic & Address ---
+      const step2Next = () =>
+        screen.getByRole('button', { name: /Continuar a Contacto y Acceso/i });
+
+      // CURP and RFC were auto-suggested on advancing to Step 2; also test explicit assistant button
+      await user.click(screen.getByRole('button', { name: /Calcular CURP \/ RFC/i }));
+      const curpInput = screen.getByLabelText(/CURP \(18 caracteres\)/i) as HTMLInputElement;
+      const rfcInput = screen.getByLabelText(/RFC con Homoclave/i) as HTMLInputElement;
+      expect(curpInput.value).toHaveLength(18);
+      expect(rfcInput.value).toHaveLength(13);
+
+      // Test address validations (calle, numExt, colonia, CP, municipio)
+      await user.click(step2Next());
+      expect(screen.getByText(/Ingresa la calle de tu domicilio/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Calle y Avenida/i), 'Av. Paseo de la Reforma');
+
+      await user.click(step2Next());
+      expect(screen.getByText(/número exterior/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Núm\. Ext\./i), '250');
+      await user.type(screen.getByLabelText(/Núm\. Int\./i), '4B');
+
+      await user.click(step2Next());
+      expect(screen.getByText(/colonia o fraccionamiento/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Colonia \*/i), 'Juarez');
+
+      await user.click(step2Next());
+      expect(screen.getByText(/código postal debe contener 5 dígitos/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Código Postal/i), '06600');
+
+      await user.click(step2Next());
+      expect(screen.getByText(/municipio o alcaldía/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/Municipio \/ Alcaldía/i), 'Cuauhtemoc');
+
+      // Test stepper pill navigation back to Step 1 and forward again
+      await user.click(screen.getByRole('button', { name: /Anterior/i }));
+      await user.click(step1Next());
+
+      await user.click(step2Next());
+
+      // --- STEP 3: Contact & Access ---
       const sendCodeBtn = () =>
         screen.getByRole('button', { name: /Enviar Código 2FA al Correo/i });
 
-      // 1. Invalid nombre
-      await user.click(sendCodeBtn());
-      expect(screen.getByText(/El nombre debe tener entre 2 y 50/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/^Nombre \*/i), 'Cesar');
-
-      // 2. Invalid apellidoPaterno
-      await user.click(sendCodeBtn());
-      expect(screen.getByText(/El apellido paterno debe tener/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Apellido\(s\) \/ Paterno/i), 'Garay');
-
-      // 3. Invalid & placeholder email
       const emailInput = screen.getByLabelText(/Correo electrónico real/i);
       await user.type(emailInput, 'correo-invalido');
       await user.click(sendCodeBtn());
@@ -128,14 +186,12 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.clear(emailInput);
       await user.type(emailInput, 'cesar@gmail.com');
 
-      // 4. Invalid phone (0000000000 rejected; 1111111111 accepted as GestoPago test number)
       const telInput = screen.getByLabelText(/Teléfono móvil México/i);
       await user.type(telInput, '0000000000');
       await user.click(sendCodeBtn());
       await user.clear(telInput);
       await user.type(telInput, '1111111111');
 
-      // 5. Invalid usuario
       const usrInput = screen.getByLabelText(/^Usuario \*/i);
       await user.type(usrInput, 'ab');
       await user.click(sendCodeBtn());
@@ -143,7 +199,6 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.clear(usrInput);
       await user.type(usrInput, 'cesar_nuevo');
 
-      // 6. Weak password & mismatch + toggle register password visibility
       await user.click(screen.getByLabelText('Mostrar contraseña'));
       const passInput = screen.getByLabelText(/^Contraseña \*/i);
       const confInput = screen.getByLabelText(/Confirmar contraseña/i);
@@ -160,21 +215,23 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.clear(confInput);
       await user.type(confInput, 'Venta2026#');
 
-      // Step 1: First OTP send rejects, second transitions to Step 2
+      // Step 3 -> Step 4: First OTP send rejects, second transitions to Step 4
       await user.click(sendCodeBtn());
       await waitFor(() =>
-        expect(screen.getByText('El correo ya está registrado')).toBeInTheDocument()
+        expect(
+          screen.getByText('La CURP ingresada ya se encuentra registrada')
+        ).toBeInTheDocument()
       );
 
       await user.click(sendCodeBtn());
       await waitFor(() =>
-        expect(screen.getByText(/Verifica tu correo \(2FA\)/i)).toBeInTheDocument()
+        expect(screen.getByText(/Verifica tu Correo Electrónico \(2FA\)/i)).toBeInTheDocument()
       );
 
-      // Step 2: Resend code, edit back & return, then verify OTP
+      // Step 4: Resend code, edit back & return, then verify OTP
       await user.click(screen.getByRole('button', { name: /Reenviar código/i }));
       await waitFor(() =>
-        expect(screen.getByText(/Se envió un nuevo código/i)).toBeInTheDocument()
+        expect(screen.getByText(/Se envió un nuevo código 2FA/i)).toBeInTheDocument()
       );
 
       await user.click(screen.getByRole('button', { name: /Editar datos/i }));
@@ -195,11 +252,14 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(registerMock).toHaveBeenCalledTimes(2);
       expect(registerMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
+          curp: expect.stringMatching(/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/),
+          rfc: expect.stringMatching(/^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/),
           telefonoMovil: '1111111111',
+          codigoPostal: '06600',
           codigoVerificacion: '123456',
         })
       );
-    }, 20000);
+    }, 25000);
   });
 
   describe('CatalogPage Component', () => {
@@ -282,9 +342,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
 
-      // Verify Premium Banking Card renders and its refresh button works
+      // Verify Premium Banking Card renders and its refresh & copy buttons work
       expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
       await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
+      await user.click(screen.getByLabelText('Copiar número de cuenta'));
 
       // Filter by frontType Recargas and Pago de Servicios
       await user.click(screen.getByRole('button', { name: /^Recargas$/i }));
@@ -352,9 +413,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
 
-      // Verify Premium Banking Card renders and its refresh button works
+      // Verify Premium Banking Card renders and its refresh & copy buttons work
       expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
       await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
+      await user.click(screen.getByLabelText('Copiar número de cuenta'));
 
       const loadMoreBtn = screen.getByRole('button', { name: /Mostrar .* más/i });
       await user.click(loadMoreBtn);
@@ -485,9 +547,10 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         expect(screen.getByText('Paquete Sin Limite 20')).toBeInTheDocument()
       );
 
-      // Verify Premium Banking Card renders and its refresh button works
+      // Verify Premium Banking Card renders and its refresh & copy buttons work
       expect(screen.getByText(/PLATINUM • 2FA VERIFIED/i)).toBeInTheDocument();
       await user.click(screen.getByLabelText('Sincronizar saldo de tarjeta'));
+      await user.click(screen.getByLabelText('Copiar número de cuenta'));
 
       await user.click(screen.getByRole('button', { name: /Historial de Pagos/i }));
       await waitFor(() =>
@@ -531,6 +594,8 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
         apellidoPaterno: 'GARAY',
         apellidoMaterno: 'LOPEZ',
         nombreCompleto: 'CARLOS GARAY LOPEZ',
+        curp: 'GALC980515HDFRRL01',
+        rfc: 'GALC980515AB1',
         correo: 'carlos@gmail.com',
         telefonoMovil: '5512345678',
         numeroCuenta: '5225253189113705',
@@ -604,7 +669,11 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       const editDialog = screen.getByRole('dialog', { name: /Editar usuario/i });
       const textInputs = editDialog.querySelectorAll('input');
       for (const inp of Array.from(textInputs)) {
-        if (inp.type === 'text' || inp.type === 'email') {
+        if (inp.maxLength === 18) {
+          fireEvent.change(inp, { target: { value: 'GAGC980515HDFRRL01' } });
+        } else if (inp.maxLength === 13) {
+          fireEvent.change(inp, { target: { value: 'GAGC980515AB1' } });
+        } else if (inp.type === 'text' || inp.type === 'email') {
           fireEvent.change(inp, { target: { value: inp.value || 'NuevoValor123' } });
         } else if (inp.type === 'number') {
           fireEvent.change(inp, { target: { value: '950' } });

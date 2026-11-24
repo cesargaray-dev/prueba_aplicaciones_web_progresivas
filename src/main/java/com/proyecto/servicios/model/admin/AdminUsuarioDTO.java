@@ -31,6 +31,8 @@ public class AdminUsuarioDTO {
     private LocalDate fechaNacimiento;
 
     private String sexo;
+    private String nacionalidad;
+    private String estadoCivil;
     private String curp;
     private String rfc;
     private String correo;

@@ -80,6 +80,34 @@ void main() {
       expect(provider.filteredProducts.first.service, 'AT-T');
       expect(provider.filteredProducts.first.isRecarga, isTrue);
     });
+
+    test('valida CURP, RFC, CP y genera claves oficiales RENAPO/SAT', () {
+      expect(ValidationUtils.esCurpValida('GAGC990515HDFRRL01'), isTrue);
+      expect(ValidationUtils.esCurpValida('INVALID'), isFalse);
+      expect(ValidationUtils.diagnosticarCurp(''), isNotNull);
+      expect(ValidationUtils.diagnosticarCurp('GAGC990515HDFRRL01'), isNull);
+
+      expect(ValidationUtils.esRfcValido('GAGC990515AB1'), isTrue);
+      expect(ValidationUtils.esRfcValido('BAD'), isFalse);
+      expect(ValidationUtils.diagnosticarRfc(''), isNotNull);
+      expect(ValidationUtils.diagnosticarRfc('GAGC990515AB1'), isNull);
+
+      expect(ValidationUtils.esCodigoPostalValido('06600'), isTrue);
+      expect(ValidationUtils.esCodigoPostalValido('00000'), isFalse);
+
+      final gen = ValidationUtils.generarCurpYRfcSugeridos(
+        nombre: 'José',
+        segundoNombre: 'César',
+        apellidoPaterno: 'Garay',
+        apellidoMaterno: 'García',
+        fechaNacimiento: '2001-05-15',
+        sexo: 'HOMBRE',
+        estadoCodigo: 'DF',
+      );
+      expect(gen, isNotNull);
+      expect(ValidationUtils.esCurpValida(gen!.curp), isTrue);
+      expect(ValidationUtils.esRfcValido(gen.rfc), isTrue);
+    });
   });
 
   group('ValidationUtils & ProductItem - Clasificación GestoPago', () {

@@ -1,15 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import {
+  diagnosticarCurp,
+  diagnosticarRfc,
   diagnosticarTelefono,
+  esCodigoPostalValido,
   esConsultaSaldo,
   esContrasenaSegura,
   esCorreoPlaceholder,
   esCorreoValido,
+  esCurpValida,
+  esItemHistorialRecarga,
   esMayorDeEdad,
   esNombreValido,
   esRecargaTelefonica,
+  esRfcValido,
   esTelefonoMexicanoValido,
   esUsuarioValido,
+  generarCurpYRfcSugeridos,
   getMaxBirthDateIso,
   getProductCategoryName,
   normalizarBusquedaCatalogo,
@@ -92,5 +99,59 @@ describe('Validation & Catalog Classification Suite', () => {
     expect(esMayorDeEdad('1900-01-01', refDate)).toBe(false);
     expect(esMayorDeEdad('2000-02-30', refDate)).toBe(false);
     expect(esMayorDeEdad('invalid', refDate)).toBe(false);
+  });
+
+  it('validates CURP, RFC, Postal Codes, generates official RENAPO/SAT keys, and classifies 1111111111 history recharges', () => {
+    expect(esCurpValida('GAGC990515HDFRRL01')).toBe(true);
+    expect(esCurpValida('INVALID')).toBe(false);
+    expect(diagnosticarCurp('')).toContain('obligatoria');
+    expect(diagnosticarCurp('ABC')).toContain('18 caracteres');
+    expect(diagnosticarCurp('123456789012345678')).toContain('Formato de CURP');
+    expect(diagnosticarCurp('GAGC990515HDFRRL01')).toBeNull();
+
+    expect(esRfcValido('GAGC990515AB1')).toBe(true);
+    expect(esRfcValido('BAD')).toBe(false);
+    expect(diagnosticarRfc('')).toContain('obligatorio');
+    expect(diagnosticarRfc('ABC')).toContain('13 caracteres');
+    expect(diagnosticarRfc('1234567890123')).toContain('Formato de RFC');
+    expect(diagnosticarRfc('GAGC990515AB1')).toBeNull();
+
+    expect(esCodigoPostalValido('06600')).toBe(true);
+    expect(esCodigoPostalValido('00000')).toBe(false);
+    expect(esCodigoPostalValido('123')).toBe(false);
+
+    const suggested = generarCurpYRfcSugeridos({
+      nombre: 'José',
+      segundoNombre: 'César',
+      apellidoPaterno: 'Garay',
+      apellidoMaterno: 'García',
+      fechaNacimiento: '2001-05-15',
+      sexo: 'HOMBRE',
+      estadoCodigo: 'DF',
+    });
+    expect(suggested).not.toBeNull();
+    expect(esCurpValida(suggested!.curp)).toBe(true);
+    expect(esRfcValido(suggested!.rfc)).toBe(true);
+    expect(
+      generarCurpYRfcSugeridos({ nombre: '', apellidoPaterno: 'Garay', fechaNacimiento: '1999-01-01' })
+    ).toBeNull();
+
+    // History classification with 1111111111 vs service payment
+    expect(
+      esItemHistorialRecarga({
+        telefono: '1111111111',
+        referencia: '1111111111',
+        servicio: 'AT-T',
+        producto: 'Recarga $100',
+      })
+    ).toBe(true);
+    expect(
+      esItemHistorialRecarga({
+        telefono: '1111111111',
+        referencia: '012345678912',
+        servicio: 'CFE',
+        producto: 'Recibo CFE',
+      })
+    ).toBe(false);
   });
 });

@@ -14,6 +14,24 @@ export interface LoginResponse {
   nombreCompleto: string;
   email: string;
   telefonoMovil?: string;
+  telefonoAlternativo?: string;
+  curp?: string;
+  rfc?: string;
+  fechaNacimiento?: string;
+  sexo?: string;
+  nacionalidad?: string;
+  estadoCivil?: string;
+  ocupacion?: string;
+  empresa?: string;
+  ingresoMensual?: number;
+  calle?: string;
+  numeroExterior?: string;
+  numeroInterior?: string;
+  colonia?: string;
+  municipio?: string;
+  estado?: string;
+  codigoPostal?: string;
+  pais?: string;
   numeroCuenta: string;
   saldo: number;
   ultimoAcceso?: string;
@@ -29,11 +47,27 @@ export interface RegisterRequest {
   apellidoPaterno: string;
   apellidoMaterno?: string;
   fechaNacimiento?: string;
+  sexo?: 'HOMBRE' | 'MUJER';
+  nacionalidad?: string;
+  estadoCivil?: string;
+  curp?: string;
+  rfc?: string;
   correo: string;
   telefonoMovil: string;
+  telefonoAlternativo?: string;
+  ocupacion?: string;
+  empresa?: string;
+  ingresoMensual?: number;
+  calle?: string;
+  numeroExterior?: string;
+  numeroInterior?: string;
+  colonia?: string;
+  municipio?: string;
+  estado?: string;
+  codigoPostal?: string;
+  pais?: string;
   usuario: string;
   contrasena: string;
-  sexo?: 'HOMBRE' | 'MUJER';
   codigoVerificacion?: string;
 }
 
@@ -41,6 +75,8 @@ export interface EnviarCodigoRegistroRequest {
   correo: string;
   nombre?: string;
   usuario?: string;
+  curp?: string;
+  rfc?: string;
 }
 
 export interface EnviarCodigoRegistroResponse {
@@ -58,6 +94,15 @@ export interface ActualizarContactoRequest {
   apellidoMaterno?: string;
   correo: string;
   telefonoMovil: string;
+  ocupacion?: string;
+  empresa?: string;
+  calle?: string;
+  numeroExterior?: string;
+  numeroInterior?: string;
+  colonia?: string;
+  municipio?: string;
+  estado?: string;
+  codigoPostal?: string;
 }
 
 export interface CambiarContrasenaRequest {
@@ -84,6 +129,24 @@ export interface UserProfile {
   nombreCompleto: string;
   email: string;
   telefonoMovil?: string;
+  telefonoAlternativo?: string;
+  curp?: string;
+  rfc?: string;
+  fechaNacimiento?: string;
+  sexo?: string;
+  nacionalidad?: string;
+  estadoCivil?: string;
+  ocupacion?: string;
+  empresa?: string;
+  ingresoMensual?: number;
+  calle?: string;
+  numeroExterior?: string;
+  numeroInterior?: string;
+  colonia?: string;
+  municipio?: string;
+  estado?: string;
+  codigoPostal?: string;
+  pais?: string;
   numeroCuenta: string;
   saldo: number;
   ultimoAcceso?: string;
@@ -107,6 +170,8 @@ export interface AdminUserItem {
   nombreCompleto: string;
   fechaNacimiento?: string;
   sexo?: string;
+  nacionalidad?: string;
+  estadoCivil?: string;
   curp?: string;
   rfc?: string;
   correo: string;
@@ -127,6 +192,11 @@ export interface AdminUpdateUserRequest {
   segundoNombre?: string;
   apellidoPaterno?: string;
   apellidoMaterno?: string;
+  curp?: string;
+  rfc?: string;
+  sexo?: string;
+  nacionalidad?: string;
+  estadoCivil?: string;
   correo?: string;
   telefonoMovil?: string;
   usuario?: string;

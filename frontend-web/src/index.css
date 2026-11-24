@@ -16,14 +16,21 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background-color: #f8fafc;
+  background-image:
+    radial-gradient(ellipse at 15% 0%, rgba(37, 99, 235, 0.06), transparent 50%),
+    radial-gradient(ellipse at 85% 5%, rgba(245, 158, 11, 0.05), transparent 45%);
   color: #0f172a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition: background-color 220ms ease, color 220ms ease;
 }
 
 html.dark body,
 html.dark .bg-slate-50 {
-  background-color: #060b16 !important;
-  background-image: radial-gradient(ellipse at 50% 0%, rgba(29, 78, 216, 0.16), transparent 65%);
+  background-color: #050a15 !important;
+  background-image:
+    radial-gradient(ellipse at 50% 0%, rgba(29, 78, 216, 0.18), transparent 62%),
+    radial-gradient(ellipse at 85% 15%, rgba(245, 158, 11, 0.08), transparent 45%);
   color: #f8fafc;
 }
 
@@ -206,6 +213,7 @@ html.dark .text-indigo-700 {
 
 html.dark input:not(.bg-transparent):not([type="checkbox"]),
 html.dark select,
+html.dark select option,
 html.dark textarea {
   background-color: #091122 !important;
   color: #f8fafc !important;

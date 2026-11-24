@@ -86,6 +86,8 @@ class _FakeAuthService extends AuthService {
   bool biometricRegisteredOnServer = false;
   String? lastRegisteredToken;
   String? lastRegistrationCode;
+  String? lastCurp;
+  String? lastRfc;
   int sendCodeCalls = 0;
   int keepAliveCalls = 0;
 
@@ -94,6 +96,8 @@ class _FakeAuthService extends AuthService {
     required String correo,
     String? nombre,
     String? usuario,
+    String? curp,
+    String? rfc,
   }) async {
     sendCodeCalls++;
     return {
@@ -119,6 +123,8 @@ class _FakeAuthService extends AuthService {
       nombreCompleto: 'César Garay',
       email: 'cesar@gmail.com',
       telefonoMovil: '5512345678',
+      curp: 'GAGC990515HDFRRL01',
+      rfc: 'GAGC990515AB1',
       numeroCuenta: '5915019417993769',
       saldo: 500.0,
     );
@@ -132,13 +138,31 @@ class _FakeAuthService extends AuthService {
     String apellidoMaterno = '',
     String fechaNacimiento = '1995-01-01',
     String sexo = 'HOMBRE',
+    String? nacionalidad,
+    String? estadoCivil,
+    String? curp,
+    String? rfc,
+    String? ocupacion,
+    String? empresa,
+    double? ingresoMensual,
+    String? calle,
+    String? numeroExterior,
+    String? numeroInterior,
+    String? colonia,
+    String? codigoPostal,
+    String? municipio,
+    String? estado,
+    String? pais,
     required String correo,
     required String telefonoMovil,
+    String? telefonoAlternativo,
     required String usuario,
     required String contrasena,
     String? codigoVerificacion,
   }) async {
     lastRegistrationCode = codigoVerificacion;
+    lastCurp = curp;
+    lastRfc = rfc;
     return UserSession(
       token: 'jwt-reg-1',
       usuario: usuario,
@@ -150,6 +174,8 @@ class _FakeAuthService extends AuthService {
       nombreCompleto: '$nombre $apellidoPaterno $apellidoMaterno',
       email: correo,
       telefonoMovil: telefonoMovil,
+      curp: curp,
+      rfc: rfc,
       numeroCuenta: '5111222233334444',
       saldo: 200.0,
     );
@@ -647,6 +673,8 @@ void main() {
       expect(find.text('Editar @carlos98'), findsOneWidget);
 
       final saveBtn = find.text('Guardar Cambios');
+      await tester.ensureVisible(saveBtn);
+      await tester.pumpAndSettle();
       await tester.tap(saveBtn);
       await tester.tap(saveBtn, warnIfMissed: false);
       await tester.pumpAndSettle();
@@ -741,7 +769,7 @@ void main() {
       expect(find.text('Valida la Referencia para Continuar'), findsOneWidget);
       expect(find.text('Usar mi celular (5512345678)'), findsOneWidget);
 
-      // 3. LoginScreen Crear Cuenta no solicita CURP, nacionalidad, fecha de nacimiento ni sexo
+      // 3. LoginScreen Crear Cuenta incluye expediente KYC completo (Identidad, CURP y RFC)
       await tester.pumpWidget(
         ChangeNotifierProvider<AuthProvider>.value(
           value: auth,
@@ -758,18 +786,16 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nombre *'), findsOneWidget);
-      expect(find.text('Apellido(s) *'), findsOneWidget);
-      expect(find.text('CURP'), findsNothing);
-      expect(find.text('Nacionalidad'), findsNothing);
-      expect(find.text('Nacimiento *'), findsNothing);
-      expect(find.text('Sexo'), findsNothing);
+      expect(find.text('Apellido paterno *'), findsOneWidget);
+      expect(find.text('Apellido materno *'), findsOneWidget);
+      expect(find.text('Nacionalidad *'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       auth.dispose();
     });
 
     testWidgets(
-        'LoginScreen ejecuta registro en 2 pasos con 2FA al correo y acepta teléfono 1111111111',
+        'LoginScreen ejecuta registro KYC en 4 pasos (Identidad, CURP/RFC/Domicilio, Acceso, 2FA) y acepta 1111111111',
         (WidgetTester tester) async {
       final fakeBio = _FakeBiometricService(
         availability: const BiometricAvailability(
@@ -798,8 +824,41 @@ void main() {
       await tester.tap(find.text('Crear Cuenta'));
       await tester.pumpAndSettle();
 
+      // Paso 1: Identidad
       await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'Cesar');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido(s) *'), 'Garay');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido paterno *'), 'Garay');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido materno *'), 'Garcia');
+
+      final next1 = find.text('Continuar a Datos Fiscales');
+      await tester.ensureVisible(next1);
+      await tester.tap(next1);
+      await tester.pumpAndSettle();
+
+      // Paso 2: Fiscal (CURP y RFC autocalculados) + Domicilio
+      expect(find.text('CURP (18 caracteres) *'), findsOneWidget);
+      expect(find.text('RFC con Homoclave (13) *'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Calle y Avenida *'),
+        'Av. Paseo de la Reforma',
+      );
+      await tester.enterText(find.widgetWithText(TextFormField, 'Núm. Ext. *'), '250');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Colonia *'), 'Juarez');
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Código Postal (5 díg) *'),
+        '06600',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Municipio / Alcaldía *'),
+        'Cuauhtemoc',
+      );
+
+      final next2 = find.text('Continuar a Contacto y Acceso');
+      await tester.ensureVisible(next2);
+      await tester.tap(next2);
+      await tester.pumpAndSettle();
+
+      // Paso 3: Contacto y Credenciales
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Correo electrónico real (para 2FA y recibos) *'),
         'cesar@gmail.com',
@@ -826,6 +885,7 @@ void main() {
       await tester.tap(sendBtn);
       await tester.pumpAndSettle();
 
+      // Paso 4: OTP 2FA
       expect(fakeAuthSvc.sendCodeCalls, 1);
       expect(find.text('Verifica tu correo (2FA)'), findsOneWidget);
       expect(find.text('cesar@gmail.com'), findsOneWidget);
@@ -839,6 +899,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(fakeAuthSvc.lastRegistrationCode, '654321');
+      expect(fakeAuthSvc.lastCurp?.length, 18);
+      expect(fakeAuthSvc.lastRfc?.length, 13);
       expect(auth.isAuthenticated, isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());

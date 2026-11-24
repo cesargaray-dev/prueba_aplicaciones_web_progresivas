@@ -30,4 +30,16 @@ public class EnviarCodigoRegistroRequestDTO {
 
     @Size(max = 50, message = "El usuario no debe exceder 50 caracteres")
     private String usuario;
+
+    @Size(max = 18, message = "La CURP no debe exceder 18 caracteres")
+    private String curp;
+
+    @Size(max = 13, message = "El RFC no debe exceder 13 caracteres")
+    private String rfc;
+
+    public EnviarCodigoRegistroRequestDTO(String correo, String nombre, String usuario) {
+        this.correo = correo;
+        this.nombre = nombre;
+        this.usuario = usuario;
+    }
 }

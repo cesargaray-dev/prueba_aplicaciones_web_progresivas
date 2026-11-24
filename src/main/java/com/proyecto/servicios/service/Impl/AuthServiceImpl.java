@@ -278,6 +278,7 @@ public class AuthServiceImpl implements AuthService {
         Cuenta cuenta = obtenerCuentaCliente(cliente);
         BigDecimal saldo = obtenerSaldoCuenta(cuenta);
         boolean isAdmin = esUsuarioAdmin(login.getUsuario());
+        var dom = cliente.getDomicilio();
 
         return UserProfileDTO.builder()
                 .clienteId(cliente.getId())
@@ -289,6 +290,24 @@ public class AuthServiceImpl implements AuthService {
                 .nombreCompleto(construirNombreCompleto(cliente))
                 .email(cliente.getCorreo())
                 .telefonoMovil(cliente.getTelefonoMovil())
+                .telefonoAlternativo(cliente.getTelefonoAlternativo())
+                .curp(cliente.getCurp())
+                .rfc(cliente.getRfc())
+                .fechaNacimiento(cliente.getFechaNacimiento() != null ? cliente.getFechaNacimiento().toString() : null)
+                .sexo(cliente.getSexo())
+                .nacionalidad(cliente.getNacionalidad())
+                .estadoCivil(cliente.getEstadoCivil())
+                .ocupacion(cliente.getOcupacion())
+                .empresa(cliente.getEmpresa())
+                .ingresoMensual(cliente.getIngresoMensual())
+                .calle(dom != null ? dom.getCalle() : null)
+                .numeroExterior(dom != null ? dom.getNumeroExterior() : null)
+                .numeroInterior(dom != null ? dom.getNumeroInterior() : null)
+                .colonia(dom != null ? dom.getColonia() : null)
+                .municipio(dom != null ? dom.getMunicipio() : null)
+                .estado(dom != null ? dom.getEstado() : null)
+                .codigoPostal(dom != null ? dom.getCodigoPostal() : null)
+                .pais(dom != null ? dom.getPais() : null)
                 .numeroCuenta(cuenta != null ? cuenta.getNumeroCuenta() : null)
                 .saldo(saldo)
                 .activo(cliente.getActivo())

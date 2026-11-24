@@ -30,6 +30,8 @@ import {
   Wifi,
   PlusCircle,
   ShieldCheck,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 const PAGE_SIZE = 24;
@@ -115,6 +117,7 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onGoToHistory }) => {
   const { user, refreshBalance } = useAuth();
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [copiedCardNumber, setCopiedCardNumber] = useState(false);
 
   const [products, setProducts] = useState<ProductDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -416,9 +419,38 @@ export const CatalogPage: React.FC<CatalogPageProps> = ({ onGoToHistory }) => {
                   <p className="text-sm font-extrabold uppercase tracking-wider text-white truncate drop-shadow-sm mt-0.5">
                     {user.nombreCompleto}
                   </p>
-                  <p className="text-xs sm:text-[13px] font-mono font-bold tracking-[0.22em] text-amber-200 mt-1">
-                    {maskedAccount}
-                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-xs sm:text-[13px] font-mono font-bold tracking-[0.22em] text-amber-200">
+                      {maskedAccount}
+                    </p>
+                    {user.numeroCuenta && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(user.numeroCuenta).then(() => {
+                            setCopiedCardNumber(true);
+                            setTimeout(() => setCopiedCardNumber(false), 1800);
+                          });
+                        }}
+                        title="Copiar número de cuenta completo"
+                        aria-label="Copiar número de cuenta"
+                        className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-amber-200 transition-colors"
+                      >
+                        {copiedCardNumber ? (
+                          <Check className="w-3 h-3 text-emerald-300" />
+                        ) : (
+                          <Copy className="w-3 h-3" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                  {(user.curp || user.rfc) && (
+                    <p className="text-[10px] font-mono text-blue-200/80 mt-0.5 truncate">
+                      {user.curp ? `CURP: ${user.curp}` : ''}
+                      {user.curp && user.rfc ? ' · ' : ''}
+                      {user.rfc ? `RFC: ${user.rfc}` : ''}
+                    </p>
+                  )}
                 </div>
 
                 {/* Dual-Circle Metallic Network Emblem */}

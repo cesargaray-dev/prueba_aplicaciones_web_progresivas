@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
@@ -507,16 +508,69 @@ class BankingCard extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(height: 4),
-                            Text(
-                              session.maskedAccount,
-                              style: const TextStyle(
-                                color: Color(0xFFFDE68A),
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 2.4,
-                                fontFamily: 'monospace',
-                              ),
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    session.maskedAccount,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Color(0xFFFDE68A),
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 2.2,
+                                      fontFamily: 'monospace',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () {
+                                    Clipboard.setData(ClipboardData(text: session.numeroCuenta));
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Número de cuenta copiado al portapapeles'),
+                                        behavior: SnackBarBehavior.floating,
+                                        duration: Duration(seconds: 2),
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: 0.12),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: const Icon(
+                                      Icons.copy_rounded,
+                                      size: 13,
+                                      color: Color(0xFFFDE68A),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
+                            if ((session.curp != null && session.curp!.isNotEmpty) ||
+                                (session.rfc != null && session.rfc!.isNotEmpty)) ...[
+                              const SizedBox(height: 3),
+                              Text(
+                                [
+                                  if (session.curp != null && session.curp!.isNotEmpty)
+                                    'CURP: ${session.curp}',
+                                  if (session.rfc != null && session.rfc!.isNotEmpty)
+                                    'RFC: ${session.rfc}',
+                                ].join(' · '),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.72),
+                                  fontSize: 10,
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),

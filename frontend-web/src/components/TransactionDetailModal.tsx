@@ -18,7 +18,7 @@ import type { ItemHistorialPago } from '../types/history';
 import { useAuth } from '../context/useAuth';
 import { paymentApi } from '../api/paymentApi';
 import { BrandLogo } from './BrandLogo';
-import { esCorreoPlaceholder, esCorreoValido } from '../utils/validation';
+import { esCorreoPlaceholder, esCorreoValido, esItemHistorialRecarga } from '../utils/validation';
 
 interface TransactionDetailModalProps {
   item: ItemHistorialPago | null;
@@ -77,9 +77,7 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
   };
 
   const statusInfo = getStatusDisplay(item.estado);
-  const isRecargaMovil =
-    Boolean(item.telefono && item.telefono !== '1111111111') &&
-    (!item.referencia || item.referencia === item.telefono);
+  const isRecargaMovil = esItemHistorialRecarga(item);
 
   const handleCopyFolio = async () => {
     try {

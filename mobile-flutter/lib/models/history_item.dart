@@ -1,3 +1,5 @@
+import '../utils/validation_utils.dart';
+
 class HistoryItem {
   final int idPago;
   final String folioTicket;
@@ -80,15 +82,17 @@ class HistoryItem {
     );
   }
 
-  bool get isRecarga =>
-      telefono.isNotEmpty &&
-      telefono != '1111111111' &&
-      (referencia.isEmpty || referencia == telefono);
+  bool get isRecarga => ValidationUtils.esItemHistorialRecarga(
+        telefono: telefono,
+        referencia: referencia,
+        servicio: servicio,
+        producto: producto,
+      );
 
   String get destinoDisplay {
     if (isRecarga) return telefono;
     if (referencia.isNotEmpty) return referencia;
-    if (telefono.isNotEmpty && telefono != '1111111111') return telefono;
+    if (telefono.isNotEmpty && telefono != ValidationUtils.telefonoPruebaGestoPago) return telefono;
     return '—';
   }
 

@@ -4,6 +4,7 @@ import { historyApi } from '../api/historyApi';
 import type { ItemHistorialPago } from '../types/history';
 import { BrandLogo } from '../components/BrandLogo';
 import { TransactionDetailModal } from '../components/TransactionDetailModal';
+import { esItemHistorialRecarga } from '../utils/validation';
 import {
   Search,
   RefreshCw,
@@ -24,11 +25,7 @@ interface HistoryPageProps {
 
 type HistoryTypeFilter = 'ALL' | 'RECARGAS' | 'SERVICIOS';
 
-const isRecargaItem = (p: ItemHistorialPago): boolean => {
-  const tel = (p.telefono || '').trim();
-  const ref = (p.referencia || '').trim();
-  return Boolean(tel && tel !== '1111111111') && (!ref || ref === tel);
-};
+const isRecargaItem = (p: ItemHistorialPago): boolean => esItemHistorialRecarga(p);
 
 const getDestinoLabel = (p: ItemHistorialPago): string => {
   if (isRecargaItem(p)) {

@@ -145,6 +145,24 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
                 throw new ValidacionException("El nombre de usuario '" + usuario + "' ya se encuentra en uso.");
             }
         }
+        if (request.getCurp() != null && !request.getCurp().isBlank()) {
+            String curp = request.getCurp().trim().toUpperCase(Locale.ROOT);
+            if (!curp.matches("^[A-Z]{4}\\d{6}[HM][A-Z]{5}[A-Z\\d]\\d$")) {
+                throw new ValidacionException("El formato de la CURP es inválido (debe tener 18 caracteres oficiales).");
+            }
+            if (clienteRepository.existsByCurp(curp)) {
+                throw new CurpDuplicadaException("La CURP ingresada ya se encuentra registrada en otra cuenta.");
+            }
+        }
+        if (request.getRfc() != null && !request.getRfc().isBlank()) {
+            String rfc = request.getRfc().trim().toUpperCase(Locale.ROOT);
+            if (!rfc.matches("^[A-ZÑ&]{3,4}\\d{6}[A-Z\\d]{3}$")) {
+                throw new ValidacionException("El formato del RFC es inválido (debe tener 12 o 13 caracteres con homoclave).");
+            }
+            if (clienteRepository.existsByRfc(rfc)) {
+                throw new RfcDuplicadoException("El RFC ingresado ya se encuentra registrado en otra cuenta.");
+            }
+        }
 
         String codigo = String.valueOf(RANDOM.nextInt(900_000) + 100_000);
         String nombreSaludo = request.getNombre() != null ? request.getNombre().trim() : "";
@@ -328,6 +346,37 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             }
             cliente.setApellidoMaterno(apMatClean);
         }
+        if (request.getOcupacion() != null && !request.getOcupacion().isBlank()) {
+            cliente.setOcupacion(request.getOcupacion().trim().toUpperCase(Locale.ROOT));
+        }
+        if (request.getEmpresa() != null && !request.getEmpresa().isBlank()) {
+            cliente.setEmpresa(request.getEmpresa().trim().toUpperCase(Locale.ROOT));
+        }
+        Domicilio dom = cliente.getDomicilio();
+        if (dom != null) {
+            if (request.getCalle() != null && !request.getCalle().isBlank()) {
+                dom.setCalle(request.getCalle().trim());
+            }
+            if (request.getNumeroExterior() != null && !request.getNumeroExterior().isBlank()) {
+                dom.setNumeroExterior(request.getNumeroExterior().trim());
+            }
+            if (request.getNumeroInterior() != null) {
+                String ni = request.getNumeroInterior().trim();
+                dom.setNumeroInterior(ni.isEmpty() ? null : ni);
+            }
+            if (request.getColonia() != null && !request.getColonia().isBlank()) {
+                dom.setColonia(request.getColonia().trim());
+            }
+            if (request.getMunicipio() != null && !request.getMunicipio().isBlank()) {
+                dom.setMunicipio(request.getMunicipio().trim());
+            }
+            if (request.getEstado() != null && !request.getEstado().isBlank()) {
+                dom.setEstado(request.getEstado().trim());
+            }
+            if (request.getCodigoPostal() != null && !request.getCodigoPostal().isBlank()) {
+                dom.setCodigoPostal(request.getCodigoPostal().trim());
+            }
+        }
 
         clienteRepository.save(cliente);
 
@@ -471,6 +520,15 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         String rfc = resolverRfcUnico(request.getRfc(), curp);
         String numeroCuenta = generarNumeroCuentaUnico();
 
+        String nacionalidad = textoONull(request.getNacionalidad());
+        String estadoCivil = textoONull(request.getEstadoCivil());
+        String ocupacion = textoONull(request.getOcupacion());
+        String empresa = textoONull(request.getEmpresa());
+        String telAlt = textoONull(request.getTelefonoAlternativo());
+        BigDecimal ingreso = (request.getIngresoMensual() != null && request.getIngresoMensual().compareTo(BigDecimal.ZERO) > 0)
+                ? request.getIngresoMensual().setScale(2, RoundingMode.HALF_UP)
+                : new BigDecimal("15000.00");
+
         Cliente cliente = new Cliente();
         cliente.setNombre(nombre);
         cliente.setSegundoNombre(segundoNombre);
@@ -480,24 +538,35 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         cliente.setRfc(rfc);
         cliente.setFechaNacimiento(fechaNacimiento);
         cliente.setSexo(sexo);
-        cliente.setNacionalidad("MEXICANA");
-        cliente.setEstadoCivil("SOLTERO");
-        cliente.setOcupacion("PARTICULAR");
-        cliente.setEmpresa("INDEPENDIENTE");
-        cliente.setIngresoMensual(new BigDecimal("15000.00"));
+        cliente.setNacionalidad(nacionalidad != null ? nacionalidad.toUpperCase(Locale.ROOT) : "MEXICANA");
+        cliente.setEstadoCivil(estadoCivil != null ? estadoCivil.toUpperCase(Locale.ROOT) : "SOLTERO");
+        cliente.setOcupacion(ocupacion != null ? ocupacion.toUpperCase(Locale.ROOT) : "PARTICULAR");
+        cliente.setEmpresa(empresa != null ? empresa.toUpperCase(Locale.ROOT) : "INDEPENDIENTE");
+        cliente.setIngresoMensual(ingreso);
         cliente.setCorreo(correo);
         cliente.setTelefonoMovil(telefono);
+        cliente.setTelefonoAlternativo(telAlt);
         cliente.setActivo(true);
+
+        String calle = textoONull(request.getCalle());
+        String numExt = textoONull(request.getNumeroExterior());
+        String numInt = textoONull(request.getNumeroInterior());
+        String colonia = textoONull(request.getColonia());
+        String municipio = textoONull(request.getMunicipio());
+        String estado = textoONull(request.getEstado());
+        String cp = textoONull(request.getCodigoPostal());
+        String pais = textoONull(request.getPais());
 
         Domicilio domicilio = new Domicilio();
         domicilio.setCliente(cliente);
-        domicilio.setCalle("Av. Reforma Digital");
-        domicilio.setNumeroExterior("100");
-        domicilio.setColonia("Centro");
-        domicilio.setMunicipio("Cuauhtémoc");
-        domicilio.setEstado("Ciudad de México");
-        domicilio.setCodigoPostal("06000");
-        domicilio.setPais("México");
+        domicilio.setCalle(calle != null ? calle : "Av. Reforma Digital");
+        domicilio.setNumeroExterior(numExt != null ? numExt : "100");
+        domicilio.setNumeroInterior(numInt);
+        domicilio.setColonia(colonia != null ? colonia : "Centro");
+        domicilio.setMunicipio(municipio != null ? municipio : "Cuauhtémoc");
+        domicilio.setEstado(estado != null ? estado : "Ciudad de México");
+        domicilio.setCodigoPostal(cp != null ? cp : "06000");
+        domicilio.setPais(pais != null ? pais : "México");
         domicilio.setActivo(true);
         cliente.setDomicilio(domicilio);
 
@@ -646,6 +715,14 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             }
         }
         return 'X';
+    }
+
+    private static String textoONull(String valor) {
+        if (valor == null) {
+            return null;
+        }
+        String t = valor.trim();
+        return t.isEmpty() ? null : t;
     }
 
     private record RegistroPersistido(Cliente cliente, Cuenta cuenta, BigDecimal saldoInicialAplicado) {

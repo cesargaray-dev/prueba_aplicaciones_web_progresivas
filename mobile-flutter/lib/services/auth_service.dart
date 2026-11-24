@@ -27,6 +27,8 @@ class AuthService {
     required String correo,
     String? nombre,
     String? usuario,
+    String? curp,
+    String? rfc,
   }) async {
     final response = await _client.post(
       '/api/v1/auth/register/enviar-codigo',
@@ -34,6 +36,8 @@ class AuthService {
         'correo': correo.trim(),
         if (nombre != null && nombre.trim().isNotEmpty) 'nombre': nombre.trim(),
         if (usuario != null && usuario.trim().isNotEmpty) 'usuario': usuario.trim(),
+        if (curp != null && curp.trim().isNotEmpty) 'curp': curp.trim().toUpperCase(),
+        if (rfc != null && rfc.trim().isNotEmpty) 'rfc': rfc.trim().toUpperCase(),
       },
     );
     if (response is Map<String, dynamic>) {
@@ -49,8 +53,24 @@ class AuthService {
     String apellidoMaterno = '',
     String fechaNacimiento = '1995-01-01',
     String sexo = 'HOMBRE',
+    String? nacionalidad,
+    String? estadoCivil,
+    String? curp,
+    String? rfc,
+    String? ocupacion,
+    String? empresa,
+    double? ingresoMensual,
+    String? calle,
+    String? numeroExterior,
+    String? numeroInterior,
+    String? colonia,
+    String? codigoPostal,
+    String? municipio,
+    String? estado,
+    String? pais,
     required String correo,
     required String telefonoMovil,
+    String? telefonoAlternativo,
     required String usuario,
     required String contrasena,
     String? codigoVerificacion,
@@ -69,8 +89,30 @@ class AuthService {
         if (cleanMaterno.isNotEmpty) 'apellidoMaterno': cleanMaterno,
         if (cleanFecha.isNotEmpty) 'fechaNacimiento': cleanFecha,
         if (cleanSexo.isNotEmpty) 'sexo': cleanSexo,
+        if (nacionalidad != null && nacionalidad.trim().isNotEmpty)
+          'nacionalidad': nacionalidad.trim(),
+        if (estadoCivil != null && estadoCivil.trim().isNotEmpty)
+          'estadoCivil': estadoCivil.trim(),
+        if (curp != null && curp.trim().isNotEmpty) 'curp': curp.trim().toUpperCase(),
+        if (rfc != null && rfc.trim().isNotEmpty) 'rfc': rfc.trim().toUpperCase(),
+        if (ocupacion != null && ocupacion.trim().isNotEmpty) 'ocupacion': ocupacion.trim(),
+        if (empresa != null && empresa.trim().isNotEmpty) 'empresa': empresa.trim(),
+        if (ingresoMensual != null && ingresoMensual > 0) 'ingresoMensual': ingresoMensual,
+        if (calle != null && calle.trim().isNotEmpty) 'calle': calle.trim(),
+        if (numeroExterior != null && numeroExterior.trim().isNotEmpty)
+          'numeroExterior': numeroExterior.trim(),
+        if (numeroInterior != null && numeroInterior.trim().isNotEmpty)
+          'numeroInterior': numeroInterior.trim(),
+        if (colonia != null && colonia.trim().isNotEmpty) 'colonia': colonia.trim(),
+        if (codigoPostal != null && codigoPostal.trim().isNotEmpty)
+          'codigoPostal': codigoPostal.trim(),
+        if (municipio != null && municipio.trim().isNotEmpty) 'municipio': municipio.trim(),
+        if (estado != null && estado.trim().isNotEmpty) 'estado': estado.trim(),
+        if (pais != null && pais.trim().isNotEmpty) 'pais': pais.trim(),
         'correo': correo.trim(),
         'telefonoMovil': telefonoMovil.trim(),
+        if (telefonoAlternativo != null && telefonoAlternativo.trim().isNotEmpty)
+          'telefonoAlternativo': telefonoAlternativo.trim(),
         'usuario': usuario.trim(),
         'contrasena': contrasena,
         if (cleanCode != null && cleanCode.isNotEmpty) 'codigoVerificacion': cleanCode,

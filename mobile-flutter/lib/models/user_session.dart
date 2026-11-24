@@ -9,6 +9,24 @@ class UserSession {
   final String nombreCompleto;
   final String email;
   final String? telefonoMovil;
+  final String? telefonoAlternativo;
+  final String? curp;
+  final String? rfc;
+  final String? fechaNacimiento;
+  final String? sexo;
+  final String? nacionalidad;
+  final String? estadoCivil;
+  final String? ocupacion;
+  final String? empresa;
+  final double? ingresoMensual;
+  final String? calle;
+  final String? numeroExterior;
+  final String? numeroInterior;
+  final String? colonia;
+  final String? municipio;
+  final String? estado;
+  final String? codigoPostal;
+  final String? pais;
   final String numeroCuenta;
   final double saldo;
   final String? ultimoAcceso;
@@ -28,6 +46,24 @@ class UserSession {
     required this.nombreCompleto,
     required this.email,
     this.telefonoMovil,
+    this.telefonoAlternativo,
+    this.curp,
+    this.rfc,
+    this.fechaNacimiento,
+    this.sexo,
+    this.nacionalidad,
+    this.estadoCivil,
+    this.ocupacion,
+    this.empresa,
+    this.ingresoMensual,
+    this.calle,
+    this.numeroExterior,
+    this.numeroInterior,
+    this.colonia,
+    this.municipio,
+    this.estado,
+    this.codigoPostal,
+    this.pais,
     required this.numeroCuenta,
     required this.saldo,
     this.ultimoAcceso,
@@ -55,6 +91,26 @@ class UserSession {
       nombreCompleto: (json['nombreCompleto'] ?? '').toString(),
       email: (json['email'] ?? '').toString(),
       telefonoMovil: json['telefonoMovil']?.toString(),
+      telefonoAlternativo: json['telefonoAlternativo']?.toString(),
+      curp: json['curp']?.toString(),
+      rfc: json['rfc']?.toString(),
+      fechaNacimiento: json['fechaNacimiento']?.toString(),
+      sexo: json['sexo']?.toString(),
+      nacionalidad: json['nacionalidad']?.toString(),
+      estadoCivil: json['estadoCivil']?.toString(),
+      ocupacion: json['ocupacion']?.toString(),
+      empresa: json['empresa']?.toString(),
+      ingresoMensual: json['ingresoMensual'] is num
+          ? (json['ingresoMensual'] as num).toDouble()
+          : double.tryParse(json['ingresoMensual']?.toString() ?? ''),
+      calle: json['calle']?.toString(),
+      numeroExterior: json['numeroExterior']?.toString(),
+      numeroInterior: json['numeroInterior']?.toString(),
+      colonia: json['colonia']?.toString(),
+      municipio: json['municipio']?.toString(),
+      estado: json['estado']?.toString(),
+      codigoPostal: json['codigoPostal']?.toString(),
+      pais: json['pais']?.toString(),
       numeroCuenta: (json['numeroCuenta'] ?? '').toString(),
       saldo: (json['saldo'] is num)
           ? (json['saldo'] as num).toDouble()
@@ -79,6 +135,24 @@ class UserSession {
       'nombreCompleto': nombreCompleto,
       'email': email,
       'telefonoMovil': telefonoMovil,
+      'telefonoAlternativo': telefonoAlternativo,
+      'curp': curp,
+      'rfc': rfc,
+      'fechaNacimiento': fechaNacimiento,
+      'sexo': sexo,
+      'nacionalidad': nacionalidad,
+      'estadoCivil': estadoCivil,
+      'ocupacion': ocupacion,
+      'empresa': empresa,
+      'ingresoMensual': ingresoMensual,
+      'calle': calle,
+      'numeroExterior': numeroExterior,
+      'numeroInterior': numeroInterior,
+      'colonia': colonia,
+      'municipio': municipio,
+      'estado': estado,
+      'codigoPostal': codigoPostal,
+      'pais': pais,
       'numeroCuenta': numeroCuenta,
       'saldo': saldo,
       'ultimoAcceso': ultimoAcceso,
@@ -100,6 +174,24 @@ class UserSession {
     String? nombreCompleto,
     String? email,
     String? telefonoMovil,
+    String? telefonoAlternativo,
+    String? curp,
+    String? rfc,
+    String? fechaNacimiento,
+    String? sexo,
+    String? nacionalidad,
+    String? estadoCivil,
+    String? ocupacion,
+    String? empresa,
+    double? ingresoMensual,
+    String? calle,
+    String? numeroExterior,
+    String? numeroInterior,
+    String? colonia,
+    String? municipio,
+    String? estado,
+    String? codigoPostal,
+    String? pais,
     String? numeroCuenta,
     double? saldo,
     String? ultimoAcceso,
@@ -119,6 +211,24 @@ class UserSession {
       nombreCompleto: nombreCompleto ?? this.nombreCompleto,
       email: email ?? this.email,
       telefonoMovil: telefonoMovil ?? this.telefonoMovil,
+      telefonoAlternativo: telefonoAlternativo ?? this.telefonoAlternativo,
+      curp: curp ?? this.curp,
+      rfc: rfc ?? this.rfc,
+      fechaNacimiento: fechaNacimiento ?? this.fechaNacimiento,
+      sexo: sexo ?? this.sexo,
+      nacionalidad: nacionalidad ?? this.nacionalidad,
+      estadoCivil: estadoCivil ?? this.estadoCivil,
+      ocupacion: ocupacion ?? this.ocupacion,
+      empresa: empresa ?? this.empresa,
+      ingresoMensual: ingresoMensual ?? this.ingresoMensual,
+      calle: calle ?? this.calle,
+      numeroExterior: numeroExterior ?? this.numeroExterior,
+      numeroInterior: numeroInterior ?? this.numeroInterior,
+      colonia: colonia ?? this.colonia,
+      municipio: municipio ?? this.municipio,
+      estado: estado ?? this.estado,
+      codigoPostal: codigoPostal ?? this.codigoPostal,
+      pais: pais ?? this.pais,
       numeroCuenta: numeroCuenta ?? this.numeroCuenta,
       saldo: saldo ?? this.saldo,
       ultimoAcceso: ultimoAcceso ?? this.ultimoAcceso,

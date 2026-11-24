@@ -70,11 +70,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
       final email = (u['correo'] ?? '').toString().toLowerCase();
       final tel = (u['telefonoMovil'] ?? '').toString();
       final cta = (u['numeroCuenta'] ?? '').toString();
+      final curp = (u['curp'] ?? '').toString().toLowerCase();
+      final rfc = (u['rfc'] ?? '').toString().toLowerCase();
       return name.contains(q) ||
           usr.contains(q) ||
           email.contains(q) ||
           tel.contains(q) ||
-          cta.contains(q);
+          cta.contains(q) ||
+          curp.contains(q) ||
+          rfc.contains(q);
     }).toList();
   }
 
@@ -507,6 +511,19 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                       color: AppTheme.textSecondary(context),
                                     ),
                                   ),
+                                  if ((u['curp'] ?? '').toString().isNotEmpty ||
+                                      (u['rfc'] ?? '').toString().isNotEmpty) ...[
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      'CURP: ${u['curp'] ?? '—'} · RFC: ${u['rfc'] ?? '—'}',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.w600,
+                                        color: AppTheme.brandAccent(context),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 8),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -596,6 +613,8 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
   late final TextEditingController _segundoCtrl;
   late final TextEditingController _paternoCtrl;
   late final TextEditingController _maternoCtrl;
+  late final TextEditingController _curpCtrl;
+  late final TextEditingController _rfcCtrl;
   late final TextEditingController _correoCtrl;
   late final TextEditingController _telCtrl;
   late final TextEditingController _usrCtrl;
@@ -616,6 +635,8 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
     _segundoCtrl = TextEditingController(text: (u['segundoNombre'] ?? '').toString());
     _paternoCtrl = TextEditingController(text: (u['apellidoPaterno'] ?? '').toString());
     _maternoCtrl = TextEditingController(text: (u['apellidoMaterno'] ?? '').toString());
+    _curpCtrl = TextEditingController(text: (u['curp'] ?? '').toString());
+    _rfcCtrl = TextEditingController(text: (u['rfc'] ?? '').toString());
     _correoCtrl = TextEditingController(text: (u['correo'] ?? '').toString());
     _telCtrl = TextEditingController(text: (u['telefonoMovil'] ?? '').toString());
     _usrCtrl = TextEditingController(text: (u['usuario'] ?? '').toString());
@@ -631,6 +652,8 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
     _segundoCtrl.dispose();
     _paternoCtrl.dispose();
     _maternoCtrl.dispose();
+    _curpCtrl.dispose();
+    _rfcCtrl.dispose();
     _correoCtrl.dispose();
     _telCtrl.dispose();
     _usrCtrl.dispose();
@@ -662,6 +685,8 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
       'segundoNombre': _segundoCtrl.text.trim(),
       'apellidoPaterno': _paternoCtrl.text.trim(),
       'apellidoMaterno': _maternoCtrl.text.trim(),
+      if (_curpCtrl.text.trim().isNotEmpty) 'curp': _curpCtrl.text.trim().toUpperCase(),
+      if (_rfcCtrl.text.trim().isNotEmpty) 'rfc': _rfcCtrl.text.trim().toUpperCase(),
       'correo': _correoCtrl.text.trim(),
       'telefonoMovil': _telCtrl.text.trim(),
       'usuario': _usrCtrl.text.trim(),
@@ -776,6 +801,34 @@ class _AdminEditUserSheetState extends State<_AdminEditUserSheet> {
                     child: TextField(
                       controller: _maternoCtrl,
                       decoration: const InputDecoration(labelText: 'Apellido Materno (opcional)'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _curpCtrl,
+                      maxLength: 18,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'CURP (18 car.)',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _rfcCtrl,
+                      maxLength: 13,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'RFC (13 car.)',
+                        counterText: '',
+                      ),
                     ),
                   ),
                 ],
@@ -915,6 +968,8 @@ class _AdminCreateUserSheet extends StatefulWidget {
 class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
   final _nombreCtrl = TextEditingController();
   final _paternoCtrl = TextEditingController();
+  final _curpCtrl = TextEditingController();
+  final _rfcCtrl = TextEditingController();
   final _correoCtrl = TextEditingController();
   final _telCtrl = TextEditingController();
   final _usrCtrl = TextEditingController();
@@ -928,6 +983,8 @@ class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
   void dispose() {
     _nombreCtrl.dispose();
     _paternoCtrl.dispose();
+    _curpCtrl.dispose();
+    _rfcCtrl.dispose();
     _correoCtrl.dispose();
     _telCtrl.dispose();
     _usrCtrl.dispose();
@@ -956,6 +1013,8 @@ class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
       await widget.api.post('/api/v1/admin/usuarios', body: {
         'nombre': _nombreCtrl.text.trim(),
         'apellidoPaterno': _paternoCtrl.text.trim(),
+        if (_curpCtrl.text.trim().isNotEmpty) 'curp': _curpCtrl.text.trim().toUpperCase(),
+        if (_rfcCtrl.text.trim().isNotEmpty) 'rfc': _rfcCtrl.text.trim().toUpperCase(),
         'correo': _correoCtrl.text.trim(),
         'telefonoMovil': _telCtrl.text.trim(),
         'usuario': _usrCtrl.text.trim(),
@@ -1052,6 +1111,34 @@ class _AdminCreateUserSheetState extends State<_AdminCreateUserSheet> {
                   labelText: 'Teléfono (10 díg) *',
                   counterText: '',
                 ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _curpCtrl,
+                      maxLength: 18,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'CURP (18 car.)',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _rfcCtrl,
+                      maxLength: 13,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'RFC (13 car.)',
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 10),
               TextField(

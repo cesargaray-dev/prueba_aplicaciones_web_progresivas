@@ -48,11 +48,38 @@ public class ActualizarContactoRequestDTO {
     @Schema(description = "Apellido paterno del titular (opcional)", example = "Garay")
     private String apellidoPaterno;
 
-    @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$",
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,80}$",
             message = "El apellido materno solo debe contener letras")
-    @Size(min = 2, max = 80, message = "El apellido materno debe tener entre 2 y 80 caracteres")
+    @Size(max = 80, message = "El apellido materno no debe exceder 80 caracteres")
     @Schema(description = "Apellido materno del titular (opcional)", example = "García")
     private String apellidoMaterno;
+
+    @Size(max = 100)
+    private String ocupacion;
+
+    @Size(max = 150)
+    private String empresa;
+
+    @Size(max = 200)
+    private String calle;
+
+    @Size(max = 20)
+    private String numeroExterior;
+
+    @Size(max = 20)
+    private String numeroInterior;
+
+    @Size(max = 100)
+    private String colonia;
+
+    @Size(max = 100)
+    private String municipio;
+
+    @Size(max = 100)
+    private String estado;
+
+    @Pattern(regexp = "^$|^(0[1-9]|[1-9][0-9])[0-9]{3}$", message = "El código postal debe tener 5 dígitos válidos")
+    private String codigoPostal;
 
     public ActualizarContactoRequestDTO(String correo, String telefonoMovil) {
         this.correo = correo;

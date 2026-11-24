@@ -484,6 +484,107 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         padding: EdgeInsets.only(bottom: 10),
                         child: LinearProgressIndicator(minHeight: 2),
                       ),
+                    if ((session.curp != null && session.curp!.isNotEmpty) ||
+                        (session.rfc != null && session.rfc!.isNotEmpty) ||
+                        (session.calle != null && session.calle!.isNotEmpty)) ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        margin: const EdgeInsets.only(bottom: 14),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF040914), Color(0xFF0C1E4A), Color(0xFF1E3A8A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFFDE68A).withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Flexible(
+                                  child: Text(
+                                    'EXPEDIENTE KYC VERIFICADO',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w900,
+                                      color: Color(0xFFFDE68A),
+                                      letterSpacing: 0.9,
+                                    ),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    session.nacionalidad ?? 'MEXICANA',
+                                    style: const TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF6EE7B7),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 6,
+                              children: [
+                                if (session.curp != null && session.curp!.isNotEmpty)
+                                  Text(
+                                    'CURP: ${session.curp}',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                if (session.rfc != null && session.rfc!.isNotEmpty)
+                                  Text(
+                                    'RFC: ${session.rfc}',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFFFDE68A),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            if (session.calle != null && session.calle!.isNotEmpty) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                [
+                                  '${session.calle} #${session.numeroExterior ?? 'S/N'}',
+                                  if (session.colonia != null && session.colonia!.isNotEmpty)
+                                    'Col. ${session.colonia}',
+                                  if (session.codigoPostal != null &&
+                                      session.codigoPostal!.isNotEmpty)
+                                    'C.P. ${session.codigoPostal}',
+                                  if (session.municipio != null && session.municipio!.isNotEmpty)
+                                    session.municipio!,
+                                  if (session.estado != null && session.estado!.isNotEmpty)
+                                    session.estado!,
+                                ].join(', '),
+                                style: const TextStyle(fontSize: 11, color: Colors.white70),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                     Text(
                       'Información Personal',
                       style: TextStyle(

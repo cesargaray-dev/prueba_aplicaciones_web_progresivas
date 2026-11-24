@@ -172,6 +172,215 @@ export function esMayorDeEdad(fechaIso: string, referenceDate: Date = new Date()
   return age >= 18 && age <= 100;
 }
 
+export interface EstadoMexicoOption {
+  code: string;
+  name: string;
+}
+
+export const ESTADOS_MEXICO: readonly EstadoMexicoOption[] = [
+  { code: 'AS', name: 'Aguascalientes' },
+  { code: 'BC', name: 'Baja California' },
+  { code: 'BS', name: 'Baja California Sur' },
+  { code: 'CC', name: 'Campeche' },
+  { code: 'CL', name: 'Coahuila' },
+  { code: 'CM', name: 'Colima' },
+  { code: 'CS', name: 'Chiapas' },
+  { code: 'CH', name: 'Chihuahua' },
+  { code: 'DF', name: 'Ciudad de México' },
+  { code: 'DG', name: 'Durango' },
+  { code: 'GT', name: 'Guanajuato' },
+  { code: 'GR', name: 'Guerrero' },
+  { code: 'HG', name: 'Hidalgo' },
+  { code: 'JC', name: 'Jalisco' },
+  { code: 'MC', name: 'Estado de México' },
+  { code: 'MN', name: 'Michoacán' },
+  { code: 'MS', name: 'Morelos' },
+  { code: 'NT', name: 'Nayarit' },
+  { code: 'NL', name: 'Nuevo León' },
+  { code: 'OC', name: 'Oaxaca' },
+  { code: 'PL', name: 'Puebla' },
+  { code: 'QT', name: 'Querétaro' },
+  { code: 'QR', name: 'Quintana Roo' },
+  { code: 'SP', name: 'San Luis Potosí' },
+  { code: 'SL', name: 'Sinaloa' },
+  { code: 'SR', name: 'Sonora' },
+  { code: 'TC', name: 'Tabasco' },
+  { code: 'TS', name: 'Tamaulipas' },
+  { code: 'TL', name: 'Tlaxcala' },
+  { code: 'VZ', name: 'Veracruz' },
+  { code: 'YN', name: 'Yucatán' },
+  { code: 'ZS', name: 'Zacatecas' },
+  { code: 'NE', name: 'Nacido en el Extranjero' },
+];
+
+const PALABRAS_INCONVENIENTES_CURP = new Set([
+  'BACA', 'BAKA', 'BUEI', 'BUEY', 'CACA', 'CACO', 'CAGA', 'CAGO', 'CAKA', 'CAKO',
+  'COGE', 'COGI', 'COJA', 'COJE', 'COJI', 'COJO', 'COLA', 'CULO', 'FALO', 'FETO',
+  'GETA', 'GUEI', 'GUEY', 'JETA', 'JOTO', 'KACA', 'KACO', 'KAGA', 'KAGO', 'KAKA',
+  'KAKO', 'KOGE', 'KOGI', 'KOJA', 'KOJE', 'KOJI', 'KOJO', 'KOLA', 'KULO', 'LILO',
+  'LOCA', 'LOCO', 'LOKA', 'LOKO', 'MAME', 'MAMO', 'MEAR', 'MEAS', 'MEON', 'MIAR',
+  'MION', 'MOCO', 'MOKO', 'MULA', 'MULO', 'NACA', 'NACO', 'PEDA', 'PEDO', 'PENE',
+  'PIPI', 'PITO', 'POPO', 'PUTA', 'PUTO', 'QULO', 'RATA', 'ROBA', 'ROBE', 'ROBO',
+  'RUIN', 'SENO', 'TETA', 'VACA', 'VAGA', 'VAGO', 'VAKA', 'VUEI', 'VUEY', 'WUEI', 'WUEY',
+]);
+
+export function esCurpValida(raw: string): boolean {
+  if (!raw) return false;
+  return /^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/.test(raw.trim().toUpperCase());
+}
+
+export function diagnosticarCurp(raw: string): string | null {
+  const c = (raw || '').trim().toUpperCase();
+  if (!c) return 'La CURP es obligatoria (18 caracteres oficiales).';
+  if (c.length !== 18) return `La CURP debe tener exactamente 18 caracteres (actual: ${c.length}/18).`;
+  if (!esCurpValida(c)) {
+    return 'Formato de CURP inválido (4 letras + 6 dígitos de fecha + H/M + 5 letras + 2 caracteres de homoclave).';
+  }
+  return null;
+}
+
+export function esRfcValido(raw: string): boolean {
+  if (!raw) return false;
+  return /^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/.test(raw.trim().toUpperCase());
+}
+
+export function diagnosticarRfc(raw: string): string | null {
+  const r = (raw || '').trim().toUpperCase();
+  if (!r) return 'El RFC con homoclave es obligatorio (13 caracteres para persona física).';
+  if (r.length < 12 || r.length > 13) {
+    return `El RFC debe contener 13 caracteres con homoclave (actual: ${r.length}).`;
+  }
+  if (!esRfcValido(r)) {
+    return 'Formato de RFC inválido (4 letras + 6 dígitos YYMMDD + 3 caracteres de homoclave).';
+  }
+  return null;
+}
+
+export function esCodigoPostalValido(raw: string): boolean {
+  if (!raw) return false;
+  return /^(0[1-9]|[1-9][0-9])\d{3}$/.test(raw.trim());
+}
+
+const limpiarTextoRenapo = (txt: string): string =>
+  (txt || '')
+    .toUpperCase()
+    .replace(/Ñ/g, 'X')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z\s]/g, ' ')
+    .trim();
+
+const primeraVocalInternaCurp = (palabra: string): string => {
+  for (let i = 1; i < palabra.length; i++) {
+    if ('AEIOU'.includes(palabra[i])) return palabra[i];
+  }
+  return 'X';
+};
+
+const primeraConsonanteInternaCurp = (palabra: string): string => {
+  for (let i = 1; i < palabra.length; i++) {
+    const c = palabra[i];
+    if (!'AEIOU'.includes(c) && c >= 'A' && c <= 'Z') return c;
+  }
+  return 'X';
+};
+
+const calcularDigitoVerificadorCurp = (curp17: string): string => {
+  const diccionario = '0123456789ABCDEFGHIJKLMNÑOPQRSTUVWXYZ';
+  let suma = 0;
+  for (let i = 0; i < 17; i++) {
+    const idx = diccionario.indexOf(curp17[i]);
+    suma += (idx >= 0 ? idx : 0) * (18 - i);
+  }
+  const residuo = 10 - (suma % 10);
+  return String(residuo === 10 ? 0 : residuo);
+};
+
+export function generarCurpYRfcSugeridos(params: {
+  nombre: string;
+  segundoNombre?: string;
+  apellidoPaterno: string;
+  apellidoMaterno?: string;
+  fechaNacimiento: string;
+  sexo?: string;
+  estadoCodigo?: string;
+}): { curp: string; rfc: string } | null {
+  const {
+    nombre,
+    segundoNombre,
+    apellidoPaterno,
+    apellidoMaterno,
+    fechaNacimiento,
+    sexo = 'HOMBRE',
+    estadoCodigo = 'DF',
+  } = params;
+
+  if (!nombre?.trim() || !apellidoPaterno?.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(fechaNacimiento || '')) {
+    return null;
+  }
+
+  const nombres = limpiarTextoRenapo(`${nombre} ${segundoNombre || ''}`).split(/\s+/).filter(Boolean);
+  let nombreBase = nombres[0] || 'X';
+  if (nombres.length > 1 && (nombreBase === 'JOSE' || nombreBase === 'MARIA' || nombreBase === 'MA' || nombreBase === 'J')) {
+    nombreBase = nombres[1];
+  }
+
+  const patTokens = limpiarTextoRenapo(apellidoPaterno).split(/\s+/).filter(Boolean);
+  const matTokens = limpiarTextoRenapo(apellidoMaterno || '').split(/\s+/).filter(Boolean);
+  const pat = patTokens[0] || 'X';
+  const mat = matTokens[0] || 'X';
+
+  let prefijo = `${pat[0] || 'X'}${primeraVocalInternaCurp(pat)}${matTokens.length > 0 ? mat[0] : 'X'}${nombreBase[0] || 'X'}`;
+  if (PALABRAS_INCONVENIENTES_CURP.has(prefijo)) {
+    prefijo = `${prefijo[0]}X${prefijo.slice(2)}`;
+  }
+
+  const [yyyy, mm, dd] = fechaNacimiento.trim().split('-');
+  const fecha6 = `${yyyy.slice(-2)}${mm}${dd}`;
+  const genero = sexo.toUpperCase().startsWith('M') ? 'M' : 'H';
+  const entidad = /^[A-Z]{2}$/.test((estadoCodigo || '').toUpperCase())
+    ? estadoCodigo.toUpperCase()
+    : 'DF';
+
+  const consonantes = `${primeraConsonanteInternaCurp(pat)}${matTokens.length > 0 ? primeraConsonanteInternaCurp(mat) : 'X'}${primeraConsonanteInternaCurp(nombreBase)}`;
+  const diferenciadorSiglo = Number(yyyy) >= 2000 ? 'A' : '0';
+  const curp17 = `${prefijo}${fecha6}${genero}${entidad}${consonantes}${diferenciadorSiglo}`;
+  const curp = `${curp17}${calcularDigitoVerificadorCurp(curp17)}`;
+
+  // Homoclave determinística de 3 caracteres alfanuméricos para RFC
+  const seedStr = `${pat}|${mat}|${nombreBase}|${fechaNacimiento}`;
+  let hash = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = (hash * 31 + seedStr.charCodeAt(i)) >>> 0;
+  }
+  const alfa = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789';
+  const h1 = alfa[hash % alfa.length];
+  const h2 = alfa[Math.floor(hash / 37) % alfa.length];
+  const h3 = String((hash % 9) + 1);
+  const rfc = `${prefijo}${fecha6}${h1}${h2}${h3}`;
+
+  return { curp, rfc };
+}
+
+export function esItemHistorialRecarga(item: {
+  telefono?: string;
+  referencia?: string;
+  servicio?: string;
+  producto?: string;
+}): boolean {
+  const tel = (item.telefono || '').trim();
+  const ref = (item.referencia || '').trim();
+  if (!tel) return false;
+  if (ref && ref === tel) return true;
+  if (!ref && tel !== TELEFONO_PRUEBA_GESTOPAGO) return true;
+  if (!ref && tel === TELEFONO_PRUEBA_GESTOPAGO) {
+    return /recarga|tiempo aire|paquete|telcel|at-t|at&t|att|movistar|unefon|bait|virgin|pillofon/i.test(
+      `${item.servicio || ''} ${item.producto || ''}`
+    );
+  }
+  return false;
+}
+
 export function getProductCategoryName(product: {
   frontType?: string;
   categoryId?: string;

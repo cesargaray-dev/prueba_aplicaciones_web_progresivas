@@ -17,6 +17,8 @@ import {
   Lock,
   Eye,
   EyeOff,
+  FileBadge,
+  MapPin,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import type { LoginResponse } from '../types/auth';
@@ -416,6 +418,54 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                 <div className="flex items-center gap-2 text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   <span>Sincronizando datos de tu perfil...</span>
+                </div>
+              )}
+
+              {(user.curp || user.rfc || user.fechaNacimiento || user.calle) && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-blue-950 to-indigo-950 text-white border border-blue-400/25 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-300 flex items-center gap-1.5">
+                      <FileBadge className="w-3.5 h-3.5" />
+                      <span>Expediente Bancario KYC Verificado</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/35 text-emerald-300">
+                      {user.nacionalidad || 'MEXICANA'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {user.curp && (
+                      <div className="bg-white/10 rounded-xl px-3 py-1.5">
+                        <span className="text-[10px] text-blue-200/80 block">CURP Oficial</span>
+                        <span className="font-mono font-bold text-white text-[11px] break-all">
+                          {user.curp}
+                        </span>
+                      </div>
+                    )}
+                    {user.rfc && (
+                      <div className="bg-white/10 rounded-xl px-3 py-1.5">
+                        <span className="text-[10px] text-blue-200/80 block">RFC con Homoclave</span>
+                        <span className="font-mono font-bold text-amber-200 text-[11px] break-all">
+                          {user.rfc}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  {(user.calle || user.municipio || user.estado) && (
+                    <p className="text-[11px] text-blue-100/85 flex items-start gap-1.5 pt-1 border-t border-white/10">
+                      <MapPin className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" />
+                      <span>
+                        {[
+                          user.calle && `${user.calle} #${user.numeroExterior || 'S/N'}`,
+                          user.colonia && `Col. ${user.colonia}`,
+                          user.codigoPostal && `C.P. ${user.codigoPostal}`,
+                          user.municipio,
+                          user.estado,
+                        ]
+                          .filter(Boolean)
+                          .join(', ')}
+                      </span>
+                    </p>
+                  )}
                 </div>
               )}
 

@@ -339,8 +339,22 @@ class PortalCuentaServiceImplTest {
         assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
                 new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp")));
 
-        // Falla controlada cuando Brevo no logra entregar
+        // Valida formato y unicidad de CURP y RFC antes de enviar el OTP
         when(loginClienteRepository.findByUsuario("cesar_otp")).thenReturn(Optional.empty());
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp", "CURP_MALA", null)));
+        when(clienteRepository.existsByCurp("GAGC990515HDFRRL01")).thenReturn(true);
+        assertThrows(CurpDuplicadaException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp", "GAGC990515HDFRRL01", null)));
+        when(clienteRepository.existsByCurp("GAGC990515HDFRRL01")).thenReturn(false);
+        assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp", "GAGC990515HDFRRL01", "RFC_MALO")));
+        when(clienteRepository.existsByRfc("GAGC990515HDF")).thenReturn(true);
+        assertThrows(RfcDuplicadoException.class, () -> service.enviarCodigoVerificacionRegistro(
+                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp", "GAGC990515HDFRRL01", "GAGC990515HDF")));
+        when(clienteRepository.existsByRfc("GAGC990515HDF")).thenReturn(false);
+
+        // Falla controlada cuando Brevo no logra entregar
         when(comprobanteEmailService.enviarCodigoRegistro2FA(eq("nuevo.otp@gmail.com"), eq("Cesar"), anyString(), eq(300L)))
                 .thenReturn(EmailEnvioResultadoDTO.builder().enviado(false).mensaje("Brevo error").build());
         assertThrows(ValidacionException.class, () -> service.enviarCodigoVerificacionRegistro(
@@ -356,7 +370,8 @@ class PortalCuentaServiceImplTest {
                 });
 
         EnviarCodigoRegistroResponseDTO envResp = service.enviarCodigoVerificacionRegistro(
-                new EnviarCodigoRegistroRequestDTO("nuevo.otp@gmail.com", "Cesar", "cesar_otp"));
+                new EnviarCodigoRegistroRequestDTO(
+                        "nuevo.otp@gmail.com", "Cesar", "cesar_otp", "GAGC990515HDFRRL01", "GAGC990515HDF"));
         assertTrue(envResp.isCorreoEnviado());
         assertEquals("nuevo.otp@gmail.com", envResp.getCorreoDestino());
         assertEquals(300L, envResp.getExpiraEnSegundos());
@@ -535,6 +550,19 @@ class PortalCuentaServiceImplTest {
                 .usuario("nuevo_user")
                 .contrasena("Segura2026")
                 .sexo("HOMBRE")
+                .nacionalidad("MEXICANA")
+                .estadoCivil("SOLTERO")
+                .ocupacion("INGENIERO")
+                .empresa("BANCA TECH")
+                .ingresoMensual(new BigDecimal("28000.00"))
+                .calle("Av. Insurgentes Sur")
+                .numeroExterior("1602")
+                .numeroInterior("Piso 4")
+                .colonia("Crédito Constructor")
+                .municipio("Benito Juárez")
+                .estado("Ciudad de México")
+                .codigoPostal("03940")
+                .pais("México")
                 .build();
     }
 }

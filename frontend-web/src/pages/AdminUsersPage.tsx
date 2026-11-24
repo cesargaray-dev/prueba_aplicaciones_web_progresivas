@@ -109,6 +109,8 @@ export const AdminUsersPage: React.FC = () => {
         u.correo,
         u.telefonoMovil,
         u.numeroCuenta,
+        u.curp,
+        u.rfc,
       ]
         .filter(Boolean)
         .join(' ')
@@ -136,6 +138,8 @@ export const AdminUsersPage: React.FC = () => {
       segundoNombre: u.segundoNombre ?? '',
       apellidoPaterno: u.apellidoPaterno ?? '',
       apellidoMaterno: u.apellidoMaterno ?? '',
+      curp: u.curp ?? '',
+      rfc: u.rfc ?? '',
       correo: u.correo ?? '',
       telefonoMovil: u.telefonoMovil ?? '',
       usuario: u.usuario ?? '',
@@ -157,6 +161,8 @@ export const AdminUsersPage: React.FC = () => {
         segundoNombre: editForm.segundoNombre?.trim() ?? '',
         apellidoPaterno: editForm.apellidoPaterno?.trim(),
         apellidoMaterno: editForm.apellidoMaterno?.trim(),
+        curp: editForm.curp?.trim() ? editForm.curp.trim().toUpperCase() : undefined,
+        rfc: editForm.rfc?.trim() ? editForm.rfc.trim().toUpperCase() : undefined,
         correo: editForm.correo?.trim(),
         telefonoMovil: editForm.telefonoMovil?.trim(),
         usuario: editForm.usuario?.trim(),
@@ -449,9 +455,14 @@ export const AdminUsersPage: React.FC = () => {
                               </span>
                             )}
                           </div>
-                          <span className="text-slate-500 font-mono">
+                          <span className="text-slate-500 font-mono block">
                             @{u.usuario || 'sin_usuario'} &bull; ID #{u.clienteId}
                           </span>
+                          {(u.curp || u.rfc) && (
+                            <span className="text-[10px] font-mono text-blue-800 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                              {u.curp || '—'} {u.rfc ? `· ${u.rfc}` : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -617,6 +628,30 @@ export const AdminUsersPage: React.FC = () => {
                     value={editForm.apellidoMaterno}
                     onChange={(e) => setEditForm({ ...editForm, apellidoMaterno: e.target.value })}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">CURP (18 car.)</label>
+                  <input
+                    type="text"
+                    maxLength={18}
+                    value={editForm.curp || ''}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, curp: e.target.value.toUpperCase() })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 block mb-1">RFC (13 car.)</label>
+                  <input
+                    type="text"
+                    maxLength={13}
+                    value={editForm.rfc || ''}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, rfc: e.target.value.toUpperCase() })
+                    }
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono"
                   />
                 </div>
               </div>

@@ -353,6 +353,38 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
             }
             c.setTelefonoMovil(tel);
         }
+        if (req.getCurp() != null && !req.getCurp().isBlank()) {
+            String curp = req.getCurp().trim().toUpperCase(Locale.ROOT);
+            if (!curp.matches("^[A-Z]{4}\\d{6}[HM][A-Z]{5}[A-Z\\d]\\d$")) {
+                throw new ValidacionException("El formato de la CURP es inválido (18 caracteres oficiales).");
+            }
+            if (!curp.equalsIgnoreCase(c.getCurp()) && clienteRepo.existsByCurp(curp)) {
+                throw new CurpDuplicadaException("La CURP ingresada ya pertenece a otro cliente.");
+            }
+            c.setCurp(curp);
+        }
+        if (req.getRfc() != null && !req.getRfc().isBlank()) {
+            String rfc = req.getRfc().trim().toUpperCase(Locale.ROOT);
+            if (!rfc.matches("^[A-ZÑ&]{3,4}\\d{6}[A-Z\\d]{3}$")) {
+                throw new ValidacionException("El formato del RFC es inválido (12 o 13 caracteres).");
+            }
+            if (!rfc.equalsIgnoreCase(c.getRfc()) && clienteRepo.existsByRfc(rfc)) {
+                throw new RfcDuplicadoException("El RFC ingresado ya pertenece a otro cliente.");
+            }
+            c.setRfc(rfc);
+        }
+        if (req.getSexo() != null && !req.getSexo().isBlank()) {
+            String sx = req.getSexo().trim().toUpperCase(Locale.ROOT);
+            if ("HOMBRE".equals(sx) || "MUJER".equals(sx)) {
+                c.setSexo(sx);
+            }
+        }
+        if (req.getNacionalidad() != null && !req.getNacionalidad().isBlank()) {
+            c.setNacionalidad(req.getNacionalidad().trim().toUpperCase(Locale.ROOT));
+        }
+        if (req.getEstadoCivil() != null && !req.getEstadoCivil().isBlank()) {
+            c.setEstadoCivil(req.getEstadoCivil().trim().toUpperCase(Locale.ROOT));
+        }
     }
 
     private void aplicarCambiosCredenciales(LoginCliente lg, AdminActualizarUsuarioRequestDTO req, boolean targetIsAdmin) {
@@ -546,6 +578,8 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
                 .nombreCompleto(full.toString().trim())
                 .fechaNacimiento(c.getFechaNacimiento())
                 .sexo(c.getSexo())
+                .nacionalidad(c.getNacionalidad())
+                .estadoCivil(c.getEstadoCivil())
                 .curp(c.getCurp())
                 .rfc(c.getRfc())
                 .correo(c.getCorreo())

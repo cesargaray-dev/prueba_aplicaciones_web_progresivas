@@ -46,6 +46,60 @@ public class UserProfileDTO {
     @Schema(description = "Teléfono móvil registrado", example = "5512345678")
     private String telefonoMovil;
 
+    @Schema(description = "Teléfono alternativo", example = "5587654321")
+    private String telefonoAlternativo;
+
+    @Schema(description = "CURP oficial de 18 caracteres", example = "GAGC990515HDFRRL01")
+    private String curp;
+
+    @Schema(description = "RFC con homoclave", example = "GAGC990515HDF")
+    private String rfc;
+
+    @Schema(description = "Fecha de nacimiento (yyyy-MM-dd)", example = "1999-05-15")
+    private String fechaNacimiento;
+
+    @Schema(description = "Sexo registrado (HOMBRE o MUJER)", example = "HOMBRE")
+    private String sexo;
+
+    @Schema(description = "Nacionalidad", example = "MEXICANA")
+    private String nacionalidad;
+
+    @Schema(description = "Estado civil", example = "SOLTERO")
+    private String estadoCivil;
+
+    @Schema(description = "Ocupación o actividad económica", example = "INGENIERO")
+    private String ocupacion;
+
+    @Schema(description = "Empresa o lugar de trabajo", example = "TECNOLOGIA SA")
+    private String empresa;
+
+    @Schema(description = "Ingreso mensual estimado", example = "25000.00")
+    private BigDecimal ingresoMensual;
+
+    @Schema(description = "Calle del domicilio", example = "Av. Paseo de la Reforma")
+    private String calle;
+
+    @Schema(description = "Número exterior", example = "250")
+    private String numeroExterior;
+
+    @Schema(description = "Número interior", example = "4B")
+    private String numeroInterior;
+
+    @Schema(description = "Colonia", example = "Juárez")
+    private String colonia;
+
+    @Schema(description = "Municipio o Alcaldía", example = "Cuauhtémoc")
+    private String municipio;
+
+    @Schema(description = "Estado o Entidad Federativa", example = "Ciudad de México")
+    private String estado;
+
+    @Schema(description = "Código postal de 5 dígitos", example = "06600")
+    private String codigoPostal;
+
+    @Schema(description = "País", example = "México")
+    private String pais;
+
     @Schema(description = "Número de cuenta bancaria activa (16 dígitos)", example = "1234567890123456")
     private String numeroCuenta;
 
