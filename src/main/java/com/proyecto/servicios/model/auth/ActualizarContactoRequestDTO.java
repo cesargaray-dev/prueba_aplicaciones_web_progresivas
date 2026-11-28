@@ -57,6 +57,9 @@ public class ActualizarContactoRequestDTO {
     @Size(max = 100)
     private String ocupacion;
 
+    @Size(max = 120)
+    private String profesion;
+
     @Size(max = 150)
     private String empresa;
 

@@ -17,6 +17,7 @@ export interface ItemHistorialPago {
   fechaOperacion?: string;
   estado: string;
   logoUrl?: string;
+  leyenda?: string;
 }
 
 export interface HistorialPagosResponse {

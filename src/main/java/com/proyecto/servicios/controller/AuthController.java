@@ -8,12 +8,17 @@ import com.proyecto.servicios.model.auth.BiometriaEstadoResponseDTO;
 import com.proyecto.servicios.model.auth.BiometriaLoginRequestDTO;
 import com.proyecto.servicios.model.auth.BiometriaRegistroRequestDTO;
 import com.proyecto.servicios.model.auth.CambiarContrasenaRequestDTO;
+import com.proyecto.servicios.model.auth.DisponibilidadRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO;
 import com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.LoginRequestDTO;
 import com.proyecto.servicios.model.auth.LoginResponseDTO;
 import com.proyecto.servicios.model.auth.LogoutRequestDTO;
 import com.proyecto.servicios.model.auth.RegisterRequestDTO;
+import com.proyecto.servicios.model.auth.TotpEstadoResponseDTO;
+import com.proyecto.servicios.model.auth.TotpSetupRequestDTO;
+import com.proyecto.servicios.model.auth.TotpSetupResponseDTO;
+import com.proyecto.servicios.model.auth.TotpVerificarRequestDTO;
 import com.proyecto.servicios.model.auth.UserProfileDTO;
 import com.proyecto.servicios.service.AuthService;
 import com.proyecto.servicios.service.BiometriaAuthService;
@@ -139,6 +144,77 @@ public class AuthController {
             @RequestHeader(value = "Authorization", required = false) String authHeader) {
         boolean activa = authService.validarTokenYObtenerUsuario(authHeader).isPresent();
         return ResponseEntity.ok(java.util.Map.of("activa", activa));
+    }
+
+    @GetMapping("/register/disponibilidad")
+    @Operation(
+            summary = "Verificar disponibilidad inmediata de correo, usuario, CURP y RFC",
+            description = "Permite avisar inmediatamente al usuario durante el registro por pasos si el correo electrónico, usuario, CURP o RFC ya están registrados."
+    )
+    public ResponseEntity<DisponibilidadRegistroResponseDTO> verificarDisponibilidadRegistro(
+            @RequestParam(value = "correo", required = false) String correo,
+            @RequestParam(value = "usuario", required = false) String usuario,
+            @RequestParam(value = "curp", required = false) String curp,
+            @RequestParam(value = "rfc", required = false) String rfc) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de registro no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.verificarDisponibilidadRegistro(correo, usuario, curp, rfc));
+    }
+
+    @PostMapping("/register/totp")
+    @Operation(
+            summary = "Generar clave secreta y código QR de Google Authenticator para registro",
+            description = "Valida que el correo y usuario estén disponibles y genera una clave Base32 + QR compatible con Google Authenticator (TOTP de 6 dígitos cada 30 segundos)."
+    )
+    public ResponseEntity<TotpSetupResponseDTO> configurarTotpRegistro(
+            @RequestBody TotpSetupRequestDTO request) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de registro no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.generarConfiguracionTotpRegistro(request));
+    }
+
+    @GetMapping("/me/totp/estado")
+    @Operation(summary = "Consultar si la cuenta autenticada tiene activo Google Authenticator")
+    public ResponseEntity<TotpEstadoResponseDTO> estadoTotp(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de perfil no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.consultarEstadoTotp(authHeader));
+    }
+
+    @PostMapping("/me/totp/iniciar")
+    @Operation(summary = "Generar código QR y clave Base32 para vincular Google Authenticator en una cuenta existente")
+    public ResponseEntity<TotpSetupResponseDTO> iniciarTotp(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de perfil no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.iniciarVinculacionTotp(authHeader));
+    }
+
+    @PostMapping("/me/totp/activar")
+    @Operation(summary = "Confirmar y activar Google Authenticator validando el código actual de 6 dígitos")
+    public ResponseEntity<TotpEstadoResponseDTO> activarTotp(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @Valid @RequestBody TotpVerificarRequestDTO request) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de perfil no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.activarTotp(authHeader, request));
+    }
+
+    @PostMapping("/me/totp/desactivar")
+    @Operation(summary = "Desactivar Google Authenticator verificando el código actual")
+    public ResponseEntity<TotpEstadoResponseDTO> desactivarTotp(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
+            @RequestBody(required = false) TotpVerificarRequestDTO request) {
+        if (portalCuentaService == null) {
+            throw new IllegalStateException("El servicio de perfil no está disponible en este contexto");
+        }
+        return ResponseEntity.ok(portalCuentaService.desactivarTotp(authHeader, request));
     }
 
     @PostMapping("/register/enviar-codigo")

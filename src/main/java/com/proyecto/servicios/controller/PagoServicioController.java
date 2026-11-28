@@ -205,9 +205,9 @@ public class PagoServicioController {
         if (notificacionPagoService == null) {
             throw new IllegalStateException("El servicio de notificaciones no está disponible en este contexto");
         }
-        PagoServicio pago = notificacionPagoService.obtenerPagoPorFolio(folioTicket);
-        if (pago != null && pago.getNumeroCuenta() != null) {
-            verificarPropiedadCuenta(pago.getNumeroCuenta());
+        String cuentaPropietaria = notificacionPagoService.obtenerCuentaPropietariaPorFolio(folioTicket);
+        if (cuentaPropietaria != null) {
+            verificarPropiedadCuenta(cuentaPropietaria);
         }
         byte[] pdfBytes = notificacionPagoService.generarComprobantePdf(folioTicket);
         String safeFolio = folioTicket != null ? folioTicket.replaceAll("[^A-Za-z0-9_-]", "_") : "ticket";

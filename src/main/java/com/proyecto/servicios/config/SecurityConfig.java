@@ -58,12 +58,19 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/auth/session-status").permitAll()
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/api/v1/auth/session-status",
+                                "/api/v1/auth/register/disponibilidad",
+                                "/api/v1/catalogos/cp/**",
+                                "/api/v1/catalogos/ocupaciones"
+                        ).permitAll()
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/register",
                                 "/api/v1/auth/register/enviar-codigo",
+                                "/api/v1/auth/register/totp",
                                 "/api/v1/auth/login/biometrico"
                         ).permitAll()
                         .requestMatchers("/api/v1/gestopago/**").permitAll()

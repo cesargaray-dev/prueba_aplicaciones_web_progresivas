@@ -2,10 +2,21 @@ import React from 'react';
 import { vi } from 'vitest';
 import { AuthContext } from '../context/authContextInstance';
 import type { AuthContextType } from '../context/authContextInstance';
-import type { LoginResponse, UserProfile } from '../types/auth';
+import type { LoginResponse, TotpSetupResponse, UserProfile } from '../types/auth';
 import type { ProductDTO } from '../types/catalog';
 import type { ItemHistorialPago } from '../types/history';
 import type { PagoServicioResponse, ValidarReferenciaResponse } from '../types/payment';
+
+export const mockTotpSetup: TotpSetupResponse = {
+  secret: 'JBSWY3DPEHPK3PXP',
+  secretFormateado: 'JBSW Y3DP EHPK 3PXP',
+  otpauthUri: 'otpauth://totp/Banco%20Digital:cesar@gmail.com?secret=JBSWY3DPEHPK3PXP&issuer=Banco%20Digital',
+  qrPngBase64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  emisor: 'Banco Digital',
+  cuenta: 'cesar@gmail.com',
+  digitos: 6,
+  periodoSegundos: 30,
+};
 
 export const mockLoginResponse: LoginResponse = {
   token: 'test-token-123',
@@ -21,6 +32,9 @@ export const mockLoginResponse: LoginResponse = {
   curp: 'GAGC990515HDFRRL01',
   rfc: 'GAGC990515AB1',
   nacionalidad: 'MEXICANA',
+  ocupacion: 'Empleado(a) del sector privado',
+  profesion: 'Ingeniero en Sistemas / Desarrollo de Software / TI',
+  totpHabilitado: false,
   calle: 'Av. Reforma',
   numeroExterior: '250',
   colonia: 'Juárez',
@@ -45,6 +59,9 @@ export const mockUserProfile: UserProfile = {
   curp: 'GAGC990515HDFRRL01',
   rfc: 'GAGC990515AB1',
   nacionalidad: 'MEXICANA',
+  ocupacion: 'Empleado(a) del sector privado',
+  profesion: 'Ingeniero en Sistemas / Desarrollo de Software / TI',
+  totpHabilitado: false,
   calle: 'Av. Reforma',
   numeroExterior: '250',
   colonia: 'Juárez',

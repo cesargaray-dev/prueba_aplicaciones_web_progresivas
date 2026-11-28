@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -5,6 +6,7 @@ import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/validation_utils.dart';
+import 'totp_widgets.dart';
 
 class ProfileSheet extends StatefulWidget {
   final int initialTab;
@@ -37,6 +39,13 @@ class _ProfileSheetState extends State<ProfileSheet> {
   bool _showCurrentPass = false;
   bool _showNewPass = false;
 
+  Map<String, dynamic>? _totpSetupData;
+  final _totpActivateCodeController = TextEditingController();
+  final _totpDisableCodeController = TextEditingController();
+  bool _showDisableTotpBox = false;
+  Timer? _totpUiTimer;
+  int _totpSecondsLeft = TotpUtils.secondsRemainingInWindow();
+
   bool _syncingProfile = false;
   String? _statusMsg;
   bool _statusIsError = false;
@@ -47,6 +56,14 @@ class _ProfileSheetState extends State<ProfileSheet> {
     _selectedTab = widget.initialTab.clamp(0, 2);
     final auth = Provider.of<AuthProvider>(context, listen: false);
     _fillFieldsFromSession(auth);
+    _totpUiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      if (_selectedTab == 2) {
+        setState(() {
+          _totpSecondsLeft = TotpUtils.secondsRemainingInWindow();
+        });
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncProfileFromServer());
   }
 
@@ -75,6 +92,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
 
   @override
   void dispose() {
+    _totpUiTimer?.cancel();
     _nombreController.dispose();
     _segundoNombreController.dispose();
     _apellidoPaternoController.dispose();
@@ -86,6 +104,8 @@ class _ProfileSheetState extends State<ProfileSheet> {
     _passActualController.dispose();
     _passNuevaController.dispose();
     _passConfirmController.dispose();
+    _totpActivateCodeController.dispose();
+    _totpDisableCodeController.dispose();
     super.dispose();
   }
 
@@ -697,108 +717,194 @@ class _ProfileSheetState extends State<ProfileSheet> {
                     ),
                   ],
 
-                  // TAB 1: ABONAR SALDO
+                  // TAB 1: ABONAR SALDO (Admin) o FONDEO AUTORIZADO POR ADMIN (Cliente)
                   if (_selectedTab == 1) ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Flexible(
-                          child: Text(
-                            'Abonar Fondos a mi Cuenta',
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.accentEmerald,
+                    if (session.esAdmin || session.usuario.toLowerCase() == 'admin') ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Flexible(
+                            child: Text(
+                              'Abonar Fondos (Administrador)',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.accentEmerald,
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Saldo: ${currencyFormatter.format(session.saldo)}',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: ['100', '250', '500', '1000'].map((amt) {
-                        final active = _abonoController.text.trim() == amt;
-                        final isDark = AppTheme.isDark(context);
-                        return ChoiceChip(
-                          showCheckmark: false,
-                          selected: active,
-                          backgroundColor: isDark ? AppTheme.darkElevated : Colors.white,
-                          selectedColor: AppTheme.accentEmerald,
-                          side: BorderSide(
-                            color: active
-                                ? AppTheme.accentEmerald
-                                : AppTheme.borderCol(context),
-                            width: active ? 1.5 : 1,
+                          const SizedBox(width: 8),
+                          Text(
+                            'Saldo: ${currencyFormatter.format(session.saldo)}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                           ),
-                          label: Text(
-                            '\$$amt',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: active ? Colors.white : AppTheme.textPrimary(context),
-                            ),
-                          ),
-                          onSelected: (_) => setState(() => _abonoController.text = amt),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _abonoController,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppTheme.textPrimary(context),
-                            ),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            onChanged: (_) => setState(() {}),
-                            decoration: const InputDecoration(
-                              labelText: 'Monto MXN',
-                              prefixText: '\$ ',
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _conceptoController,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppTheme.textPrimary(context),
-                            ),
-                            decoration: const InputDecoration(labelText: 'Concepto'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    ElevatedButton.icon(
-                      onPressed: auth.isLoading ? null : () => _applyAbono(auth),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accentEmerald,
-                        foregroundColor: Colors.white,
-                        disabledBackgroundColor: AppTheme.elevatedBg(context),
-                        disabledForegroundColor: AppTheme.textSecondary(context),
+                        ],
                       ),
-                      icon: auth.isLoading
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          : const Icon(Icons.add_circle_outline_rounded, size: 18),
-                      label: Text(auth.isLoading ? 'Abonando...' : 'Abonar a Cuenta'),
-                    ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: ['100', '250', '500', '1000'].map((amt) {
+                          final active = _abonoController.text.trim() == amt;
+                          final isDark = AppTheme.isDark(context);
+                          return ChoiceChip(
+                            showCheckmark: false,
+                            selected: active,
+                            backgroundColor: isDark ? AppTheme.darkElevated : Colors.white,
+                            selectedColor: AppTheme.accentEmerald,
+                            side: BorderSide(
+                              color: active
+                                  ? AppTheme.accentEmerald
+                                  : AppTheme.borderCol(context),
+                              width: active ? 1.5 : 1,
+                            ),
+                            label: Text(
+                              '\$$amt',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: active ? Colors.white : AppTheme.textPrimary(context),
+                              ),
+                            ),
+                            onSelected: (_) => setState(() => _abonoController.text = amt),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _abonoController,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppTheme.textPrimary(context),
+                              ),
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              onChanged: (_) => setState(() {}),
+                              decoration: const InputDecoration(
+                                labelText: 'Monto MXN',
+                                prefixText: '\$ ',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: _conceptoController,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: AppTheme.textPrimary(context),
+                              ),
+                              decoration: const InputDecoration(labelText: 'Concepto'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      ElevatedButton.icon(
+                        onPressed: auth.isLoading ? null : () => _applyAbono(auth),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.accentEmerald,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: AppTheme.elevatedBg(context),
+                          disabledForegroundColor: AppTheme.textSecondary(context),
+                        ),
+                        icon: auth.isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.add_circle_outline_rounded, size: 18),
+                        label: Text(auth.isLoading ? 'Abonando...' : 'Abonar a Cuenta'),
+                      ),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.brandAccent(context).withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: AppTheme.borderCol(context)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    'Fondeo Autorizado por Administrador',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppTheme.brandAccent(context),
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  currencyFormatter.format(session.saldo),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppTheme.textPrimary(context),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Al crear tu cuenta digital el saldo inicia en \$0.00 MXN. Únicamente un Administrador (@admin) puede ingresar dinero a tu cuenta desde el módulo de Gestión de Usuarios.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.textSecondary(context),
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cardBg(context),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: AppTheme.borderCol(context)),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      'Cuenta: ${session.numeroCuenta}',
+                                      style: TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12.5,
+                                        color: AppTheme.textPrimary(context),
+                                      ),
+                                    ),
+                                  ),
+                                  IconButton(
+                                    visualDensity: VisualDensity.compact,
+                                    icon: const Icon(Icons.copy_rounded, size: 17),
+                                    onPressed: () {
+                                      Clipboard.setData(ClipboardData(text: session.numeroCuenta));
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Número de cuenta copiado'),
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ],
 
                   // TAB 2: SEGURIDAD (Huella Digital + Cambiar Contraseña)
@@ -905,6 +1011,9 @@ class _ProfileSheetState extends State<ProfileSheet> {
                       ),
                     ),
 
+                    const SizedBox(height: 14),
+                    _buildTotpSecurityCard(auth),
+
                     const SizedBox(height: 16),
                     Text(
                       'Cambiar Contraseña',
@@ -970,6 +1079,294 @@ class _ProfileSheetState extends State<ProfileSheet> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _startTotpSetup(AuthProvider auth) async {
+    setState(() {
+      _statusMsg = null;
+      _statusIsError = false;
+    });
+    final data = await auth.iniciarTotpPerfil();
+    if (!mounted) return;
+    if (data != null) {
+      setState(() {
+        _totpSetupData = data;
+        _totpActivateCodeController.clear();
+        _totpSecondsLeft = TotpUtils.secondsRemainingInWindow();
+      });
+    } else {
+      setState(() {
+        _statusIsError = true;
+        _statusMsg = auth.errorMessage ?? 'No se pudo iniciar la configuración de Google Authenticator.';
+      });
+    }
+  }
+
+  Future<void> _confirmActivateTotp(AuthProvider auth) async {
+    final secret = (_totpSetupData?['secret'] ?? '').toString().trim();
+    final code = _totpActivateCodeController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      setState(() {
+        _statusIsError = true;
+        _statusMsg = 'Ingresa el código dinámico de 6 dígitos de Google Authenticator.';
+      });
+      return;
+    }
+    final ok = await auth.activarTotpPerfil(secret: secret, codigo: code);
+    if (!mounted) return;
+    setState(() {
+      _statusIsError = !ok;
+      if (ok) {
+        _totpSetupData = null;
+        _totpActivateCodeController.clear();
+        _statusMsg =
+            'Google Authenticator vinculado exitosamente. Tus pagos pedirán el código dinámico de 6 dígitos.';
+      } else {
+        _statusMsg = auth.errorMessage ?? 'Código inválido. Verifica la hora de tu dispositivo.';
+      }
+    });
+  }
+
+  Future<void> _confirmDisableTotp(AuthProvider auth) async {
+    final code = _totpDisableCodeController.text.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(code)) {
+      setState(() {
+        _statusIsError = true;
+        _statusMsg = 'Ingresa el código actual de 6 dígitos para desactivar Google Authenticator.';
+      });
+      return;
+    }
+    final ok = await auth.desactivarTotpPerfil(codigo: code);
+    if (!mounted) return;
+    setState(() {
+      _statusIsError = !ok;
+      if (ok) {
+        _showDisableTotpBox = false;
+        _totpDisableCodeController.clear();
+        _statusMsg = 'Google Authenticator desactivado. Tus pagos usarán código por correo.';
+      } else {
+        _statusMsg = auth.errorMessage ?? 'No fue posible desactivar Google Authenticator.';
+      }
+    });
+  }
+
+  Widget _buildTotpSecurityCard(AuthProvider auth) {
+    final enabled = auth.session?.totpHabilitado == true;
+    final accent = AppTheme.brandAccent(context);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: (enabled ? AppTheme.accentEmerald : accent).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: enabled
+              ? AppTheme.accentEmerald.withValues(alpha: 0.4)
+              : AppTheme.borderCol(context),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (enabled ? AppTheme.accentEmerald : AppTheme.secondaryBlue)
+                      .withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.phonelink_lock_rounded,
+                  color: enabled ? AppTheme.accentEmerald : accent,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Google Authenticator (Código cada 30s)',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: enabled ? AppTheme.accentEmerald : accent,
+                      ),
+                    ),
+                    Text(
+                      enabled
+                          ? 'Activo · Autoriza pagos con código dinámico sin esperar correo'
+                          : 'Inactivo · Vincúlalo para autorizar pagos cada 30 segundos',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.textSecondary(context),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (enabled ? AppTheme.accentEmerald : AppTheme.textMuted)
+                      .withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  enabled ? 'ACTIVO' : 'INACTIVO',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w900,
+                    color: enabled ? AppTheme.accentEmerald : AppTheme.textSecondary(context),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!enabled && _totpSetupData == null) ...[
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: auth.isLoading ? null : () => _startTotpSetup(auth),
+              icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+              label: const Text('Vincular Google Authenticator'),
+            ),
+          ],
+          if (!enabled && _totpSetupData != null) ...[
+            const SizedBox(height: 12),
+            TotpQrSetupCard(
+              secret: (_totpSetupData!['secret'] ?? '').toString(),
+              secretFormateado: _totpSetupData!['secretFormateado']?.toString(),
+              qrPngBase64: _totpSetupData!['qrPngBase64']?.toString(),
+              cuentaLabel: _totpSetupData!['cuenta']?.toString() ?? auth.session?.email,
+              periodSeconds: (_totpSetupData!['periodoSegundos'] is int)
+                  ? (_totpSetupData!['periodoSegundos'] as int)
+                  : 30,
+              secondsLeft: _totpSecondsLeft,
+              onCopied: () {
+                setState(() {
+                  _statusIsError = false;
+                  _statusMsg = 'Clave secreta copiada al portapapeles.';
+                });
+              },
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _totpActivateCodeController,
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(6),
+              ],
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Código de Google Authenticator (6 dígitos)',
+                hintText: '123456',
+                counterText: '',
+                prefixIcon: Icon(Icons.pin_rounded),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                OutlinedButton(
+                  onPressed: auth.isLoading
+                      ? null
+                      : () => setState(() {
+                            _totpSetupData = null;
+                            _totpActivateCodeController.clear();
+                          }),
+                  child: const Text('Cancelar'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: (auth.isLoading ||
+                            _totpActivateCodeController.text.trim().length < 6)
+                        ? null
+                        : () => _confirmActivateTotp(auth),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
+                    icon: const Icon(Icons.verified_user_rounded, size: 17),
+                    label: const Text('Activar'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (enabled) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(
+                    'Ventana TOTP actual: ${_totpSecondsLeft}s restantes',
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.accentEmerald,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: auth.isLoading
+                      ? null
+                      : () => setState(() {
+                            _showDisableTotpBox = !_showDisableTotpBox;
+                            _totpDisableCodeController.clear();
+                          }),
+                  icon: Icon(
+                    _showDisableTotpBox ? Icons.expand_less_rounded : Icons.link_off_rounded,
+                    size: 16,
+                    color: AppTheme.errorRed,
+                  ),
+                  label: Text(
+                    _showDisableTotpBox ? 'Cancelar' : 'Desactivar',
+                    style: const TextStyle(fontSize: 12, color: AppTheme.errorRed),
+                  ),
+                ),
+              ],
+            ),
+            if (_showDisableTotpBox) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _totpDisableCodeController,
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(6),
+                ],
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  labelText: 'Código actual de 6 dígitos para desactivar',
+                  hintText: '123456',
+                  counterText: '',
+                  prefixIcon: Icon(Icons.pin_rounded),
+                ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: (auth.isLoading || _totpDisableCodeController.text.trim().length < 6)
+                    ? null
+                    : () => _confirmDisableTotp(auth),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.errorRed,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.link_off_rounded, size: 17),
+                label: const Text('Confirmar Desactivación'),
+              ),
+            ],
+          ],
+        ],
       ),
     );
   }

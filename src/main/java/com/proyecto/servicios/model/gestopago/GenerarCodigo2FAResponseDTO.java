@@ -33,4 +33,6 @@ public class GenerarCodigo2FAResponseDTO extends GenericResponse {
     private String correoDestino;
     private String mensajeCorreo;
     private String messageId;
+    private String metodo2FA;
+    private Integer periodoTotpSegundos;
 }

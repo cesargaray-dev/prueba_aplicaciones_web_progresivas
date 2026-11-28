@@ -17,6 +17,13 @@ export const adminApi = {
     return apiClient.put<AdminUserItem>(`/admin/usuarios/${clienteId}`, payload);
   },
 
+  abonarSaldoUsuario: async (
+    clienteId: number,
+    payload: { monto: number; concepto?: string }
+  ): Promise<AdminUserItem> => {
+    return apiClient.post<AdminUserItem>(`/admin/usuarios/${clienteId}/abonar`, payload);
+  },
+
   eliminarUsuario: async (clienteId: number): Promise<{ codigo: number; mensaje: string }> => {
     return apiClient.delete<{ codigo: number; mensaje: string }>(`/admin/usuarios/${clienteId}`);
   },

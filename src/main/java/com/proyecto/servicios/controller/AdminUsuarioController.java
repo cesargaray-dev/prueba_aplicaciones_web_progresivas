@@ -3,6 +3,7 @@ package com.proyecto.servicios.controller;
 import com.proyecto.servicios.model.GenericResponse;
 import com.proyecto.servicios.model.admin.AdminActualizarUsuarioRequestDTO;
 import com.proyecto.servicios.model.admin.AdminUsuarioDTO;
+import com.proyecto.servicios.model.auth.AbonoSaldoRequestDTO;
 import com.proyecto.servicios.model.auth.RegisterRequestDTO;
 import com.proyecto.servicios.service.AdminUsuarioService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -60,6 +61,16 @@ public class AdminUsuarioController {
             Authentication auth) {
         String admin = auth != null ? auth.getName() : null;
         return ResponseEntity.ok(adminUsuarioService.actualizarUsuarioComoAdmin(admin, clienteId, request));
+    }
+
+    @PostMapping("/{clienteId}/abonar")
+    @Operation(summary = "Ingresar dinero (abonar saldo) a la cuenta de un usuario como administrador")
+    public ResponseEntity<AdminUsuarioDTO> abonarSaldoUsuario(
+            @PathVariable Long clienteId,
+            @Valid @RequestBody AbonoSaldoRequestDTO request,
+            Authentication auth) {
+        String admin = auth != null ? auth.getName() : null;
+        return ResponseEntity.ok(adminUsuarioService.abonarSaldoComoAdmin(admin, clienteId, request));
     }
 
     @DeleteMapping("/{clienteId}")

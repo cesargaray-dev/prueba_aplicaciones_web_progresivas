@@ -9,6 +9,7 @@ import '../providers/payment_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/receipt_downloader.dart';
 import '../utils/validation_utils.dart';
+import 'official_legend_card.dart';
 
 class ReceiptDialog extends StatefulWidget {
   final ProductItem product;
@@ -126,6 +127,38 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     final r = widget.receipt;
     final isEmailOk = _correoEnviado == true;
 
+    final serviceClean = (r.servicio ?? widget.product.service).trim();
+    final prodClean = (r.producto ?? widget.product.name).trim();
+    final String displayProductTitle;
+    if (widget.product.isRecarga) {
+      final lowProd = prodClean.toLowerCase();
+      final lowServ = serviceClean.toLowerCase();
+      if (lowProd.contains('recarga') && lowProd.contains(lowServ)) {
+        displayProductTitle = prodClean;
+      } else if (lowProd.startsWith('recarga')) {
+        final rest = prodClean.substring(7).trim();
+        displayProductTitle = rest.isEmpty ? 'Recarga $serviceClean' : 'Recarga $serviceClean $rest';
+      } else {
+        displayProductTitle = prodClean.isEmpty
+            ? 'Recarga $serviceClean'
+            : 'Recarga $serviceClean - $prodClean';
+      }
+    } else {
+      displayProductTitle = prodClean.isNotEmpty ? prodClean : '$serviceClean - ${widget.product.name}';
+    }
+
+    final rawDisplayMsg = (r.mensajeOperacion != null && r.mensajeOperacion!.isNotEmpty)
+        ? r.mensajeOperacion!
+        : r.mensaje;
+    final motivoRechazo = (r.motivoProveedor != null && r.motivoProveedor!.trim().isNotEmpty)
+        ? r.motivoProveedor!.trim()
+        : (RegExp(r'origen\s+(no\s+)?valido', caseSensitive: false).hasMatch(rawDisplayMsg)
+            ? 'Origen no valido'
+            : (rawDisplayMsg.isNotEmpty ? rawDisplayMsg : 'Origen no valido'));
+    final numeroGestoPago = r.numeroAutorizacion.isNotEmpty
+        ? r.numeroAutorizacion
+        : (r.codigoProveedor == '-1' ? '-1' : '-1');
+
     final Color statusColor;
     final IconData statusIcon;
     final String statusBadgeText;
@@ -141,17 +174,15 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
       statusBadgeText = 'PENDIENTE / NO CONFIRMADA';
       titleText = 'Operación Pendiente de Confirmación';
     } else {
-      final hasGestoPagoAttempt = (r.upc != null && r.upc!.isNotEmpty) ||
-          (r.codigoProveedor != null && r.codigoProveedor!.isNotEmpty);
       statusColor = AppTheme.errorRed;
       statusIcon = Icons.cancel_rounded;
-      statusBadgeText = hasGestoPagoAttempt ? 'NO SE PUDO VALIDAR EN GESTOPAGO' : 'RECHAZADA';
-      titleText = hasGestoPagoAttempt ? 'No se pudo validar en GestoPago' : 'Operación Rechazada';
+      statusBadgeText = 'OPERACIÓN RECHAZADA';
+      titleText = 'Operación rechazada';
     }
 
-    final displayMsg = (r.mensajeOperacion != null && r.mensajeOperacion!.isNotEmpty)
-        ? r.mensajeOperacion!
-        : r.mensaje;
+    final displayMsg = r.isRejected
+        ? '$displayProductTitle · $motivoRechazo ($numeroGestoPago)'
+        : rawDisplayMsg;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -307,12 +338,12 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                     border: Border.all(color: AppTheme.borderCol(context)),
                   ),
                   child: Text(
-                    '${widget.product.service} - ${widget.product.name}',
+                    displayProductTitle,
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: AppTheme.textPrimary(context),
-                      fontSize: 13,
+                      fontSize: 13.5,
                     ),
                   ),
                 ),
@@ -320,6 +351,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               ],
 
               if (r.idTransaccion != null ||
+                  r.isRejected ||
                   r.numeroAutorizacion.isNotEmpty ||
                   (r.upc != null && r.upc!.isNotEmpty) ||
                   (r.codigoProveedor != null && r.codigoProveedor!.isNotEmpty)) ...[
@@ -351,7 +383,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                             child: Text(
                               r.isSuccess
                                   ? '✓ COMPRA VERIFICADA GESTOPAGO'
-                                  : '⚡ INTENTO GESTOPAGO · NO VALIDADO',
+                                  : '⚡ RESPUESTA GESTOPAGO · RECHAZADA',
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w900,
@@ -368,7 +400,9 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
-                              'COD ${r.codigoProveedor ?? (r.isSuccess ? '01' : 'ERR')}',
+                              r.isSuccess
+                                  ? 'COD ${r.codigoProveedor ?? '01'}'
+                                  : 'GESTOPAGO: $numeroGestoPago',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -382,28 +416,96 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                         ],
                       ),
                       const SizedBox(height: 10),
-                      if (!r.isSuccess)
+                      if (!r.isSuccess) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Operación:',
+                                style: TextStyle(fontSize: 12, color: Colors.white70),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  displayProductTitle,
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                         const Padding(
                           padding: EdgeInsets.only(bottom: 6),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                'Estado en GestoPago:',
+                                'Estado:',
                                 style: TextStyle(fontSize: 12, color: Colors.white70),
                               ),
                               Text(
-                                'NO SE PUDO VALIDAR',
+                                'Operación rechazada',
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w900,
-                                  fontFamily: 'monospace',
-                                  color: Color(0xFFFDE68A),
+                                  color: Color(0xFFFECDD3),
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Motivo GestoPago:',
+                                style: TextStyle(fontSize: 12, color: Colors.white70),
+                              ),
+                              Flexible(
+                                child: Text(
+                                  motivoRechazo,
+                                  textAlign: TextAlign.end,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    fontFamily: 'monospace',
+                                    color: Color(0xFFFDE68A),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              const Text(
+                                'Número GestoPago:',
+                                style: TextStyle(fontSize: 12, color: Colors.white70),
+                              ),
+                              Text(
+                                numeroGestoPago,
+                                style: const TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w900,
+                                  fontFamily: 'monospace',
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (r.idTransaccion != null)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -423,7 +525,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                             ),
                           ],
                         ),
-                      if (r.numeroAutorizacion.isNotEmpty) ...[
+                      if (r.isSuccess && r.numeroAutorizacion.isNotEmpty) ...[
                         const SizedBox(height: 6),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -434,9 +536,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                             ),
                             Flexible(
                               child: Text(
-                                r.numeroAutorizacion == '-1'
-                                    ? '-1 (No validado)'
-                                    : r.numeroAutorizacion,
+                                r.numeroAutorizacion,
                                 textAlign: TextAlign.end,
                                 style: const TextStyle(
                                   fontSize: 13,
@@ -467,6 +567,29 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                                   fontWeight: FontWeight.w700,
                                   fontFamily: 'monospace',
                                   color: Color(0xFF93C5FD),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      if (r.firmaDigital != null && r.firmaDigital!.isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              'Firma AES-256:',
+                              style: TextStyle(fontSize: 11, color: Colors.white70),
+                            ),
+                            Flexible(
+                              child: Text(
+                                r.firmaDigital!,
+                                textAlign: TextAlign.end,
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontFamily: 'monospace',
+                                  color: Colors.white70,
                                 ),
                               ),
                             ),
@@ -592,23 +715,26 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                     ],
                   ),
                 ),
-                if (r.folioTicket.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isDownloadingPdf ? null : _downloadPdf,
-                      icon: _isDownloadingPdf
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.picture_as_pdf_rounded, size: 18),
-                      label: Text(_isDownloadingPdf ? 'Descargando PDF...' : 'Descargar PDF'),
-                    ),
+              ],
+              const SizedBox(height: 14),
+              OfficialLegendCard(leyenda: r.leyendaEfectiva),
+
+              if (r.folioTicket.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _isDownloadingPdf ? null : _downloadPdf,
+                    icon: _isDownloadingPdf
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.picture_as_pdf_rounded, size: 18),
+                    label: Text(_isDownloadingPdf ? 'Descargando PDF...' : 'Descargar PDF'),
                   ),
-                ],
+                ),
               ],
 
               const SizedBox(height: 18),
@@ -621,17 +747,21 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                         final text = r.isRejected
                             ? 'Operación Rechazada - ${widget.product.name}\n'
                                 'Código: ${r.codigoProveedor ?? 'N/A'}\n'
-                                'Detalle: $displayMsg'
+                                'Folio Ticket: ${r.folioTicket}\n'
+                                'Detalle: $displayMsg\n'
+                                'Leyenda Oficial: ${r.leyendaEfectiva}'
                             : (r.isPending
                                 ? 'Operación Pendiente - ${widget.product.name}\n'
                                     'Folio: ${r.folioTicket}\n'
-                                    'UPC: ${r.upc ?? 'N/A'}'
+                                    'UPC: ${r.upc ?? 'N/A'}\n'
+                                    'Leyenda Oficial: ${r.leyendaEfectiva}'
                                 : 'Comprobante GestoPago - ${widget.product.name}\n'
                                     'ID TX GestoPago: ${r.idTransaccion ?? 'N/A'}\n'
                                     'Autorización GestoPago: ${r.numeroAutorizacion}\n'
                                     'Folio UPC: ${r.upc ?? 'N/A'}\n'
                                     'Folio Ticket: ${r.folioTicket}\n'
-                                    'Monto: ${currencyFormatter.format(r.montoPagado)}');
+                                    'Monto: ${currencyFormatter.format(r.montoPagado)}\n'
+                                    'Leyenda Oficial: ${r.leyendaEfectiva}');
                         Clipboard.setData(ClipboardData(text: text));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(

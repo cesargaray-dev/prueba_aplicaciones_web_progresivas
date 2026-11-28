@@ -109,10 +109,10 @@ const isSessionUnauthorized = (
     return false;
   }
 
-  // Backend Autenticacion2FAException returns HTTP 401 on wrong/expired OTP during payment.
-  // Keep wrong 2FA code errors inline in Payment2FAModal without kicking the user out.
-  if (normalizedPath === '/pagos/servicios') {
-    const mentionsOtp = /\b2fa\b|\botp\b|c[oó]digo/i.test(errorMessage);
+  // Backend Autenticacion2FAException returns HTTP 401 on wrong/expired OTP during payment or TOTP verification.
+  // Keep wrong 2FA code errors inline without kicking the user out.
+  if (normalizedPath === '/pagos/servicios' || normalizedPath.startsWith('/auth/me/totp/')) {
+    const mentionsOtp = /\b2fa\b|\botp\b|\btotp\b|autenticador|c[oó]digo/i.test(errorMessage);
     const mentionsSession = /sesi[oó]n|token|no\s+autenticad|expirado\s+su\s+acceso/i.test(
       errorMessage
     );

@@ -578,3 +578,32 @@ export function getProductCategoryName(product: {
   }
   return 'Otros Servicios';
 }
+
+export function obtenerLeyendaComprobante(params: {
+  leyenda?: string;
+  esRechazada?: boolean;
+  numAuth?: string;
+  folio?: string;
+}): string {
+  const custom = params.leyenda?.trim();
+  if (custom) return custom;
+
+  const { esRechazada, numAuth, folio } = params;
+  if (esRechazada) {
+    return (
+      'Operación no aplicada: no se realizó ningún cargo a su cuenta. Conserve este comprobante digital como constancia del intento de operación. Para cualquier duda o aclaración comuníquese a nuestra Línea de Aclaraciones al 800-226-2600 (sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com mencionando la Respuesta GestoPago: ' +
+      (numAuth || '-1') +
+      ' y su Folio de Ticket: ' +
+      (folio || 'N/A') +
+      '.'
+    );
+  }
+
+  return (
+    'Conserve este comprobante digital como constancia oficial de pago. Para cualquier duda, aclaración, reporte de saldo o reclamación relacionada con esta transacción o la aplicación del servicio por parte del proveedor, comuníquese a nuestra Línea de Aclaraciones al 800-226-2600 (sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com dentro de los 30 días naturales posteriores a la fecha de operación. Favor de mencionar el Número de Autorización: ' +
+    (numAuth || 'N/A') +
+    ' y su Folio de Ticket: ' +
+    (folio || 'N/A') +
+    '.'
+  );
+}

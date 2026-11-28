@@ -31,6 +31,10 @@ public class PagoServicioResponseDTO extends GenericResponse {
     private String codigoProveedor;
     private String estadoOperacion;
     private String mensajeOperacion;
+    private String motivoProveedor;
+    private String firmaDigital;
+    private String referenciaDestino;
+    private String numeroCuenta;
     private String servicio;
     private String producto;
     private BigDecimal montoPagado;
@@ -41,6 +45,7 @@ public class PagoServicioResponseDTO extends GenericResponse {
     private LocalDateTime fechaHoraOperacion;
 
     private String concepto;
+    private String leyenda;
 
     private Boolean correoEnviado;
     private String correoDestino;

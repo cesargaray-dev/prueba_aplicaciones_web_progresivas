@@ -19,9 +19,13 @@ import {
   EyeOff,
   FileBadge,
   MapPin,
+  Smartphone,
+  ShieldOff,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
-import type { LoginResponse } from '../types/auth';
+import { authApi } from '../api/authApi';
+import type { LoginResponse, TotpSetupResponse } from '../types/auth';
+import { TotpSetupCard } from './TotpSetupCard';
 import {
   diagnosticarApellido,
   diagnosticarNombre,
@@ -77,11 +81,20 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
   const [showNewPass, setShowNewPass] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
 
+  // Google Authenticator (TOTP) fields
+  const [totpEnabled, setTotpEnabled] = useState<boolean>(Boolean(user.totpHabilitado));
+  const [totpSetup, setTotpSetup] = useState<TotpSetupResponse | null>(null);
+  const [totpActivateCode, setTotpActivateCode] = useState('');
+  const [showDeactivateTotp, setShowDeactivateTotp] = useState(false);
+  const [totpDeactivateCode, setTotpDeactivateCode] = useState('');
+  const [totpBusy, setTotpBusy] = useState(false);
+
   const [copiedAccount, setCopiedAccount] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; msg: string } | null>(
+    null
+  );
   const isDirtyRef = useRef(false);
 
-  // Fetch fresh /auth/me on modal open so split name fields are always pre-populated
   useEffect(() => {
     let cancelled = false;
 
@@ -89,13 +102,18 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
       setLoadingProfile(true);
       try {
         const fresh = await refreshBalance();
-        if (!cancelled && fresh && !isDirtyRef.current) {
-          setNombre(fresh.nombre || '');
-          setSegundoNombre(fresh.segundoNombre || '');
-          setApellidoPaterno(fresh.apellidoPaterno || '');
-          setApellidoMaterno(fresh.apellidoMaterno || '');
-          setCorreo(fresh.email || '');
-          setTelefono(fresh.telefonoMovil || '');
+        if (!cancelled && fresh) {
+          if (typeof fresh.totpHabilitado === 'boolean') {
+            setTotpEnabled(fresh.totpHabilitado);
+          }
+          if (!isDirtyRef.current) {
+            setNombre(fresh.nombre || '');
+            setSegundoNombre(fresh.segundoNombre || '');
+            setApellidoPaterno(fresh.apellidoPaterno || '');
+            setApellidoMaterno(fresh.apellidoMaterno || '');
+            setCorreo(fresh.email || '');
+            setTelefono(fresh.telefonoMovil || '');
+          }
         }
       } finally {
         if (!cancelled) {
@@ -111,12 +129,32 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
   }, [refreshBalance]);
 
   useEffect(() => {
+    if (activeTab !== 'seguridad') return;
+    let cancelled = false;
+    authApi
+      .obtenerEstadoTotp()
+      .then((res) => {
+        if (!cancelled) {
+          setTotpEnabled(Boolean(res.totpHabilitado));
+        }
+      })
+      .catch(() => {
+        // Preserve in-memory user.totpHabilitado state
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !savingContact && !savingAbono && !savingPassword) onClose();
+      if (e.key === 'Escape' && !savingContact && !savingAbono && !savingPassword && !totpBusy) {
+        onClose();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, savingContact, savingAbono, savingPassword]);
+  }, [onClose, savingContact, savingAbono, savingPassword, totpBusy]);
 
   const isPlaceholderMail = esCorreoPlaceholder(user.email || '');
   const phoneDiag = telefono ? diagnosticarTelefono(telefono) : null;
@@ -207,7 +245,7 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
       setApellidoMaterno(updated.apellidoMaterno || maternoClean);
       setFeedback({
         type: 'success',
-        msg: `Perfil actualizado correctamente (${updated.nombreCompleto}). Tus códigos 2FA y recibos llegarán a ${correoClean}.`,
+        msg: `Perfil actualizado correctamente (${updated.nombreCompleto}). Tus notificaciones y recibos llegarán a ${correoClean}.`,
       });
     } catch (err: unknown) {
       setFeedback({
@@ -224,13 +262,19 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
     setFeedback(null);
     const val = parseFloat(montoAbono);
     if (isNaN(val) || val < 1 || val > 50000) {
-      setFeedback({ type: 'error', msg: 'El monto del abono debe estar entre $1.00 y $50,000.00 MXN.' });
+      setFeedback({
+        type: 'error',
+        msg: 'El monto del abono debe estar entre $1.00 y $50,000.00 MXN.',
+      });
       return;
     }
 
     setSavingAbono(true);
     try {
-      const updated = await abonarSaldo({ monto: val, concepto: conceptoAbono.trim() || undefined });
+      const updated = await abonarSaldo({
+        monto: val,
+        concepto: conceptoAbono.trim() || undefined,
+      });
       setFeedback({
         type: 'success',
         msg: `Abono aplicado exitosamente. Nuevo saldo disponible: ${formatCurrency(updated.saldo)}.`,
@@ -242,6 +286,103 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
       });
     } finally {
       setSavingAbono(false);
+    }
+  };
+
+  const handleIniciarTotp = async () => {
+    setFeedback(null);
+    setTotpBusy(true);
+    try {
+      const setup = await authApi.iniciarTotpPerfil();
+      setTotpSetup(setup);
+      setTotpActivateCode('');
+    } catch (err: unknown) {
+      setFeedback({
+        type: 'error',
+        msg:
+          err instanceof Error
+            ? err.message
+            : 'No fue posible generar la configuración de Google Authenticator.',
+      });
+    } finally {
+      setTotpBusy(false);
+    }
+  };
+
+  const handleActivarTotp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedback(null);
+    if (!totpSetup || !/^\d{6}$/.test(totpActivateCode.trim())) {
+      setFeedback({
+        type: 'error',
+        msg: 'Ingresa el código de 6 dígitos generado en Google Authenticator.',
+      });
+      return;
+    }
+
+    setTotpBusy(true);
+    try {
+      const res = await authApi.activarTotpPerfil({
+        secret: totpSetup.secret,
+        codigo: totpActivateCode.trim(),
+      });
+      setTotpEnabled(Boolean(res.totpHabilitado ?? true));
+      setTotpSetup(null);
+      setTotpActivateCode('');
+      await refreshBalance();
+      setFeedback({
+        type: 'success',
+        msg:
+          res.mensaje ||
+          'Google Authenticator activado exitosamente. Tus próximos pagos usarán códigos dinámicos de 30 segundos.',
+      });
+    } catch (err: unknown) {
+      setFeedback({
+        type: 'error',
+        msg:
+          err instanceof Error
+            ? err.message
+            : 'Código inválido. Verifica el número de 6 dígitos en Google Authenticator.',
+      });
+    } finally {
+      setTotpBusy(false);
+    }
+  };
+
+  const handleDesactivarTotp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFeedback(null);
+    if (!/^\d{6}$/.test(totpDeactivateCode.trim())) {
+      setFeedback({
+        type: 'error',
+        msg: 'Ingresa tu código actual de 6 dígitos de Google Authenticator para confirmar la desactivación.',
+      });
+      return;
+    }
+
+    setTotpBusy(true);
+    try {
+      const res = await authApi.desactivarTotpPerfil({
+        codigo: totpDeactivateCode.trim(),
+      });
+      setTotpEnabled(Boolean(res.totpHabilitado ?? false));
+      setShowDeactivateTotp(false);
+      setTotpDeactivateCode('');
+      await refreshBalance();
+      setFeedback({
+        type: 'success',
+        msg: res.mensaje || 'Google Authenticator fue desactivado en tu cuenta.',
+      });
+    } catch (err: unknown) {
+      setFeedback({
+        type: 'error',
+        msg:
+          err instanceof Error
+            ? err.message
+            : 'No fue posible desactivar Google Authenticator. Verifica el código.',
+      });
+    } finally {
+      setTotpBusy(false);
     }
   };
 
@@ -261,11 +402,17 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
       return;
     }
     if (contrasenaNueva !== confirmarContrasena) {
-      setFeedback({ type: 'error', msg: 'La confirmación no coincide con la nueva contraseña.' });
+      setFeedback({
+        type: 'error',
+        msg: 'La confirmación no coincide con la nueva contraseña.',
+      });
       return;
     }
     if (contrasenaActual === contrasenaNueva) {
-      setFeedback({ type: 'error', msg: 'La nueva contraseña debe ser diferente a la actual.' });
+      setFeedback({
+        type: 'error',
+        msg: 'La nueva contraseña debe ser diferente a la actual.',
+      });
       return;
     }
 
@@ -320,7 +467,11 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                   title="Copiar número de cuenta"
                   className="p-1 rounded hover:bg-white/15 text-blue-200 hover:text-white transition-colors shrink-0"
                 >
-                  {copiedAccount ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedAccount ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-300" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                 </button>
               </div>
             </div>
@@ -404,7 +555,7 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
             </div>
           )}
 
-          {/* TAB 1: MIS DATOS (Personal + Contact) */}
+          {/* TAB 1: MIS DATOS */}
           {activeTab === 'datos' && (
             <form onSubmit={handleGuardarPerfil} className="space-y-4">
               {loadingProfile && (
@@ -443,6 +594,11 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                       </div>
                     )}
                   </div>
+                  {(user.ocupacion || user.profesion) && (
+                    <p className="text-[11px] text-blue-200/90 pt-0.5">
+                      {[user.ocupacion, user.profesion].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                   {(user.calle || user.municipio || user.estado) && (
                     <p className="text-[11px] text-blue-100/85 flex items-start gap-1.5 pt-1 border-t border-white/10">
                       <MapPin className="w-3.5 h-3.5 text-amber-300 shrink-0 mt-0.5" />
@@ -487,7 +643,10 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label htmlFor="perfil-segundo-nombre" className="text-xs font-semibold text-slate-700">
+                    <label
+                      htmlFor="perfil-segundo-nombre"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Segundo nombre (opcional)
                     </label>
                     <input
@@ -504,7 +663,10 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label htmlFor="perfil-apellido-paterno" className="text-xs font-semibold text-slate-700">
+                    <label
+                      htmlFor="perfil-apellido-paterno"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Apellido paterno *
                     </label>
                     <input
@@ -521,7 +683,10 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                     />
                   </div>
                   <div className="space-y-1">
-                    <label htmlFor="perfil-apellido-materno" className="text-xs font-semibold text-slate-700">
+                    <label
+                      htmlFor="perfil-apellido-materno"
+                      className="text-xs font-semibold text-slate-700"
+                    >
                       Apellido materno *
                     </label>
                     <input
@@ -543,7 +708,7 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
               <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-600">
-                    Contacto y Notificaciones 2FA
+                    Contacto y Notificaciones
                   </h4>
                   <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -601,9 +766,13 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                           : 'border-slate-200 focus:ring-blue-600'
                       }`}
                     />
-                    {phoneValid && <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-2" />}
+                    {phoneValid && (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-2" />
+                    )}
                   </div>
-                  {telefono && phoneDiag && <p className="text-[11px] text-red-600 font-medium">{phoneDiag}</p>}
+                  {telefono && phoneDiag && (
+                    <p className="text-[11px] text-red-600 font-medium">{phoneDiag}</p>
+                  )}
                 </div>
               </div>
 
@@ -612,105 +781,301 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                 disabled={savingContact}
                 className="w-full py-2.5 rounded-xl bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-60 shadow-sm"
               >
-                {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {savingContact ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4" />
+                )}
                 <span>Guardar Cambios de Perfil</span>
               </button>
             </form>
           )}
 
           {/* TAB 2: ABONAR SALDO */}
-          {activeTab === 'abono' && (
-            <form onSubmit={handleAbonar} className="space-y-4 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
-                  <Wallet className="w-4 h-4 text-emerald-700" />
-                  <span>Abonar Fondos a mi Cuenta</span>
-                </h4>
-                <span className="text-xs font-black text-emerald-800">
-                  Actual: {formatCurrency(user.saldo)}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2">
-                {['100', '250', '500', '1000'].map((amt) => (
-                  <button
-                    key={amt}
-                    type="button"
-                    onClick={() => setMontoAbono(amt)}
-                    className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                      montoAbono === amt
-                        ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
-                        : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-100'
-                    }`}
-                  >
-                    ${amt}
-                  </button>
-                ))}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label htmlFor="abono-monto" className="text-[11px] font-bold text-emerald-900">
-                    Monto MXN
-                  </label>
-                  <input
-                    id="abono-monto"
-                    type="number"
-                    min={1}
-                    max={50000}
-                    step="0.01"
-                    value={montoAbono}
-                    onChange={(e) => setMontoAbono(e.target.value)}
-                    className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="abono-concepto" className="text-[11px] font-bold text-emerald-900">
-                    Concepto
-                  </label>
-                  <input
-                    id="abono-concepto"
-                    type="text"
-                    value={conceptoAbono}
-                    onChange={(e) => setConceptoAbono(e.target.value)}
-                    placeholder="Transferencia SPEI"
-                    className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={savingAbono}
-                className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-60 shadow-sm"
+          {activeTab === 'abono' &&
+            (user.esAdmin ? (
+              <form
+                onSubmit={handleAbonar}
+                className="space-y-4 bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200"
               >
-                {savingAbono ? <Loader2 className="w-4 h-4 animate-spin" /> : <PlusCircle className="w-4 h-4" />}
-                <span>Abonar a Cuenta</span>
-              </button>
-            </form>
-          )}
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                    <Wallet className="w-4 h-4 text-emerald-700" />
+                    <span>Abonar Fondos (Administrador)</span>
+                  </h4>
+                  <span className="text-xs font-black text-emerald-800">
+                    Actual: {formatCurrency(user.saldo)}
+                  </span>
+                </div>
 
-          {/* TAB 3: SEGURIDAD (Cambiar Contraseña + Resumen) */}
+                <div className="grid grid-cols-4 gap-2">
+                  {['100', '250', '500', '1000'].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setMontoAbono(amt)}
+                      className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
+                        montoAbono === amt
+                          ? 'bg-emerald-700 text-white border-emerald-700 shadow-sm'
+                          : 'bg-white text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      ${amt}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label htmlFor="abono-monto" className="text-[11px] font-bold text-emerald-900">
+                      Monto MXN
+                    </label>
+                    <input
+                      id="abono-monto"
+                      type="number"
+                      min={1}
+                      max={50000}
+                      step="0.01"
+                      value={montoAbono}
+                      onChange={(e) => setMontoAbono(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="abono-concepto"
+                      className="text-[11px] font-bold text-emerald-900"
+                    >
+                      Concepto
+                    </label>
+                    <input
+                      id="abono-concepto"
+                      type="text"
+                      value={conceptoAbono}
+                      onChange={(e) => setConceptoAbono(e.target.value)}
+                      placeholder="Transferencia SPEI"
+                      className="w-full px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={savingAbono}
+                  className="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-60 shadow-sm"
+                >
+                  {savingAbono ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <PlusCircle className="w-4 h-4" />
+                  )}
+                  <span>Abonar a Cuenta</span>
+                </button>
+              </form>
+            ) : (
+              <div className="space-y-4 bg-blue-50/70 p-4 rounded-2xl border border-blue-200 text-xs text-slate-800">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-extrabold uppercase tracking-wider text-blue-950 flex items-center gap-1.5">
+                    <Wallet className="w-4 h-4 text-blue-700" />
+                    <span>Fondeo Autorizado por Administrador</span>
+                  </h4>
+                  <span className="font-black text-blue-900">
+                    Saldo actual: {formatCurrency(user.saldo)}
+                  </span>
+                </div>
+                <p className="leading-relaxed text-slate-700">
+                  Al aperturar una cuenta digital el saldo inicial es de <strong>$0.00 MXN</strong>. Por seguridad operativa, únicamente un <strong>Administrador (@admin)</strong> puede ingresar dinero a tu cuenta desde el módulo de Administración de Usuarios.
+                </p>
+                <div className="p-3 rounded-xl bg-white border border-blue-200 flex items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase text-slate-400 block">
+                      Número de Cuenta para Depósito Admin
+                    </span>
+                    <span className="font-mono font-black text-sm text-slate-900">
+                      {user.numeroCuenta}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCopyAccount}
+                    className="px-3 py-1.5 rounded-lg bg-blue-900 hover:bg-blue-800 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                  >
+                    {copiedAccount ? (
+                      <Check className="w-3.5 h-3.5" />
+                    ) : (
+                      <Copy className="w-3.5 h-3.5" />
+                    )}
+                    <span>{copiedAccount ? 'Copiada' : 'Copiar'}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+
+          {/* TAB 3: SEGURIDAD (Google Authenticator 2FA Dinámico + Cambiar Contraseña) */}
           {activeTab === 'seguridad' && (
             <div className="space-y-4">
-              <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-2.5 text-xs text-indigo-950">
-                <ShieldCheck className="w-4 h-4 text-indigo-700 shrink-0 mt-0.5" />
-                <div className="space-y-0.5">
-                  <p className="font-bold">Protección Multiplataforma Activa</p>
-                  <p className="text-[11px] text-indigo-800/90 leading-relaxed">
-                    Tus credenciales sincronizan Web y App Móvil. Cada pago requiere confirmación 2FA enviada a tu correo real y la sesión se bloquea tras 5 minutos de inactividad.
-                  </p>
+              {/* Google Authenticator Section */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Smartphone className="w-4 h-4 text-indigo-700" />
+                    <span>Google Authenticator (2FA Dinámico)</span>
+                  </h4>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${
+                      totpEnabled
+                        ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border-amber-200'
+                    }`}
+                  >
+                    {totpEnabled ? 'Activo' : 'No configurado'}
+                  </span>
                 </div>
+
+                {totpEnabled ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Tu cuenta autoriza cada pago mediante códigos dinámicos TOTP de 6 dígitos que se actualizan cada 30 segundos en Google Authenticator.
+                    </p>
+
+                    {!showDeactivateTotp ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFeedback(null);
+                          setShowDeactivateTotp(true);
+                        }}
+                        disabled={totpBusy}
+                        className="px-3.5 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-bold inline-flex items-center gap-1.5 transition-colors"
+                      >
+                        <ShieldOff className="w-3.5 h-3.5" />
+                        <span>Desactivar Google Authenticator</span>
+                      </button>
+                    ) : (
+                      <form
+                        onSubmit={handleDesactivarTotp}
+                        className="p-3 rounded-xl bg-white border border-red-200 space-y-2.5"
+                      >
+                        <label
+                          htmlFor="perfil-totp-desactivar"
+                          className="text-xs font-bold text-slate-800 block"
+                        >
+                          Código actual de Google Authenticator (6 dígitos)
+                        </label>
+                        <input
+                          id="perfil-totp-desactivar"
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={totpDeactivateCode}
+                          onChange={(e) =>
+                            setTotpDeactivateCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                          }
+                          placeholder="000000"
+                          className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-center font-mono text-base font-black tracking-[0.4em] text-slate-900 focus:outline-none focus:ring-2 focus:ring-red-500"
+                          disabled={totpBusy}
+                        />
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowDeactivateTotp(false);
+                              setTotpDeactivateCode('');
+                            }}
+                            disabled={totpBusy}
+                            className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={totpBusy}
+                            className="px-3.5 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            {totpBusy ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <ShieldOff className="w-3.5 h-3.5" />
+                            )}
+                            <span>Confirmar Desactivación</span>
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                ) : !totpSetup ? (
+                  <div className="space-y-3">
+                    <p className="text-xs text-slate-600 leading-relaxed">
+                      Vincula <strong>Google Authenticator</strong> para autorizar tus pagos al instante con códigos dinámicos de 30 segundos sin esperar correos.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleIniciarTotp}
+                      disabled={totpBusy}
+                      className="w-full py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 shadow-sm"
+                    >
+                      {totpBusy ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Smartphone className="w-4 h-4" />
+                      )}
+                      <span>Activar Google Authenticator</span>
+                    </button>
+                  </div>
+                ) : (
+                  <form onSubmit={handleActivarTotp} className="space-y-3">
+                    <TotpSetupCard
+                      compact
+                      totpSetup={totpSetup}
+                      codigo={totpActivateCode}
+                      onCodigoChange={setTotpActivateCode}
+                      inputId="perfil-totp-activar"
+                      disabled={totpBusy}
+                    />
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTotpSetup(null);
+                          setTotpActivateCode('');
+                        }}
+                        disabled={totpBusy}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200/70"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={totpBusy}
+                        className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-60 shadow-sm"
+                      >
+                        {totpBusy ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        <span>Confirmar y Activar</span>
+                      </button>
+                    </div>
+                  </form>
+                )}
               </div>
 
-              <form onSubmit={handleCambiarContrasena} className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+              {/* Password Change Form */}
+              <form
+                onSubmit={handleCambiarContrasena}
+                className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200"
+              >
                 <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-indigo-700" />
                   <span>Cambiar Contraseña</span>
                 </h4>
 
                 <div className="space-y-1">
-                  <label htmlFor="perfil-pass-actual" className="text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="perfil-pass-actual"
+                    className="text-xs font-semibold text-slate-700"
+                  >
                     Contraseña actual
                   </label>
                   <div className="relative">
@@ -728,13 +1093,20 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                       onClick={() => setShowCurrentPass((v) => !v)}
                       className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
                     >
-                      {showCurrentPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showCurrentPass ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="perfil-pass-nueva" className="text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="perfil-pass-nueva"
+                    className="text-xs font-semibold text-slate-700"
+                  >
                     Nueva contraseña
                   </label>
                   <div className="relative">
@@ -752,7 +1124,11 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                       onClick={() => setShowNewPass((v) => !v)}
                       className="absolute right-2.5 top-2 text-slate-400 hover:text-slate-600"
                     >
-                      {showNewPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showNewPass ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
                     </button>
                   </div>
                 </div>
@@ -778,7 +1154,10 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="perfil-pass-confirmar" className="text-xs font-semibold text-slate-700">
+                  <label
+                    htmlFor="perfil-pass-confirmar"
+                    className="text-xs font-semibold text-slate-700"
+                  >
                     Confirmar nueva contraseña
                   </label>
                   <input
@@ -796,7 +1175,11 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                   disabled={savingPassword}
                   className="w-full py-2.5 rounded-xl bg-indigo-900 hover:bg-indigo-800 text-white font-bold text-xs flex items-center justify-center gap-2 transition-colors disabled:opacity-60 shadow-sm"
                 >
-                  {savingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                  {savingPassword ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4" />
+                  )}
                   <span>Actualizar Contraseña</span>
                 </button>
               </form>
@@ -808,7 +1191,11 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
   );
 };
 
-export const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose, initialTab = 'datos' }) => {
+export const ProfileModal: React.FC<ProfileModalProps> = ({
+  isOpen,
+  onClose,
+  initialTab = 'datos',
+}) => {
   const { user } = useAuth();
   if (!isOpen || !user) return null;
   return (

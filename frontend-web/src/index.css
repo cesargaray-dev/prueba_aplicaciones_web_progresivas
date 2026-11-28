@@ -45,6 +45,12 @@ html.dark .bg-white:not(.brand-logo-tile) {
   border: 1px solid rgba(203, 213, 225, 0.85);
 }
 
+.totp-qr-frame,
+html.dark .totp-qr-frame {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
 html.dark .brand-logo-tile {
   background: linear-gradient(145deg, #ffffff 0%, #e2e8f0 100%) !important;
   border: 1px solid rgba(226, 232, 240, 0.92) !important;

@@ -66,6 +66,8 @@ dependencies {
     //Utilerias Google
     implementation 'com.google.api-client:google-api-client:2.7.1'
     implementation 'com.google.api-client:google-api-client-jackson2:2.7.1'
+    implementation 'com.google.zxing:core:3.5.3'
+    implementation 'com.google.zxing:javase:3.5.3'
     //Mail-XML
     implementation 'org.glassfish.jaxb:jaxb-runtime:4.0.3'
     implementation 'jakarta.xml.bind:jakarta.xml.bind-api:4.0.0'

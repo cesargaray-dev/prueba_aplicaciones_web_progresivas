@@ -67,6 +67,24 @@ class ResolucionCodigoPostal {
 class MexicoCatalogs {
   MexicoCatalogs._();
 
+  static const List<String> catalogoOcupaciones = [
+    'Empleado(a) del sector privado',
+    'Servidor(a) público(a)',
+    'Profesionista independiente',
+    'Trabajador(a) por cuenta propia / Oficio',
+    'Empresario(a) / Dueño(a) de negocio',
+    'Comerciante',
+    'Docente / Académico(a)',
+    'Personal del sector salud',
+    'Fuerzas armadas / Seguridad pública',
+    'Agricultor(a) / Ganadero(a) / Pescador(a)',
+    'Estudiante',
+    'Labores del hogar',
+    'Jubilado(a) / Pensionado(a)',
+    'Desempleado(a) / En búsqueda de empleo',
+    'Otra ocupación',
+  ];
+
   static const List<ProfesionItem> tabuladorProfesiones = [
     ProfesionItem(clave: 'ING_SOFTWARE_TI', label: 'Ingeniero en Sistemas / Software / TI', sector: 'Tecnología e Ingeniería'),
     ProfesionItem(clave: 'ING_INDUSTRIAL_CIVIL', label: 'Ingeniero Industrial / Civil / Mecánico / Eléctrico', sector: 'Tecnología e Ingeniería'),

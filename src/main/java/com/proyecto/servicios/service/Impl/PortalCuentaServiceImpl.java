@@ -15,11 +15,16 @@ import com.proyecto.servicios.exception.ValidacionException;
 import com.proyecto.servicios.model.auth.AbonoSaldoRequestDTO;
 import com.proyecto.servicios.model.auth.ActualizarContactoRequestDTO;
 import com.proyecto.servicios.model.auth.CambiarContrasenaRequestDTO;
+import com.proyecto.servicios.model.auth.DisponibilidadRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.EnviarCodigoRegistroRequestDTO;
 import com.proyecto.servicios.model.auth.EnviarCodigoRegistroResponseDTO;
 import com.proyecto.servicios.model.auth.LoginRequestDTO;
 import com.proyecto.servicios.model.auth.LoginResponseDTO;
 import com.proyecto.servicios.model.auth.RegisterRequestDTO;
+import com.proyecto.servicios.model.auth.TotpEstadoResponseDTO;
+import com.proyecto.servicios.model.auth.TotpSetupRequestDTO;
+import com.proyecto.servicios.model.auth.TotpSetupResponseDTO;
+import com.proyecto.servicios.model.auth.TotpVerificarRequestDTO;
 import com.proyecto.servicios.model.auth.UserProfileDTO;
 import com.proyecto.servicios.model.brevo.EmailEnvioResultadoDTO;
 import com.proyecto.servicios.repositorys.clientes.ClienteRepository;
@@ -30,6 +35,7 @@ import com.proyecto.servicios.service.AuthService;
 import com.proyecto.servicios.service.ComprobanteEmailService;
 import com.proyecto.servicios.service.PortalCuentaService;
 import com.proyecto.servicios.util.TelefonoUtil;
+import com.proyecto.servicios.util.TotpAuthenticatorUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -77,8 +83,11 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
     private final PlatformTransactionManager transactionManager;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${app.onboarding.saldo-inicial:200.00}")
-    private BigDecimal saldoInicial = new BigDecimal("200.00");
+    @Value("${app.onboarding.saldo-inicial:0.00}")
+    private BigDecimal saldoInicial = BigDecimal.ZERO;
+
+    @Autowired(required = false)
+    private com.proyecto.servicios.service.SepomexCatalogoService sepomexCatalogoService;
 
     public PortalCuentaServiceImpl(
             ClienteRepository clienteRepository,
@@ -123,6 +132,123 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         this.passwordEncoder = passwordEncoder != null ? passwordEncoder : new BCryptPasswordEncoder();
     }
 
+    private boolean correoYaEnUso(String correoLimpio) {
+        return clienteRepository.existsByCorreo(correoLimpio)
+                || clienteRepository.existsByCorreoIgnoreCase(correoLimpio);
+    }
+
+    private boolean usuarioYaEnUso(String usuarioLimpio) {
+        return loginClienteRepository.findByUsuario(usuarioLimpio).isPresent()
+                || loginClienteRepository.findByUsuarioIgnoreCase(usuarioLimpio).isPresent();
+    }
+
+    private boolean curpYaEnUso(String curpLimpia) {
+        return clienteRepository.existsByCurp(curpLimpia)
+                || clienteRepository.existsByCurpIgnoreCase(curpLimpia);
+    }
+
+    private boolean rfcYaEnUso(String rfcLimpio) {
+        return clienteRepository.existsByRfc(rfcLimpio)
+                || clienteRepository.existsByRfcIgnoreCase(rfcLimpio);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DisponibilidadRegistroResponseDTO verificarDisponibilidadRegistro(
+            String correo, String usuario, String curp, String rfc) {
+        java.util.Map<String, String> mensajes = new java.util.LinkedHashMap<>();
+        Boolean correoDisp = null;
+        Boolean usuarioDisp = null;
+        Boolean curpDisp = null;
+        Boolean rfcDisp = null;
+
+        if (correo != null && !correo.isBlank()) {
+            String mailClean = correo.trim().toLowerCase(Locale.ROOT);
+            boolean usado = correoYaEnUso(mailClean);
+            correoDisp = !usado;
+            if (usado) {
+                mensajes.put("correo", "Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.");
+            }
+        }
+        if (usuario != null && !usuario.isBlank()) {
+            String usrClean = usuario.trim();
+            boolean usado = usuarioYaEnUso(usrClean);
+            usuarioDisp = !usado;
+            if (usado) {
+                mensajes.put("usuario", "El nombre de usuario '" + usrClean + "' ya se encuentra en uso.");
+            }
+        }
+        if (curp != null && !curp.isBlank()) {
+            String curpClean = curp.trim().toUpperCase(Locale.ROOT);
+            boolean usado = curpYaEnUso(curpClean);
+            curpDisp = !usado;
+            if (usado) {
+                mensajes.put("curp", "La CURP ingresada ya se encuentra registrada en otra cuenta.");
+            }
+        }
+        if (rfc != null && !rfc.isBlank()) {
+            String rfcClean = rfc.trim().toUpperCase(Locale.ROOT);
+            boolean usado = rfcYaEnUso(rfcClean);
+            rfcDisp = !usado;
+            if (usado) {
+                mensajes.put("rfc", "El RFC ingresado ya se encuentra registrado en otra cuenta.");
+            }
+        }
+
+        return DisponibilidadRegistroResponseDTO.builder()
+                .correoDisponible(correoDisp)
+                .usuarioDisponible(usuarioDisp)
+                .curpDisponible(curpDisp)
+                .rfcDisponible(rfcDisp)
+                .mensajes(mensajes)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TotpSetupResponseDTO generarConfiguracionTotpRegistro(TotpSetupRequestDTO request) {
+        String correo = (request != null && request.getCorreo() != null)
+                ? request.getCorreo().trim().toLowerCase(Locale.ROOT)
+                : "";
+        String usuario = (request != null && request.getUsuario() != null)
+                ? request.getUsuario().trim()
+                : "";
+
+        if (correo.isBlank()) {
+            throw new ValidacionException("El correo electrónico es obligatorio para configurar Google Authenticator.");
+        }
+        if (!TelefonoUtil.esCorreoSintaxisValida(correo)) {
+            throw new ValidacionException("El formato del correo electrónico no es válido.");
+        }
+        if (TelefonoUtil.esCorreoPlaceholder(correo)) {
+            throw new ValidacionException("Ingresa un correo electrónico real (no se permiten dominios de ejemplo).");
+        }
+        if (correoYaEnUso(correo)) {
+            throw new CorreoDuplicadoException(
+                    "Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.");
+        }
+        if (!usuario.isBlank() && usuarioYaEnUso(usuario)) {
+            throw new ValidacionException("El nombre de usuario '" + usuario + "' ya se encuentra en uso.");
+        }
+
+        String etiquetaCuenta = !usuario.isBlank() ? usuario : correo;
+        String secret = TotpAuthenticatorUtil.generarSecretoBase32();
+        String uri = TotpAuthenticatorUtil.construirOtpAuthUri(
+                TotpAuthenticatorUtil.EMISOR_DEFAULT, etiquetaCuenta, secret);
+        String qrBase64 = TotpAuthenticatorUtil.generarQrPngBase64(uri, 280);
+
+        return TotpSetupResponseDTO.builder()
+                .secret(secret)
+                .secretFormateado(TotpAuthenticatorUtil.formatearSecretoLegible(secret))
+                .otpauthUri(uri)
+                .qrPngBase64(qrBase64)
+                .emisor(TotpAuthenticatorUtil.EMISOR_DEFAULT)
+                .cuenta(etiquetaCuenta)
+                .digitos(TotpAuthenticatorUtil.DIGITOS_TOTP)
+                .periodoSegundos(TotpAuthenticatorUtil.PERIODO_SEGUNDOS)
+                .build();
+    }
+
     @Override
     public EnviarCodigoRegistroResponseDTO enviarCodigoVerificacionRegistro(EnviarCodigoRegistroRequestDTO request) {
         if (request == null || request.getCorreo() == null || request.getCorreo().isBlank()) {
@@ -136,12 +262,12 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             throw new ValidacionException(
                     "Ingresa un correo electrónico real para recibir tu código 2FA (no se permiten dominios de ejemplo).");
         }
-        if (clienteRepository.existsByCorreo(correo)) {
-            throw new CorreoDuplicadoException("El correo electrónico ya está registrado en otra cuenta.");
+        if (correoYaEnUso(correo)) {
+            throw new CorreoDuplicadoException("Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.");
         }
         if (request.getUsuario() != null && !request.getUsuario().isBlank()) {
             String usuario = request.getUsuario().trim();
-            if (loginClienteRepository.findByUsuario(usuario).isPresent()) {
+            if (usuarioYaEnUso(usuario)) {
                 throw new ValidacionException("El nombre de usuario '" + usuario + "' ya se encuentra en uso.");
             }
         }
@@ -150,7 +276,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             if (!curp.matches("^[A-Z]{4}\\d{6}[HM][A-Z]{5}[A-Z\\d]\\d$")) {
                 throw new ValidacionException("El formato de la CURP es inválido (debe tener 18 caracteres oficiales).");
             }
-            if (clienteRepository.existsByCurp(curp)) {
+            if (curpYaEnUso(curp)) {
                 throw new CurpDuplicadaException("La CURP ingresada ya se encuentra registrada en otra cuenta.");
             }
         }
@@ -159,7 +285,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             if (!rfc.matches("^[A-ZÑ&]{3,4}\\d{6}[A-Z\\d]{3}$")) {
                 throw new ValidacionException("El formato del RFC es inválido (debe tener 12 o 13 caracteres con homoclave).");
             }
-            if (clienteRepository.existsByRfc(rfc)) {
+            if (rfcYaEnUso(rfc)) {
                 throw new RfcDuplicadoException("El RFC ingresado ya se encuentra registrado en otra cuenta.");
             }
         }
@@ -203,11 +329,40 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             throw new ValidacionException("La solicitud de registro es obligatoria.");
         }
         String correo = request.getCorreo() != null ? request.getCorreo().trim().toLowerCase(Locale.ROOT) : "";
+        if (!correo.isBlank() && correoYaEnUso(correo)) {
+            throw new CorreoDuplicadoException(
+                    "Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.");
+        }
+
+        String totpSecretRaw = request.getTotpSecret() != null
+                ? TotpAuthenticatorUtil.normalizarSecretoBase32(request.getTotpSecret())
+                : "";
+        if (!totpSecretRaw.isEmpty()) {
+            if (!TotpAuthenticatorUtil.esSecretoBase32Valido(totpSecretRaw)) {
+                throw new ValidacionException("La clave secreta de Google Authenticator no es válida.");
+            }
+            String codigoTotp = (request.getCodigoTotp() != null && !request.getCodigoTotp().isBlank())
+                    ? request.getCodigoTotp().trim()
+                    : (request.getCodigoVerificacion() != null ? request.getCodigoVerificacion().trim() : "");
+            if (!codigoTotp.matches("^\\d{6}$")) {
+                throw new Autenticacion2FAException(
+                        "Ingresa el código dinámico de 6 dígitos que aparece en Google Authenticator.");
+            }
+            if (!TotpAuthenticatorUtil.verificarCodigo(totpSecretRaw, codigoTotp)) {
+                throw new Autenticacion2FAException(
+                        "Código de Google Authenticator incorrecto o expirado. Verifica el código actual de 6 dígitos (se renueva cada 30 segundos).");
+            }
+            request.setTotpSecret(totpSecretRaw);
+            LoginResponseDTO resp = registrarClientePortal(request);
+            codigosRegistro.remove(correo);
+            return resp;
+        }
+
         String codigoRecibido = request.getCodigoVerificacion() != null ? request.getCodigoVerificacion().trim() : "";
 
         if (!codigoRecibido.matches("^\\d{6}$")) {
             throw new Autenticacion2FAException(
-                    "Debes ingresar el código de verificación 2FA de 6 dígitos enviado a tu correo electrónico.");
+                    "Debes ingresar el código de verificación 2FA de 6 dígitos.");
         }
 
         CodigoRegistroTemporal guardado = codigosRegistro.get(correo);
@@ -269,11 +424,11 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
 
         LocalDate fechaNacimiento = parsearYValidarFechaNacimiento(request.getFechaNacimiento());
 
-        if (loginClienteRepository.findByUsuario(usuario).isPresent()) {
+        if (usuarioYaEnUso(usuario)) {
             throw new ValidacionException("El nombre de usuario '" + usuario + "' ya se encuentra en uso.");
         }
-        if (clienteRepository.existsByCorreo(correo)) {
-            throw new CorreoDuplicadoException("El correo electrónico ya está registrado en otra cuenta.");
+        if (correoYaEnUso(correo)) {
+            throw new CorreoDuplicadoException("Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.");
         }
 
         RegistroPersistido persistido = transactionManager != null
@@ -327,8 +482,8 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         Cliente cliente = clienteRepository.findById(perfilActual.getClienteId())
                 .orElseThrow(() -> new ValidacionException("No se encontró el perfil del cliente autenticado."));
 
-        if (!correoNuevo.equalsIgnoreCase(cliente.getCorreo()) && clienteRepository.existsByCorreo(correoNuevo)) {
-            throw new CorreoDuplicadoException("El correo electrónico ya se encuentra asociado a otra cuenta.");
+        if (!correoNuevo.equalsIgnoreCase(cliente.getCorreo()) && correoYaEnUso(correoNuevo)) {
+            throw new CorreoDuplicadoException("Este correo electrónico ya está en uso en otra cuenta.");
         }
 
         cliente.setCorreo(correoNuevo);
@@ -364,6 +519,9 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         }
         if (request.getOcupacion() != null && !request.getOcupacion().isBlank()) {
             cliente.setOcupacion(request.getOcupacion().trim().toUpperCase(Locale.ROOT));
+        }
+        if (request.getProfesion() != null && !request.getProfesion().isBlank()) {
+            cliente.setProfesion(request.getProfesion().trim().toUpperCase(Locale.ROOT));
         }
         if (request.getEmpresa() != null && !request.getEmpresa().isBlank()) {
             cliente.setEmpresa(request.getEmpresa().trim().toUpperCase(Locale.ROOT));
@@ -482,6 +640,10 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         }
 
         UserProfileDTO perfilActual = authService.obtenerPerfilAutenticado(authHeader, usuarioParam);
+        if (!AuthServiceImpl.esUsuarioAdmin(perfilActual.getUsuario())) {
+            throw new org.springframework.security.access.AccessDeniedException(
+                    "Solo un administrador puede ingresar fondos a las cuentas bancarias.");
+        }
         Cuenta cuenta = cuentaRepository.findByNumeroCuentaForUpdate(perfilActual.getNumeroCuenta())
                 .orElseThrow(() -> new CuentaNoEncontradaException(
                         "No se encontró la cuenta bancaria asociada al perfil."));
@@ -505,6 +667,94 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
             actualizado.setTelefonoMovil(cuenta.getCliente().getTelefonoMovil());
         }
         return actualizado;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TotpEstadoResponseDTO consultarEstadoTotp(String authHeader) {
+        UserProfileDTO perfil = authService.obtenerPerfilAutenticado(authHeader, null);
+        LoginCliente login = loginClienteRepository.findByUsuario(perfil.getUsuario())
+                .orElseThrow(() -> new ValidacionException("No se encontró la sesión activa del usuario."));
+        boolean activo = Boolean.TRUE.equals(login.getTotpHabilitado())
+                && login.getTotpSecret() != null
+                && !login.getTotpSecret().isBlank();
+        return TotpEstadoResponseDTO.builder()
+                .totpHabilitado(activo)
+                .mensaje(activo
+                        ? "Google Authenticator se encuentra activo en tu cuenta."
+                        : "Google Authenticator aún no está vinculado a tu cuenta.")
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TotpSetupResponseDTO iniciarVinculacionTotp(String authHeader) {
+        UserProfileDTO perfil = authService.obtenerPerfilAutenticado(authHeader, null);
+        String etiqueta = perfil.getUsuario() != null ? perfil.getUsuario() : perfil.getEmail();
+        String secret = TotpAuthenticatorUtil.generarSecretoBase32();
+        String uri = TotpAuthenticatorUtil.construirOtpAuthUri(
+                TotpAuthenticatorUtil.EMISOR_DEFAULT, etiqueta, secret);
+        String qrBase64 = TotpAuthenticatorUtil.generarQrPngBase64(uri, 280);
+        return TotpSetupResponseDTO.builder()
+                .secret(secret)
+                .secretFormateado(TotpAuthenticatorUtil.formatearSecretoLegible(secret))
+                .otpauthUri(uri)
+                .qrPngBase64(qrBase64)
+                .emisor(TotpAuthenticatorUtil.EMISOR_DEFAULT)
+                .cuenta(etiqueta)
+                .digitos(TotpAuthenticatorUtil.DIGITOS_TOTP)
+                .periodoSegundos(TotpAuthenticatorUtil.PERIODO_SEGUNDOS)
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public TotpEstadoResponseDTO activarTotp(String authHeader, TotpVerificarRequestDTO request) {
+        if (request == null || request.getSecret() == null || request.getSecret().isBlank()) {
+            throw new ValidacionException("La clave secreta de Google Authenticator es obligatoria.");
+        }
+        String secretClean = TotpAuthenticatorUtil.normalizarSecretoBase32(request.getSecret());
+        if (!TotpAuthenticatorUtil.esSecretoBase32Valido(secretClean)) {
+            throw new ValidacionException("La clave secreta de Google Authenticator no tiene formato Base32 válido.");
+        }
+        if (!TotpAuthenticatorUtil.verificarCodigo(secretClean, request.getCodigo())) {
+            throw new Autenticacion2FAException(
+                    "Código de Google Authenticator incorrecto o expirado. Ingresa el código actual de 6 dígitos que muestra tu aplicación.");
+        }
+        UserProfileDTO perfil = authService.obtenerPerfilAutenticado(authHeader, null);
+        LoginCliente login = loginClienteRepository.findByUsuario(perfil.getUsuario())
+                .orElseThrow(() -> new ValidacionException("No se encontró el usuario autenticado."));
+        login.setTotpSecret(secretClean);
+        login.setTotpHabilitado(true);
+        loginClienteRepository.save(login);
+        return TotpEstadoResponseDTO.builder()
+                .totpHabilitado(true)
+                .mensaje("Google Authenticator vinculado y activado exitosamente.")
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public TotpEstadoResponseDTO desactivarTotp(String authHeader, TotpVerificarRequestDTO request) {
+        UserProfileDTO perfil = authService.obtenerPerfilAutenticado(authHeader, null);
+        LoginCliente login = loginClienteRepository.findByUsuario(perfil.getUsuario())
+                .orElseThrow(() -> new ValidacionException("No se encontró el usuario autenticado."));
+        if (Boolean.TRUE.equals(login.getTotpHabilitado())
+                && login.getTotpSecret() != null
+                && !login.getTotpSecret().isBlank()) {
+            String codigo = request != null ? request.getCodigo() : null;
+            if (!TotpAuthenticatorUtil.verificarCodigo(login.getTotpSecret(), codigo)) {
+                throw new Autenticacion2FAException(
+                        "Ingresa un código válido actual de Google Authenticator para poder desactivarlo.");
+            }
+        }
+        login.setTotpSecret(null);
+        login.setTotpHabilitado(false);
+        loginClienteRepository.save(login);
+        return TotpEstadoResponseDTO.builder()
+                .totpHabilitado(false)
+                .mensaje("Google Authenticator desactivado.")
+                .build();
     }
 
     @Override
@@ -539,6 +789,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         String nacionalidad = textoONull(request.getNacionalidad());
         String estadoCivil = textoONull(request.getEstadoCivil());
         String ocupacion = textoONull(request.getOcupacion());
+        String profesion = textoONull(request.getProfesion());
         String empresa = textoONull(request.getEmpresa());
         String telAlt = textoONull(request.getTelefonoAlternativo());
         BigDecimal ingreso = (request.getIngresoMensual() != null && request.getIngresoMensual().compareTo(BigDecimal.ZERO) > 0)
@@ -556,7 +807,8 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         cliente.setSexo(sexo);
         cliente.setNacionalidad(nacionalidad != null ? nacionalidad.toUpperCase(Locale.ROOT) : "MEXICANA");
         cliente.setEstadoCivil(estadoCivil != null ? estadoCivil.toUpperCase(Locale.ROOT) : "SOLTERO");
-        cliente.setOcupacion(ocupacion != null ? ocupacion.toUpperCase(Locale.ROOT) : "PARTICULAR");
+        cliente.setOcupacion(ocupacion != null ? ocupacion.toUpperCase(Locale.ROOT) : "EMPLEADO(A) DEL SECTOR PRIVADO");
+        cliente.setProfesion(profesion != null ? profesion.toUpperCase(Locale.ROOT) : null);
         cliente.setEmpresa(empresa != null ? empresa.toUpperCase(Locale.ROOT) : "INDEPENDIENTE");
         cliente.setIngresoMensual(ingreso);
         cliente.setCorreo(correo);
@@ -573,6 +825,19 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         String cp = textoONull(request.getCodigoPostal());
         String pais = textoONull(request.getPais());
 
+        if (sepomexCatalogoService != null && cp != null && !cp.isBlank()) {
+            var cpInfo = sepomexCatalogoService.consultarCodigoPostal(cp);
+            if (!cpInfo.isValido()) {
+                throw new ValidacionException(cpInfo.getMensaje());
+            }
+            estado = cpInfo.getEstado();
+            municipio = cpInfo.getMunicipio();
+            if (colonia == null || !sepomexCatalogoService.perteneceColoniaACodigoPostal(cp, colonia)) {
+                throw new ValidacionException(
+                        "Selecciona una colonia válida que pertenezca al código postal " + cp + ".");
+            }
+        }
+
         Domicilio domicilio = new Domicilio();
         domicilio.setCliente(cliente);
         domicilio.setCalle(calle != null ? calle : "Av. Reforma Digital");
@@ -586,9 +851,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         domicilio.setActivo(true);
         cliente.setDomicilio(domicilio);
 
-        BigDecimal montoInicial = (saldoInicial != null && saldoInicial.compareTo(BigDecimal.ZERO) >= 0)
-                ? saldoInicial.setScale(2, RoundingMode.HALF_UP)
-                : new BigDecimal("200.00");
+        BigDecimal montoInicial = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
         Cuenta cuenta = new Cuenta();
         cuenta.setCliente(cliente);
@@ -598,7 +861,7 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         Saldo saldo = new Saldo();
         saldo.setCuenta(cuenta);
         saldo.setSaldo(montoInicial);
-        saldo.setConcepto("Saldo de bienvenida por apertura digital");
+        saldo.setConcepto("Apertura de cuenta digital en $0.00 (fondeo por administrador)");
         cuenta.setSaldo(saldo);
         cliente.setCuenta(cuenta);
 
@@ -607,6 +870,13 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         login.setUsuario(usuario);
         login.setContrasenaHash(passwordEncoder.encode(request.getContrasena()));
         login.setActivo(true);
+        if (request.getTotpSecret() != null && !request.getTotpSecret().isBlank()) {
+            String cleanTotp = TotpAuthenticatorUtil.normalizarSecretoBase32(request.getTotpSecret());
+            if (TotpAuthenticatorUtil.esSecretoBase32Valido(cleanTotp)) {
+                login.setTotpSecret(cleanTotp);
+                login.setTotpHabilitado(true);
+            }
+        }
         cliente.setLoginCliente(login);
 
         Cliente guardado = clienteRepository.save(cliente);

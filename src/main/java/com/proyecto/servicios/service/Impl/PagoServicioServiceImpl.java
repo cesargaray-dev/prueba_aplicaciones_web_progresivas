@@ -132,11 +132,33 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
         log.info("Generando código 2FA temporal para la cuenta: {}", enmascararCuenta(request.getNumeroCuenta()));
 
         Cuenta cuenta = validarCuentaYClienteActivo(request.getNumeroCuenta(), false);
+        var loginTitular = cuenta.getCliente() != null ? cuenta.getCliente().getLoginCliente() : null;
+        boolean usaTotp = loginTitular != null
+                && Boolean.TRUE.equals(loginTitular.getTotpHabilitado())
+                && loginTitular.getTotpSecret() != null
+                && !loginTitular.getTotpSecret().isBlank();
+
+        if (usaTotp) {
+            GenerarCodigo2FAResponseDTO totpResp = GenerarCodigo2FAResponseDTO.builder()
+                    .numeroCuenta(cuenta.getNumeroCuenta())
+                    .metodo2FA("TOTP")
+                    .periodoTotpSegundos(com.proyecto.servicios.util.TotpAuthenticatorUtil.PERIODO_SEGUNDOS)
+                    .vigenciaSegundos(VIGENCIA_SEGUNDOS_DEFAULT)
+                    .fechaExpiracion(LocalDateTime.now().plusSeconds(VIGENCIA_SEGUNDOS_DEFAULT))
+                    .correoEnviado(false)
+                    .mensajeCorreo("Abre Google Authenticator e ingresa el código de 6 dígitos (cambia cada 30 segundos).")
+                    .build();
+            totpResp.setCodigo(0);
+            totpResp.setMensaje("Autenticación con Google Authenticator requerida.");
+            return totpResp;
+        }
+
         CodigoTemporal2FA temporal = generarYPropagarCodigo2FA(cuenta.getNumeroCuenta());
 
         GenerarCodigo2FAResponseDTO response = GenerarCodigo2FAResponseDTO.builder()
                 .numeroCuenta(cuenta.getNumeroCuenta())
                 .codigo2FA(temporal.getCodigo())
+                .metodo2FA("EMAIL")
                 .vigenciaSegundos(VIGENCIA_SEGUNDOS_DEFAULT)
                 .fechaExpiracion(temporal.getFechaExpiracion())
                 .build();
@@ -173,8 +195,21 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
             // Paso 1, 2 y 3: Validar existencia de cuenta (con bloqueo pesimista en BD), Cliente ACTIVO y Cuenta ACTIVA
             Cuenta cuenta = validarCuentaYClienteActivo(request.getNumeroCuenta(), true);
 
-            // Paso 4: Validar código 2FA de 6 dígitos (heredado de Soporte2FAService)
-            validarCodigo2FA(request.getNumeroCuenta(), request.getCodigo2FA());
+            // Paso 4: Validar código 2FA (Google Authenticator TOTP cada 30s cuando está activo, o código temporal por correo)
+            var loginTitular = cuenta.getCliente() != null ? cuenta.getCliente().getLoginCliente() : null;
+            boolean usaTotp = loginTitular != null
+                    && Boolean.TRUE.equals(loginTitular.getTotpHabilitado())
+                    && loginTitular.getTotpSecret() != null
+                    && !loginTitular.getTotpSecret().isBlank();
+            if (usaTotp) {
+                if (!com.proyecto.servicios.util.TotpAuthenticatorUtil.verificarCodigo(
+                        loginTitular.getTotpSecret(), request.getCodigo2FA())) {
+                    throw new com.proyecto.servicios.exception.Autenticacion2FAException(
+                            "Código de Google Authenticator incorrecto o expirado. Ingresa el código actual de 6 dígitos que muestra tu aplicación.");
+                }
+            } else {
+                validarCodigo2FA(request.getNumeroCuenta(), request.getCodigo2FA());
+            }
 
             // Paso 5: Validar Saldo Disponible (saldo >= monto)
             Saldo saldo = cuenta.getSaldo();
@@ -252,45 +287,75 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
             String textoProveedor = txResponse.getMensaje() != null && txResponse.getMensaje().getTexto() != null
                     ? txResponse.getMensaje().getTexto().trim()
                     : "Sin mensaje del proveedor";
+            String leyendaProveedor = (txResponse.getMensaje() != null
+                    && txResponse.getMensaje().getLegend() != null
+                    && !txResponse.getMensaje().getLegend().isBlank())
+                    ? txResponse.getMensaje().getLegend()
+                    : productoCatalogo.map(ProductDTO::getLegend).orElse(null);
 
             if (!CODIGO_EXITO_GESTOPAGO.equals(codigoProveedor)) {
-                // Falla o validación no aprobada en GestoPago (ej. 05/55 Origen Valido, 02 Saldo insuficiente distribuidor, 03 Referencia inválida, 06 Duplicada, 82 Timeout)
-                // Se intentó el pago real contra GestoPago, NO SE DESCUENTA NADA DE LA CUENTA DEL CLIENTE y se devuelve el ticket del intento.
+                // Falla o rechazo devuelto por GestoPago en HTTP 200 (ej. NUM_AUTORIZACION=-1, CODIGO=-1/05/55 Origen no valido, 02, 03, 06, 82)
+                // Se generó y firmó el payload AES-256, se envió a GestoPago, NO SE DESCUENTA SALDO y se imprime el ticket exacto del rechazo.
                 LocalDateTime fechaIntento = LocalDateTime.now();
                 String folioIntento = "FT-" + fechaIntento.format(HORA_LOCAL_FORMATTER) + "-"
                         + AesGestoPagoUtil.generarCadenaAlfanumerica(4).toUpperCase();
                 String estadoIntento = CODIGO_TIMEOUT_PROVEEDOR.equals(codigoProveedor) ? "PENDIENTE" : "RECHAZADA";
-                String mensajeTicket = String.format(
-                        "Se intentó realizar el pago en GestoPago, pero no se pudo validar la operación (Código %s: %s). No se realizó ningún cargo a tu cuenta.",
-                        codigoProveedor.isEmpty() ? "ERR" : codigoProveedor,
-                        textoProveedor
-                );
+                String numAutorizacionResp = (txResponse.getNumAutorizacion() != null
+                        && !txResponse.getNumAutorizacion().isBlank())
+                        ? txResponse.getNumAutorizacion().trim()
+                        : "-1";
+                String codProvEfectivo = codigoProveedor.isEmpty() ? "-1" : codigoProveedor;
+                String motivoLegible = normalizarMotivoRechazoProveedor(codProvEfectivo, textoProveedor);
+                String etiquetaProducto = formatearEtiquetaProductoTicket(
+                        datosDestino.tipoFront(), nombreServicio, nombreProducto);
+                String firmaResumen = (signed != null && signed.length() > 24)
+                        ? signed.substring(0, 14) + "..." + signed.substring(signed.length() - 8)
+                        : signed;
+                String destinoTicket = "1".equals(datosDestino.tipoFront())
+                        ? datosDestino.telefono()
+                        : datosDestino.referencia();
+
+                String mensajeTicket = "PENDIENTE".equals(estadoIntento)
+                        ? String.format(
+                                "%s — Operación pendiente de confirmación en GestoPago (Código %s: %s).",
+                                etiquetaProducto, codProvEfectivo, motivoLegible)
+                        : String.format(
+                                "%s — Operación rechazada: %s (Respuesta GestoPago: %s | Código: %s). No se realizó ningún cargo a tu cuenta.",
+                                etiquetaProducto, motivoLegible, numAutorizacionResp, codProvEfectivo);
 
                 PagoServicioResponseDTO ticketRechazo = PagoServicioResponseDTO.builder()
                         .idTransaccion(txResponse.getIdTx())
-                        .numeroAutorizacion(txResponse.getNumAutorizacion())
+                        .numeroAutorizacion(numAutorizacionResp)
                         .folioTicket(folioIntento)
                         .upc(upc)
-                        .codigoProveedor(codigoProveedor.isEmpty() ? "ERR" : codigoProveedor)
+                        .codigoProveedor(codProvEfectivo)
                         .estadoOperacion(estadoIntento)
                         .mensajeOperacion(mensajeTicket)
+                        .motivoProveedor(motivoLegible)
+                        .firmaDigital(firmaResumen)
+                        .referenciaDestino(destinoTicket)
+                        .numeroCuenta(cuenta.getNumeroCuenta())
                         .servicio(nombreServicio)
-                        .producto(nombreProducto)
+                        .producto(etiquetaProducto)
                         .montoPagado(request.getMonto())
                         .comision(BigDecimal.ZERO)
                         .saldoRestanteCuenta(saldo.getSaldo())
                         .fechaHoraOperacion(fechaIntento)
-                        .concepto(String.format("INTENTO GESTOPAGO NO VALIDADO - %s - COD %s: %s",
-                                nombreServicio, codigoProveedor, textoProveedor))
+                        .concepto(String.format("%s - OPERACION RECHAZADA - %s (%s)",
+                                etiquetaProducto.toUpperCase(), motivoLegible.toUpperCase(), numAutorizacionResp))
+                        .leyenda(com.proyecto.servicios.util.TotpAuthenticatorUtil.construirLeyendaTicket(
+                                estadoIntento, leyendaProveedor, numAutorizacionResp, folioIntento))
                         .build();
                 ticketRechazo.setCodigo(1);
                 ticketRechazo.setMensaje(mensajeTicket);
 
-                log.warn("Intento real en GestoPago no validado (CODIGO={}): {}. No se descontó saldo de la cuenta {}",
-                        codigoProveedor, textoProveedor, cuentaMask);
+                NotificacionPagoServiceImpl.registrarTicketIntentoEnMemoria(ticketRechazo);
+
+                log.warn("Petición firmada enviada a GestoPago rechazada (NUM_AUT={}, CODIGO={}): {}. Saldo intacto en cuenta {}",
+                        numAutorizacionResp, codProvEfectivo, motivoLegible, cuentaMask);
                 int httpCode = "06".equals(codigoProveedor) ? 409 : (CODIGO_TIMEOUT_PROVEEDOR.equals(codigoProveedor) ? 504 : 400);
                 throw new PagoServicioProveedorException(
-                        codigoProveedor,
+                        codProvEfectivo,
                         mensajeTicket,
                         httpCode,
                         ticketRechazo
@@ -319,6 +384,14 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
             saldo.setConcepto(concepto);
             saldoRepository.save(saldo);
 
+            String etiquetaProductoExito = formatearEtiquetaProductoTicket(
+                    datosDestino.tipoFront(), nombreServicio, nombreProducto);
+            String destinoExito = "1".equals(datosDestino.tipoFront())
+                    ? datosDestino.telefono()
+                    : datosDestino.referencia();
+            String leyendaExito = com.proyecto.servicios.util.TotpAuthenticatorUtil.construirLeyendaTicket(
+                    "EXITOSA", leyendaProveedor, numAutorizacion, folioTicket);
+
             // 3. Registrar la transacción en la tabla 'pagos_servicios'
             PagoServicio pagoServicio = new PagoServicio();
             pagoServicio.setCuenta(cuenta);
@@ -340,6 +413,7 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
             pagoServicio.setCodigoRespuesta(codigoProveedor);
             pagoServicio.setMensajeRespuesta(textoProveedor);
             pagoServicio.setConcepto(concepto);
+            pagoServicio.setLeyenda(leyendaExito);
             pagoServicio.setFechaOperacion(fechaOperacion);
             pagoServicioRepository.save(pagoServicio);
 
@@ -361,11 +435,18 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
                     .folioTicket(folioTicket)
                     .upc(upc)
                     .codigoProveedor(codigoProveedor)
+                    .estadoOperacion("EXITOSA")
+                    .mensajeOperacion(textoProveedor)
+                    .referenciaDestino(destinoExito)
+                    .numeroCuenta(cuenta.getNumeroCuenta())
+                    .servicio(nombreServicio)
+                    .producto(etiquetaProductoExito)
                     .montoPagado(request.getMonto())
                     .comision(comision)
                     .saldoRestanteCuenta(nuevoSaldo)
                     .fechaHoraOperacion(fechaOperacion)
                     .concepto(concepto)
+                    .leyenda(leyendaExito)
                     .build();
             response.setCodigo(0);
             response.setMensaje(textoProveedor);
@@ -656,6 +737,43 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
         return rawResponse != null && rawResponse.contains("\"EXPIRED\"");
     }
 
+    private String formatearEtiquetaProductoTicket(String tipoFront, String nombreServicio, String nombreProducto) {
+        String serv = nombreServicio != null ? nombreServicio.trim() : "Servicio";
+        String prod = nombreProducto != null ? nombreProducto.trim() : "";
+        if ("1".equals(tipoFront)) {
+            String prodLower = prod.toLowerCase();
+            String servLower = serv.toLowerCase();
+            if (prodLower.contains("recarga") && prodLower.contains(servLower)) {
+                return prod;
+            }
+            if (prodLower.startsWith("recarga")) {
+                String resto = prod.substring(7).trim();
+                return resto.isEmpty() ? ("Recarga " + serv) : ("Recarga " + serv + " " + resto);
+            }
+            return prod.isEmpty() ? ("Recarga " + serv) : ("Recarga " + serv + " - " + prod);
+        }
+        if (prod.isEmpty() || prod.equalsIgnoreCase(serv)) {
+            return serv;
+        }
+        return prod.toLowerCase().contains(serv.toLowerCase()) ? prod : (serv + " - " + prod);
+    }
+
+    private String normalizarMotivoRechazoProveedor(String codigo, String textoRaw) {
+        if (textoRaw == null || textoRaw.isBlank()) {
+            return "-1".equals(codigo) || "05".equals(codigo) || "55".equals(codigo)
+                    ? "Origen no valido"
+                    : "Operacion rechazada por el proveedor";
+        }
+        String t = textoRaw.trim();
+        if (t.equalsIgnoreCase("Origen Valido")
+                || t.equalsIgnoreCase("Origen no valido")
+                || t.equalsIgnoreCase("Origen invalido")
+                || t.equalsIgnoreCase("Origen inválido")) {
+            return "Origen no valido";
+        }
+        return t;
+    }
+
     private GestoPagoTxResponse parsearRespuestaTxXml(String rawResponse) {
         if (rawResponse == null || rawResponse.isBlank()) {
             throw new PagoServicioProveedorException("ERR", "El proveedor de pagos devolvió una respuesta vacía");
@@ -664,12 +782,83 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
         if (esRespuestaTokenExpirado(trimmed)) {
             throw new GestoPagoException("El token de sesión con el proveedor GestoPago ha expirado", 401);
         }
+        if (trimmed.startsWith("{")) {
+            try {
+                var node = objectMapper.readTree(trimmed);
+                var msgNode = node.has("MENSAJE") ? node.get("MENSAJE") : (node.has("mensaje") ? node.get("mensaje") : null);
+                String cod = msgNode != null && msgNode.isObject() && msgNode.has("CODIGO")
+                        ? msgNode.get("CODIGO").asText()
+                        : (node.has("codigo") ? node.get("codigo").asText() : "-1");
+                String txt = msgNode != null && msgNode.isObject() && msgNode.has("TEXTO")
+                        ? msgNode.get("TEXTO").asText()
+                        : (msgNode != null && msgNode.isTextual()
+                                ? msgNode.asText()
+                                : (node.has("mensaje") && node.get("mensaje").isTextual()
+                                        ? node.get("mensaje").asText()
+                                        : "Origen no valido"));
+                String numAut = node.has("NUM_AUTORIZACION")
+                        ? node.get("NUM_AUTORIZACION").asText()
+                        : (node.has("numAutorizacion") ? node.get("numAutorizacion").asText() : "-1");
+                return GestoPagoTxResponse.builder()
+                        .numAutorizacion(numAut)
+                        .mensaje(GestoPagoTxResponse.MensajeTx.builder().codigo(cod).texto(txt).build())
+                        .build();
+            } catch (Exception e) {
+                log.error("Error al parsear respuesta JSON del proveedor GestoPago");
+                throw new GestoPagoException("Error al procesar la respuesta del proveedor de pagos", e, 500);
+            }
+        }
         try {
-            return xmlMapper.readValue(trimmed, GestoPagoTxResponse.class);
+            GestoPagoTxResponse parsed = xmlMapper.readValue(trimmed, GestoPagoTxResponse.class);
+            if (parsed.getMensaje() == null || parsed.getMensaje().getCodigo() == null) {
+                String codFallback = extraerTagXml(trimmed, "CODIGO");
+                String txtFallback = extraerTagXml(trimmed, "TEXTO");
+                if (txtFallback == null) {
+                    txtFallback = extraerTagXml(trimmed, "MENSAJE");
+                }
+                if (codFallback != null) {
+                    parsed.setMensaje(GestoPagoTxResponse.MensajeTx.builder()
+                            .codigo(codFallback)
+                            .texto(txtFallback != null ? txtFallback : "Origen no valido")
+                            .build());
+                }
+            }
+            return parsed;
         } catch (Exception e) {
+            String codFallback = extraerTagXml(trimmed, "CODIGO");
+            String txtFallback = extraerTagXml(trimmed, "TEXTO");
+            if (txtFallback == null) {
+                txtFallback = extraerTagXml(trimmed, "MENSAJE");
+            }
+            if (codFallback != null) {
+                String autFallback = extraerTagXml(trimmed, "NUM_AUTORIZACION");
+                return GestoPagoTxResponse.builder()
+                        .numAutorizacion(autFallback != null ? autFallback : "-1")
+                        .mensaje(GestoPagoTxResponse.MensajeTx.builder()
+                                .codigo(codFallback)
+                                .texto(txtFallback != null ? txtFallback : "Origen no valido")
+                                .build())
+                        .build();
+            }
             log.error("Error al parsear respuesta XML del proveedor GestoPago");
             throw new GestoPagoException("Error al procesar la respuesta XML del proveedor de pagos", e, 500);
         }
+    }
+
+    private String extraerTagXml(String xml, String tag) {
+        var mElem = java.util.regex.Pattern.compile(
+                "<" + tag + "[^>]*>([^<]*)</" + tag + ">",
+                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(xml);
+        if (mElem.find()) {
+            return mElem.group(1).trim();
+        }
+        var mAttr = java.util.regex.Pattern.compile(
+                tag + "\\s*=\\s*[\"']([^\"']+)[\"']",
+                java.util.regex.Pattern.CASE_INSENSITIVE).matcher(xml);
+        if (mAttr.find()) {
+            return mAttr.group(1).trim();
+        }
+        return null;
     }
 
     private String generarFolioTicketUnico(LocalDateTime fechaOperacion) {
@@ -727,6 +916,11 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
                 ? "EXITOSA"
                 : (p.getCodigoRespuesta() != null ? p.getCodigoRespuesta() : "EXITOSA");
 
+        String leyendaHist = (p.getLeyenda() != null && !p.getLeyenda().isBlank())
+                ? p.getLeyenda()
+                : com.proyecto.servicios.util.TotpAuthenticatorUtil.construirLeyendaTicket(
+                        estado, null, p.getNumAutorizacion(), p.getFolioTicket());
+
         return ItemHistorialPagoDTO.builder()
                 .idPago(p.getId())
                 .folioTicket(p.getFolioTicket())
@@ -746,6 +940,7 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
                 .fechaOperacion(p.getFechaOperacion())
                 .estado(estado)
                 .logoUrl(logoUrl)
+                .leyenda(leyendaHist)
                 .build();
     }
 

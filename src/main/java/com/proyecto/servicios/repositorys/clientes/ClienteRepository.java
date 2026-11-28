@@ -62,6 +62,15 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long>, JpaSpec
 
     boolean existsByCorreo(String correo);
 
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM Cliente c WHERE LOWER(TRIM(c.correo)) = LOWER(TRIM(:correo))")
+    boolean existsByCorreoIgnoreCase(@org.springframework.data.repository.query.Param("correo") String correo);
+
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM Cliente c WHERE UPPER(TRIM(c.curp)) = UPPER(TRIM(:curp))")
+    boolean existsByCurpIgnoreCase(@org.springframework.data.repository.query.Param("curp") String curp);
+
+    @Query("SELECT CASE WHEN COUNT(c) > 0 THEN true ELSE false END FROM Cliente c WHERE UPPER(TRIM(c.rfc)) = UPPER(TRIM(:rfc))")
+    boolean existsByRfcIgnoreCase(@org.springframework.data.repository.query.Param("rfc") String rfc);
+
     List<Cliente> findByActivoTrueOrderByFechaRegistroAsc();
 
     List<Cliente> findByFechaRegistroBetweenOrderByFechaRegistroAsc(LocalDateTime inicio, LocalDateTime fin);

@@ -58,4 +58,10 @@ public class LoginResponseDTO {
 
     @Schema(description = "Aviso informativo de seguridad cuando se cerró una sesión previa en otro dispositivo")
     private String avisoSesion;
+
+    @Schema(description = "Profesión registrada en el tabulador oficial")
+    private String profesion;
+
+    @Schema(description = "Indica si la cuenta tiene vinculado Google Authenticator (TOTP 30s)")
+    private Boolean totpHabilitado;
 }

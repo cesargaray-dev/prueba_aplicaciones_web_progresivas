@@ -33,6 +33,23 @@ import java.util.Optional;
 @Slf4j
 public class NotificacionPagoServiceImpl implements NotificacionPagoService {
 
+    private static final int MAX_TICKETS_INTENTO = 500;
+    private static final java.util.Map<String, PagoServicioResponseDTO> TICKETS_INTENTO_MEMORIA =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    public static void registrarTicketIntentoEnMemoria(PagoServicioResponseDTO ticket) {
+        if (ticket == null || ticket.getFolioTicket() == null || ticket.getFolioTicket().isBlank()) {
+            return;
+        }
+        if (TICKETS_INTENTO_MEMORIA.size() >= MAX_TICKETS_INTENTO) {
+            String firstKey = TICKETS_INTENTO_MEMORIA.keySet().iterator().next();
+            if (firstKey != null) {
+                TICKETS_INTENTO_MEMORIA.remove(firstKey);
+            }
+        }
+        TICKETS_INTENTO_MEMORIA.put(ticket.getFolioTicket().trim(), ticket);
+    }
+
     private final CuentaRepository cuentaRepository;
     private final PagoServicioRepository pagoServicioRepository;
     private final GestoPagoProductService productService;
@@ -56,6 +73,10 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
     public GenerarCodigo2FAResponseDTO enriquecerYEnviar2FA(GenerarCodigo2FAResponseDTO response) {
         if (response == null) {
             return null;
+        }
+        if ("TOTP".equalsIgnoreCase(response.getMetodo2FA())) {
+            response.setCodigo2FA(null);
+            return response;
         }
         String otpPlano = response.getCodigo2FA();
         long vigencia = response.getVigenciaSegundos() != null ? response.getVigenciaSegundos() : 300L;
@@ -199,7 +220,27 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
     }
 
     @Override
+    public String obtenerCuentaPropietariaPorFolio(String folioTicket) {
+        if (folioTicket == null || folioTicket.isBlank()) {
+            throw new ValidacionException("El folio del comprobante es obligatorio.");
+        }
+        String clean = folioTicket.trim();
+        PagoServicioResponseDTO intento = TICKETS_INTENTO_MEMORIA.get(clean);
+        if (intento != null && intento.getNumeroCuenta() != null) {
+            return intento.getNumeroCuenta();
+        }
+        PagoServicio pago = obtenerPagoPorFolio(clean);
+        return pago != null ? pago.getNumeroCuenta() : null;
+    }
+
+    @Override
     public byte[] generarComprobantePdf(String folioTicket) {
+        if (folioTicket != null) {
+            PagoServicioResponseDTO intento = TICKETS_INTENTO_MEMORIA.get(folioTicket.trim());
+            if (intento != null) {
+                return generarPdfDesdeTicketIntento(intento);
+            }
+        }
         PagoServicio pago = obtenerPagoPorFolio(folioTicket);
         String folio = sanitizePdfText(pago.getFolioTicket());
         String idTxGestoPago = pago.getIdTxGestopago() != null ? String.valueOf(pago.getIdTxGestopago()) : "N/A";
@@ -248,7 +289,82 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
                 "0 -18 Td",
                 "(Fecha y Hora: " + fecha + ") Tj",
                 "0 -26 Td",
-                "(Conserve este comprobante oficial para cualquier aclaracion al 800-226-2600.) Tj",
+                "(LEYENDA OFICIAL Y ACLARACIONES:) Tj",
+                "/F1 9 Tf",
+                "0 -15 Td",
+                "(Conserve este comprobante digital como constancia oficial de pago. Linea de Aclaraciones 800-226-2600) Tj",
+                "0 -13 Td",
+                "(o aclaraciones@bancodigital.com dentro de 30 dias naturales. Autorizacion: " + auth + " | Folio: " + folio + ") Tj",
+                "ET");
+
+        String pdf = "%PDF-1.4\n"
+                + "1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+                + "2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n"
+                + "3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n"
+                + "4 0 obj << /Length " + streamContent.length() + " >>\nstream\n"
+                + streamContent + "\nendstream\nendobj\n"
+                + "5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n"
+                + "trailer << /Root 1 0 R /Size 6 >>\n"
+                + "%%EOF\n";
+        return pdf.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
+    }
+
+    private byte[] generarPdfDesdeTicketIntento(PagoServicioResponseDTO t) {
+        String estado = sanitizePdfText("RECHAZADA".equalsIgnoreCase(t.getEstadoOperacion())
+                ? "OPERACION RECHAZADA"
+                : t.getEstadoOperacion());
+        String servicio = sanitizePdfText(t.getServicio());
+        String producto = sanitizePdfText(t.getProducto());
+        String motivo = sanitizePdfText(t.getMotivoProveedor() != null ? t.getMotivoProveedor() : t.getMensajeOperacion());
+        String numGestoPago = sanitizePdfText(t.getNumeroAutorizacion() != null ? t.getNumeroAutorizacion() : "-1");
+        String codProv = sanitizePdfText(t.getCodigoProveedor() != null ? t.getCodigoProveedor() : "-1");
+        String upcVal = sanitizePdfText(t.getUpc());
+        String firma = sanitizePdfText(t.getFirmaDigital());
+        String folio = sanitizePdfText(t.getFolioTicket());
+        String destino = sanitizePdfText(t.getReferenciaDestino());
+        String monto = t.getMontoPagado() != null ? t.getMontoPagado().toPlainString() : "0.00";
+        String saldoIntacto = t.getSaldoRestanteCuenta() != null ? t.getSaldoRestanteCuenta().toPlainString() : "0.00";
+        String cuentaMask = sanitizePdfText(TelefonoUtil.enmascararCuenta(t.getNumeroCuenta()));
+        String fecha = t.getFechaHoraOperacion() != null ? t.getFechaHoraOperacion().toString() : "N/A";
+
+        String streamContent = String.join("\n",
+                "BT",
+                "/F1 15 Tf",
+                "50 760 Td",
+                "(BANCO DIGITAL - TICKET DE OPERACION GESTOPAGO) Tj",
+                "/F1 12 Tf",
+                "0 -26 Td",
+                "(Resultado: " + estado + ") Tj",
+                "/F1 11 Tf",
+                "0 -20 Td",
+                "(Operacion / Producto: " + producto + ") Tj",
+                "0 -18 Td",
+                "(Proveedor / Servicio: " + servicio + ") Tj",
+                "0 -18 Td",
+                "(Motivo GestoPago: " + motivo + ") Tj",
+                "0 -18 Td",
+                "(Numero Respuesta GestoPago: " + numGestoPago + "  |  Codigo: " + codProv + ") Tj",
+                "0 -18 Td",
+                "(Folio UPC Peticion: " + upcVal + ") Tj",
+                "0 -18 Td",
+                "(Firma Digital AES-256: " + firma + ") Tj",
+                "0 -18 Td",
+                "(Folio de Ticket: " + folio + ") Tj",
+                "0 -18 Td",
+                "(Linea / Referencia: " + destino + ") Tj",
+                "0 -18 Td",
+                "(Importe Solicitado (NO COBRADO): $" + monto + " MXN) Tj",
+                "0 -18 Td",
+                "(Saldo Intacto en Cuenta (" + cuentaMask + "): $" + saldoIntacto + " MXN) Tj",
+                "0 -18 Td",
+                "(Fecha y Hora: " + fecha + ") Tj",
+                "0 -24 Td",
+                "(LEYENDA OFICIAL Y ACLARACIONES:) Tj",
+                "/F1 9 Tf",
+                "0 -15 Td",
+                "(Operacion no aplicada: no se realizo ningun cargo a su cuenta. Linea de Aclaraciones 800-226-2600) Tj",
+                "0 -13 Td",
+                "(o aclaraciones@bancodigital.com mencionando Respuesta GestoPago: " + numGestoPago + " y Folio: " + folio + ") Tj",
                 "ET");
 
         String pdf = "%PDF-1.4\n"

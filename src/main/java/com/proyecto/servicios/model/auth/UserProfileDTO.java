@@ -67,8 +67,11 @@ public class UserProfileDTO {
     @Schema(description = "Estado civil", example = "SOLTERO")
     private String estadoCivil;
 
-    @Schema(description = "Ocupación o actividad económica", example = "INGENIERO")
+    @Schema(description = "Ocupación o actividad económica", example = "EMPLEADO DEL SECTOR PRIVADO")
     private String ocupacion;
+
+    @Schema(description = "Profesión del tabulador oficial", example = "INGENIERÍA EN SISTEMAS / SOFTWARE / TI")
+    private String profesion;
 
     @Schema(description = "Empresa o lugar de trabajo", example = "TECNOLOGIA SA")
     private String empresa;
@@ -118,4 +121,7 @@ public class UserProfileDTO {
 
     @Schema(description = "Rol del usuario en la plataforma (ADMIN o CLIENTE)", example = "CLIENTE")
     private String rol;
+
+    @Schema(description = "Indica si Google Authenticator (TOTP) está habilitado en la cuenta", example = "true")
+    private Boolean totpHabilitado;
 }

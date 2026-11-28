@@ -18,7 +18,12 @@ import type { ItemHistorialPago } from '../types/history';
 import { useAuth } from '../context/useAuth';
 import { paymentApi } from '../api/paymentApi';
 import { BrandLogo } from './BrandLogo';
-import { esCorreoPlaceholder, esCorreoValido, esItemHistorialRecarga } from '../utils/validation';
+import {
+  esCorreoPlaceholder,
+  esCorreoValido,
+  esItemHistorialRecarga,
+  obtenerLeyendaComprobante,
+} from '../utils/validation';
 
 interface TransactionDetailModalProps {
   item: ItemHistorialPago | null;
@@ -40,6 +45,7 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [pdfNotice, setPdfNotice] = useState<string | null>(null);
   const [copiedFolio, setCopiedFolio] = useState(false);
+  const [copiedTicket, setCopiedTicket] = useState(false);
   const [resendFeedback, setResendFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
@@ -53,16 +59,21 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount);
 
-  const getStatusDisplay = (estado?: string) => {
-    const norm = (estado || '').toUpperCase();
-    if (norm === 'EXITOSA' || norm === 'COMPLETADA') {
+  const normEstado = (item.estado || '').toUpperCase();
+  const isPending =
+    normEstado === 'PENDIENTE' || normEstado === 'EN_PROCESO' || normEstado === 'NO_CONFIRMADA';
+  const isRejected =
+    normEstado === 'RECHAZADA' || normEstado === 'FALLIDA' || normEstado === 'ERROR';
+
+  const getStatusDisplay = () => {
+    if (normEstado === 'EXITOSA' || normEstado === 'COMPLETADA') {
       return {
         label: 'EXITOSA',
         color: 'bg-emerald-100 text-emerald-800 border-emerald-200',
         icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />,
       };
     }
-    if (norm === 'PENDIENTE' || norm === 'EN_PROCESO') {
+    if (isPending) {
       return {
         label: 'PENDIENTE',
         color: 'bg-amber-100 text-amber-800 border-amber-200',
@@ -70,20 +81,46 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
       };
     }
     return {
-      label: norm || 'RECHAZADA',
+      label: normEstado || 'RECHAZADA',
       color: 'bg-red-100 text-red-800 border-red-200',
       icon: <XCircle className="w-4 h-4 text-red-600" />,
     };
   };
 
-  const statusInfo = getStatusDisplay(item.estado);
+  const statusInfo = getStatusDisplay();
   const isRecargaMovil = esItemHistorialRecarga(item);
+  const leyendaTexto = obtenerLeyendaComprobante({
+    leyenda: item.leyenda,
+    esRechazada: isRejected,
+    numAuth: item.numeroAutorizacion || (isRejected ? '-1' : undefined),
+    folio: item.folioTicket,
+  });
 
   const handleCopyFolio = async () => {
     try {
       await navigator.clipboard.writeText(item.folioTicket);
       setCopiedFolio(true);
       setTimeout(() => setCopiedFolio(false), 1800);
+    } catch {
+      // Ignore clipboard error
+    }
+  };
+
+  const handleCopyTicket = async () => {
+    const summary =
+      `DETALLE DE MOVIMIENTO - BANCO DIGITAL\n` +
+      `Servicio / Producto: ${item.servicio} - ${item.producto}\n` +
+      `Estado: ${statusInfo.label}\n` +
+      `Folio de Ticket: ${item.folioTicket}\n` +
+      `No. Autorización GestoPago: ${item.numeroAutorizacion || 'N/A'}\n` +
+      `Referencia: ${(isRecargaMovil ? item.telefono : item.referencia) || 'N/A'}\n` +
+      `Monto: ${formatCurrency(item.monto)}\n` +
+      `Fecha: ${item.fechaOperacion || 'N/A'}\n\n` +
+      `LEYENDA OFICIAL Y ACLARACIONES:\n${leyendaTexto}`;
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopiedTicket(true);
+      setTimeout(() => setCopiedTicket(false), 1800);
     } catch {
       // Ignore clipboard error
     }
@@ -107,7 +144,9 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch {
-      setPdfNotice('Descarga directa no disponible; se abrió la vista de impresión para guardar en PDF.');
+      setPdfNotice(
+        'Descarga directa no disponible; se abrió la vista de impresión para guardar en PDF.'
+      );
       window.print();
     } finally {
       setDownloadingPdf(false);
@@ -277,63 +316,79 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
             )}
 
             <div className="flex justify-between gap-3 py-1 border-b border-slate-100">
-              <span className="text-slate-500 font-medium">Monto Pagado:</span>
+              <span className="text-slate-500 font-medium">
+                {isRejected ? 'Importe Solicitado (No Cobrado):' : 'Monto Pagado:'}
+              </span>
               <span className="font-bold text-slate-900">{formatCurrency(item.monto)}</span>
             </div>
 
-            <div className="flex justify-between gap-3 py-1 border-b border-slate-100">
-              <span className="text-slate-500 font-medium">Comisión:</span>
-              <span className="text-slate-700">{formatCurrency(item.comision || 0)}</span>
-            </div>
+            {!isRejected && (
+              <div className="flex justify-between gap-3 py-1 border-b border-slate-100">
+                <span className="text-slate-500 font-medium">Comisión:</span>
+                <span className="text-slate-700">{formatCurrency(item.comision || 0)}</span>
+              </div>
+            )}
 
             {item.saldoRestante !== undefined && (
               <div className="flex justify-between gap-3 py-1">
-                <span className="text-slate-500 font-medium">Saldo Posterior:</span>
+                <span className="text-slate-500 font-medium">
+                  {isRejected ? 'Saldo Intacto:' : 'Saldo Posterior:'}
+                </span>
                 <span className="font-bold text-blue-900">{formatCurrency(item.saldoRestante)}</span>
               </div>
             )}
           </div>
 
-          {/* Resend Brevo receipt from History */}
-          <form
-            onSubmit={handleResend}
-            className="no-print p-3.5 rounded-2xl bg-blue-50/70 border border-blue-100 space-y-2"
-          >
-            <label className="text-[11px] font-bold text-blue-950 flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-blue-700" />
-              <span>Enviar comprobante oficial por correo (Brevo)</span>
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                value={resendEmail}
-                onChange={(e) => setResendEmail(e.target.value)}
-                placeholder="tucorreo@gmail.com"
-                className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-              />
-              <button
-                type="submit"
-                disabled={resending}
-                className="px-3 py-1.5 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold inline-flex items-center gap-1 disabled:opacity-50"
-              >
-                {resending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Send className="w-3.5 h-3.5" />
-                )}
-                <span>Enviar</span>
-              </button>
-            </div>
-            {resendFeedback && (
-              <p
-                className={`text-[11px] font-semibold ${
-                  resendFeedback.ok ? 'text-emerald-700' : 'text-red-700'
-                }`}
-              >
-                {resendFeedback.msg}
-              </p>
-            )}
-          </form>
+          {/* Official Regulatory Legend & Clarifications (Visible in UI and Print) */}
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-800">
+              LEYENDA OFICIAL Y ACLARACIONES
+            </p>
+            <p className="text-[11px] leading-relaxed font-medium">{leyendaTexto}</p>
+          </div>
+
+          {/* Resend Brevo receipt from History (only for confirmed non-pending/non-rejected or with folio) */}
+          {!isPending && !isRejected && (
+            <form
+              onSubmit={handleResend}
+              className="no-print p-3.5 rounded-2xl bg-blue-50/70 border border-blue-100 space-y-2"
+            >
+              <label className="text-[11px] font-bold text-blue-950 flex items-center gap-1.5">
+                <Mail className="w-3.5 h-3.5 text-blue-700" />
+                <span>Enviar comprobante oficial por correo (Brevo)</span>
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  placeholder="tucorreo@gmail.com"
+                  className="flex-1 px-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                />
+                <button
+                  type="submit"
+                  disabled={resending}
+                  className="px-3 py-1.5 rounded-xl bg-blue-900 hover:bg-blue-800 text-white text-xs font-bold inline-flex items-center gap-1 disabled:opacity-50"
+                >
+                  {resending ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  <span>Enviar</span>
+                </button>
+              </div>
+              {resendFeedback && (
+                <p
+                  className={`text-[11px] font-semibold ${
+                    resendFeedback.ok ? 'text-emerald-700' : 'text-red-700'
+                  }`}
+                >
+                  {resendFeedback.msg}
+                </p>
+              )}
+            </form>
+          )}
 
           {pdfNotice && (
             <p className="no-print text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
@@ -345,19 +400,21 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
         {/* Footer */}
         <div className="no-print bg-slate-50 px-6 py-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={downloadingPdf}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-blue-200 bg-blue-50 text-blue-900 hover:bg-blue-100 text-xs font-bold transition-colors disabled:opacity-50"
-            >
-              {downloadingPdf ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <FileDown className="w-3.5 h-3.5" />
-              )}
-              <span>PDF</span>
-            </button>
+            {!isPending && (
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={downloadingPdf}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl border border-blue-200 bg-blue-50 text-blue-900 hover:bg-blue-100 text-xs font-bold transition-colors disabled:opacity-50"
+              >
+                {downloadingPdf ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <FileDown className="w-3.5 h-3.5" />
+                )}
+                <span>Descargar PDF</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -366,6 +423,28 @@ const TransactionDetailContent: React.FC<TransactionDetailContentProps> = ({ ite
             >
               <Printer className="w-3.5 h-3.5" />
               <span>Imprimir</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCopyTicket}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border text-xs font-bold transition-colors ${
+                copiedTicket
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-300 text-slate-700 hover:bg-white'
+              }`}
+            >
+              {copiedTicket ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>¡Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copiar</span>
+                </>
+              )}
             </button>
           </div>
 

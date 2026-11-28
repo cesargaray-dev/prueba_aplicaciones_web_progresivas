@@ -196,6 +196,83 @@ describe('Frontend API Client Suite', () => {
       await authApi.logout();
       expect(getAuthToken()).toBeNull();
     });
+
+    it('calls availability and TOTP setup/management endpoints and keeps wrong TOTP 401 inline', async () => {
+      const onUnauthorized = vi.fn();
+      setOnUnauthorizedHandler(onUnauthorized);
+      setAuthToken('jwt-totp');
+
+      // Empty params short-circuits cleanly
+      expect(await authApi.verificarDisponibilidadRegistro({})).toEqual({});
+
+      vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ correoDisponible: false }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ secret: 'ABC', digitos: 6, periodoSegundos: 30 }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ totpHabilitado: false, mensaje: 'No activo' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ secret: 'DEF', digitos: 6, periodoSegundos: 30 }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ totpHabilitado: true, mensaje: 'Activado' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ mensaje: 'Código TOTP inválido' }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          headers: new Headers({ 'content-type': 'application/json' }),
+          json: async () => ({ totpHabilitado: false, mensaje: 'Desactivado' }),
+        } as Response);
+
+      const disp = await authApi.verificarDisponibilidadRegistro({
+        correo: 'a@gmail.com',
+        usuario: 'usr1',
+        curp: 'gagc990515hdfrrl01',
+        rfc: 'gagc990515ab1',
+      });
+      expect(disp.correoDisponible).toBe(false);
+
+      const regTotp = await authApi.iniciarTotpRegistro({
+        correo: 'a@gmail.com',
+        usuario: 'usr1',
+      });
+      expect(regTotp.secret).toBe('ABC');
+
+      expect((await authApi.obtenerEstadoTotp()).totpHabilitado).toBe(false);
+      expect((await authApi.iniciarTotpPerfil()).secret).toBe('DEF');
+      expect(
+        (await authApi.activarTotpPerfil({ secret: 'DEF', codigo: '123456' })).totpHabilitado
+      ).toBe(true);
+
+      await expect(authApi.desactivarTotpPerfil({ codigo: '000000' })).rejects.toThrow(
+        'Código TOTP inválido'
+      );
+      expect(onUnauthorized).not.toHaveBeenCalled();
+      expect(getAuthToken()).toBe('jwt-totp');
+
+      expect((await authApi.desactivarTotpPerfil({ codigo: '654321' })).totpHabilitado).toBe(
+        false
+      );
+    });
   });
 
   describe('Pillar 2: Catalog API', () => {

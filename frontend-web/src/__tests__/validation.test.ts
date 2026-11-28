@@ -28,8 +28,10 @@ import {
   getMaxBirthDateIso,
   getProductCategoryName,
   normalizarBusquedaCatalogo,
+  obtenerLeyendaComprobante,
 } from '../utils/validation';
 import {
+  CATALOGO_OCUPACIONES,
   TABULADOR_PROFESIONES,
   TABULADOR_SUELDOS,
   obtenerEstadoPorNombreOCodigo,
@@ -251,5 +253,18 @@ describe('Validation & Catalog Classification Suite', () => {
         producto: 'Recibo CFE',
       })
     ).toBe(false);
+
+    // Official Occupation Catalog & Ticket Leyenda helper
+    expect(CATALOGO_OCUPACIONES).toHaveLength(15);
+    expect(CATALOGO_OCUPACIONES).toContain('Empleado(a) del sector privado');
+    expect(CATALOGO_OCUPACIONES).toContain('Otra ocupación');
+
+    expect(obtenerLeyendaComprobante({ leyenda: 'Leyenda backend' })).toBe('Leyenda backend');
+    expect(
+      obtenerLeyendaComprobante({ esRechazada: true, numAuth: '-1', folio: 'FT-1' })
+    ).toContain('Operación no aplicada: no se realizó ningún cargo a su cuenta.');
+    expect(
+      obtenerLeyendaComprobante({ esRechazada: false, numAuth: 'AUTH-1', folio: 'FT-2' })
+    ).toContain('Conserve este comprobante digital como constancia oficial de pago.');
   });
 });

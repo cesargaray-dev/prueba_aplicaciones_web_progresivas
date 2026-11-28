@@ -137,7 +137,9 @@ public class AuthServiceImpl implements AuthService {
             login.setContrasenaHash(passwordEncoder.encode(request.getContrasena()));
         }
 
-        // Login exitoso: restablecer contador de fallos y actualizar último acceso
+        // Login exitoso: restablecer contador de fallos, registrar sesión única en BD y actualizar último acceso
+        String token = UUID.randomUUID().toString().replace("-", "");
+        boolean sesionPreviaBd = actualizarSesionUnicaEnEntidad(login, token);
         login.setIntentosFallidos(0);
         login.setUltimoAcceso(LocalDateTime.now());
         loginClienteRepository.save(login);
@@ -150,8 +152,8 @@ public class AuthServiceImpl implements AuthService {
         Cuenta cuenta = obtenerCuentaCliente(cliente);
         BigDecimal saldo = obtenerSaldoCuenta(cuenta);
 
-        String token = UUID.randomUUID().toString().replace("-", "");
-        boolean sesionPreviaCerrada = registrarSesionUnica(token, username);
+        boolean sesionPreviaMemoria = registrarSesionUnica(token, username);
+        boolean sesionPreviaCerrada = sesionPreviaBd || sesionPreviaMemoria;
 
         log.info("Autenticación exitosa para usuario: {} con clienteId: {}", username, cliente.getId());
         boolean isAdmin = esUsuarioAdmin(username);
@@ -170,6 +172,8 @@ public class AuthServiceImpl implements AuthService {
                 .rol(isAdmin ? "ADMIN" : "CLIENTE")
                 .sesionPreviaCerrada(sesionPreviaCerrada)
                 .avisoSesion(sesionPreviaCerrada ? AVISO_SESION_PREVIA_CERRADA : null)
+                .profesion(cliente.getProfesion())
+                .totpHabilitado(Boolean.TRUE.equals(login.getTotpHabilitado()))
                 .build();
     }
 
@@ -195,6 +199,8 @@ public class AuthServiceImpl implements AuthService {
             throw new AutenticacionException("El cliente asociado no se encuentra activo.");
         }
 
+        String token = UUID.randomUUID().toString().replace("-", "");
+        boolean sesionPreviaBd = actualizarSesionUnicaEnEntidad(login, token);
         login.setIntentosFallidos(0);
         login.setUltimoAcceso(LocalDateTime.now());
         loginClienteRepository.save(login);
@@ -202,8 +208,8 @@ public class AuthServiceImpl implements AuthService {
         Cuenta cuenta = obtenerCuentaCliente(cliente);
         BigDecimal saldo = obtenerSaldoCuenta(cuenta);
 
-        String token = UUID.randomUUID().toString().replace("-", "");
-        boolean sesionPreviaCerrada = registrarSesionUnica(token, username);
+        boolean sesionPreviaMemoria = registrarSesionUnica(token, username);
+        boolean sesionPreviaCerrada = sesionPreviaBd || sesionPreviaMemoria;
 
         log.info("Sesión emitida tras verificación alterna para usuario={} clienteId={}", username, cliente.getId());
         boolean isAdmin = esUsuarioAdmin(username);
@@ -222,6 +228,8 @@ public class AuthServiceImpl implements AuthService {
                 .rol(isAdmin ? "ADMIN" : "CLIENTE")
                 .sesionPreviaCerrada(sesionPreviaCerrada)
                 .avisoSesion(sesionPreviaCerrada ? AVISO_SESION_PREVIA_CERRADA : null)
+                .profesion(cliente.getProfesion())
+                .totpHabilitado(Boolean.TRUE.equals(login.getTotpHabilitado()))
                 .build();
     }
 
@@ -242,6 +250,13 @@ public class AuthServiceImpl implements AuthService {
         }
 
         removerTokenDeAlmacen(tokenLimpio, tokenOwner);
+        loginClienteRepository.findByUsuario(tokenOwner).ifPresent(lg -> {
+            if (tokenLimpio.equals(lg.getTokenSesionActiva())) {
+                lg.setTokenSesionActiva(null);
+                lg.setSesionExpiraEn(null);
+                loginClienteRepository.save(lg);
+            }
+        });
         log.info("Sesión cerrada exitosamente para usuario: {}", tokenOwner);
     }
 
@@ -298,6 +313,7 @@ public class AuthServiceImpl implements AuthService {
                 .nacionalidad(cliente.getNacionalidad())
                 .estadoCivil(cliente.getEstadoCivil())
                 .ocupacion(cliente.getOcupacion())
+                .profesion(cliente.getProfesion())
                 .empresa(cliente.getEmpresa())
                 .ingresoMensual(cliente.getIngresoMensual())
                 .calle(dom != null ? dom.getCalle() : null)
@@ -314,6 +330,7 @@ public class AuthServiceImpl implements AuthService {
                 .ultimoAcceso(login.getUltimoAcceso())
                 .esAdmin(isAdmin)
                 .rol(isAdmin ? "ADMIN" : "CLIENTE")
+                .totpHabilitado(Boolean.TRUE.equals(login.getTotpHabilitado()))
                 .build();
     }
 
@@ -356,6 +373,19 @@ public class AuthServiceImpl implements AuthService {
         }
 
         if (username == null || username.isBlank()) {
+            Optional<LoginCliente> porTokenOpt = loginClienteRepository.findByTokenSesionActiva(tokenLimpio);
+            if (porTokenOpt.isPresent()) {
+                LoginCliente lgPorToken = porTokenOpt.get();
+                if (lgPorToken.getSesionExpiraEn() == null
+                        || LocalDateTime.now().isBefore(lgPorToken.getSesionExpiraEn())) {
+                    username = lgPorToken.getUsuario();
+                    tokenStore.put(tokenLimpio, new SessionEntry(username, now.plusSeconds(sessionTtlSeconds)));
+                    usuarioToTokens.computeIfAbsent(username, k -> ConcurrentHashMap.newKeySet()).add(tokenLimpio);
+                }
+            }
+        }
+
+        if (username == null || username.isBlank()) {
             return Optional.empty();
         }
 
@@ -364,6 +394,17 @@ public class AuthServiceImpl implements AuthService {
             return Optional.empty();
         }
         LoginCliente login = loginOpt.get();
+        if (login.getTokenSesionActiva() != null && !login.getTokenSesionActiva().equals(tokenLimpio)) {
+            removerTokenDeAlmacen(tokenLimpio, login.getUsuario());
+            marcarTokenDesplazado(tokenLimpio, now);
+            return Optional.empty();
+        }
+        if (tokenLimpio.equals(login.getTokenSesionActiva())
+                && login.getSesionExpiraEn() != null
+                && LocalDateTime.now().plusSeconds(Math.max(10L, sessionTtlSeconds - 45L)).isAfter(login.getSesionExpiraEn())) {
+            login.setSesionExpiraEn(LocalDateTime.now().plusSeconds(sessionTtlSeconds));
+            loginClienteRepository.save(login);
+        }
         if (!Boolean.TRUE.equals(login.getActivo()) || Boolean.TRUE.equals(login.getBloqueado())) {
             return Optional.empty();
         }
@@ -461,7 +502,7 @@ public class AuthServiceImpl implements AuthService {
                 log.warn("Error consultando desplazamiento en Redis: {}", e.getMessage());
             }
         }
-        return false;
+        return loginClienteRepository.findByTokenSesionDesplazada(tokenLimpio).isPresent();
     }
 
     @Override
@@ -475,9 +516,44 @@ public class AuthServiceImpl implements AuthService {
         }
         String owner = resolverPropietarioTokenSinRefrescar(tokenLimpio);
         if (owner == null || owner.isBlank()) {
+            Optional<LoginCliente> porToken = loginClienteRepository.findByTokenSesionActiva(tokenLimpio);
+            if (porToken.isPresent()
+                    && (porToken.get().getSesionExpiraEn() == null
+                            || LocalDateTime.now().isBefore(porToken.get().getSesionExpiraEn()))) {
+                owner = porToken.get().getUsuario();
+            }
+        }
+        if (owner == null || owner.isBlank()) {
             throw new AutenticacionException("Sesión no autorizada o expirada");
         }
+        Optional<LoginCliente> loginOpt = loginClienteRepository.findByUsuario(owner.trim());
+        if (loginOpt.isPresent()) {
+            LoginCliente lg = loginOpt.get();
+            if (lg.getTokenSesionActiva() != null && !lg.getTokenSesionActiva().equals(tokenLimpio)) {
+                removerTokenDeAlmacen(tokenLimpio, owner);
+                marcarTokenDesplazado(tokenLimpio, Instant.now());
+                throw new AutenticacionException(MENSAJE_SESION_DESPLAZADA);
+            }
+        }
         return true;
+    }
+
+    private boolean actualizarSesionUnicaEnEntidad(LoginCliente login, String nuevoToken) {
+        if (login == null) {
+            return false;
+        }
+        boolean desplazada = false;
+        String tokenPrevio = login.getTokenSesionActiva();
+        if (tokenPrevio != null && !tokenPrevio.isBlank() && !tokenPrevio.equals(nuevoToken)) {
+            if (login.getSesionExpiraEn() == null || LocalDateTime.now().isBefore(login.getSesionExpiraEn())) {
+                desplazada = true;
+            }
+            login.setTokenSesionDesplazada(tokenPrevio);
+            marcarTokenDesplazado(tokenPrevio, Instant.now());
+        }
+        login.setTokenSesionActiva(nuevoToken);
+        login.setSesionExpiraEn(LocalDateTime.now().plusSeconds(sessionTtlSeconds));
+        return desplazada;
     }
 
     @Scheduled(fixedDelay = 60000)

@@ -25,6 +25,8 @@ export interface Generar2FAResponse {
   codigo?: number;
   mensaje?: string;
   numeroCuenta?: string;
+  metodo2FA?: 'TOTP' | 'EMAIL';
+  periodoTotpSegundos?: number;
   codigo2FA?: string | null;
   vigenciaSegundos?: number;
   expiraEnSegundos?: number;
@@ -54,6 +56,10 @@ export interface PagoServicioResponse {
   estadoOperacion?: EstadoOperacionPago | string;
   codigoProveedor?: string;
   mensajeOperacion?: string;
+  motivoProveedor?: string;
+  firmaDigital?: string;
+  referenciaDestino?: string;
+  numeroCuenta?: string;
   idTransaccion?: number;
   numeroAutorizacion?: string;
   folioTicket?: string;
@@ -66,6 +72,7 @@ export interface PagoServicioResponse {
   servicio?: string;
   producto?: string;
   logoUrl?: string;
+  leyenda?: string;
   correoEnviado?: boolean;
   correoDestino?: string;
   mensajeCorreo?: string;

@@ -1,4 +1,5 @@
 import '../utils/validation_utils.dart';
+import '../widgets/official_legend_card.dart';
 
 class HistoryItem {
   final int idPago;
@@ -19,6 +20,7 @@ class HistoryItem {
   final String fechaOperacion;
   final String estado;
   final String logoUrl;
+  final String? leyenda;
 
   HistoryItem({
     required this.idPago,
@@ -39,6 +41,7 @@ class HistoryItem {
     required this.fechaOperacion,
     required this.estado,
     required this.logoUrl,
+    this.leyenda,
   });
 
   factory HistoryItem.fromJson(Map<String, dynamic> json) {
@@ -79,6 +82,7 @@ class HistoryItem {
       fechaOperacion: json['fechaOperacion']?.toString() ?? '',
       estado: json['estado']?.toString() ?? 'EXITOSA',
       logoUrl: logo,
+      leyenda: json['leyenda']?.toString(),
     );
   }
 
@@ -98,6 +102,14 @@ class HistoryItem {
 
   bool get isSuccess => estado.toUpperCase() == 'EXITOSA' || estado.toUpperCase() == 'COMPLETADA';
   bool get isPending => estado.toUpperCase() == 'PENDIENTE' || estado.toUpperCase() == 'EN_PROCESO';
+  bool get isRejected => !isSuccess && !isPending;
+
+  String get leyendaEfectiva => OfficialLegendUtils.resolve(
+        leyenda: leyenda,
+        isRejected: isRejected,
+        numeroAutorizacion: numeroAutorizacion,
+        folioTicket: folioTicket,
+      );
 }
 
 class HistoryResponse {

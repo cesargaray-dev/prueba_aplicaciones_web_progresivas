@@ -4,11 +4,16 @@ import type {
   AbonoSaldoRequest,
   ActualizarContactoRequest,
   CambiarContrasenaRequest,
+  DisponibilidadRegistroParams,
+  DisponibilidadRegistroResponse,
   EnviarCodigoRegistroRequest,
   EnviarCodigoRegistroResponse,
   LoginRequest,
   LoginResponse,
   RegisterRequest,
+  RegisterTotpRequest,
+  TotpEstadoResponse,
+  TotpSetupResponse,
   UserProfile,
 } from '../types/auth';
 
@@ -21,6 +26,30 @@ export const authApi = {
       setAuthToken(response.token);
     }
     return response;
+  },
+
+  verificarDisponibilidadRegistro: async (
+    params: DisponibilidadRegistroParams
+  ): Promise<DisponibilidadRegistroResponse> => {
+    const query = new URLSearchParams();
+    if (params.correo?.trim()) query.set('correo', params.correo.trim());
+    if (params.usuario?.trim()) query.set('usuario', params.usuario.trim());
+    if (params.curp?.trim()) query.set('curp', params.curp.trim().toUpperCase());
+    if (params.rfc?.trim()) query.set('rfc', params.rfc.trim().toUpperCase());
+    const qs = query.toString();
+    if (!qs) {
+      return {};
+    }
+    return apiClient.get<DisponibilidadRegistroResponse>(
+      `/auth/register/disponibilidad?${qs}`,
+      { skipUnauthorizedHandler: true }
+    );
+  },
+
+  iniciarTotpRegistro: async (payload: RegisterTotpRequest): Promise<TotpSetupResponse> => {
+    return apiClient.post<TotpSetupResponse>('/auth/register/totp', payload, {
+      skipUnauthorizedHandler: true,
+    });
   },
 
   enviarCodigoRegistro: async (
@@ -39,6 +68,25 @@ export const authApi = {
       setAuthToken(response.token);
     }
     return response;
+  },
+
+  obtenerEstadoTotp: async (): Promise<TotpEstadoResponse> => {
+    return apiClient.get<TotpEstadoResponse>('/auth/me/totp/estado');
+  },
+
+  iniciarTotpPerfil: async (): Promise<TotpSetupResponse> => {
+    return apiClient.post<TotpSetupResponse>('/auth/me/totp/iniciar', {});
+  },
+
+  activarTotpPerfil: async (payload: {
+    secret: string;
+    codigo: string;
+  }): Promise<TotpEstadoResponse> => {
+    return apiClient.post<TotpEstadoResponse>('/auth/me/totp/activar', payload);
+  },
+
+  desactivarTotpPerfil: async (payload: { codigo: string }): Promise<TotpEstadoResponse> => {
+    return apiClient.post<TotpEstadoResponse>('/auth/me/totp/desactivar', payload);
   },
 
   keepAlive: async (): Promise<{ activa: boolean }> => {

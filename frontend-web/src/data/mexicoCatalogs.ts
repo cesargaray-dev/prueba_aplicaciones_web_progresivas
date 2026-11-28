@@ -31,6 +31,24 @@ export interface ResolucionCodigoPostal {
   coloniasSugeridas: string[];
 }
 
+export const CATALOGO_OCUPACIONES: readonly string[] = [
+  'Empleado(a) del sector privado',
+  'Servidor(a) público(a)',
+  'Profesionista independiente',
+  'Trabajador(a) por cuenta propia / Oficio',
+  'Empresario(a) / Dueño(a) de negocio',
+  'Comerciante',
+  'Docente / Académico(a)',
+  'Personal del sector salud',
+  'Fuerzas armadas / Seguridad pública',
+  'Agricultor(a) / Ganadero(a) / Pescador(a)',
+  'Estudiante',
+  'Labores del hogar',
+  'Jubilado(a) / Pensionado(a)',
+  'Desempleado(a) / En búsqueda de empleo',
+  'Otra ocupación',
+];
+
 export const TABULADOR_PROFESIONES: ProfesionItem[] = [
   { clave: 'ING_SOFTWARE_TI', label: 'Ingeniero en Sistemas / Desarrollo de Software / TI', sector: 'Tecnología e Ingeniería' },
   { clave: 'ING_INDUSTRIAL_CIVIL', label: 'Ingeniero Industrial / Civil / Mecánico / Eléctrico', sector: 'Tecnología e Ingeniería' },

@@ -23,6 +23,94 @@ class AuthService {
     throw ApiException(statusCode: 500, message: 'Formato de respuesta inesperado del servidor');
   }
 
+  Future<Map<String, dynamic>> verificarDisponibilidad({
+    String? correo,
+    String? usuario,
+    String? curp,
+    String? rfc,
+  }) async {
+    final queryParams = <String, String>{
+      if (correo != null && correo.trim().isNotEmpty) 'correo': correo.trim(),
+      if (usuario != null && usuario.trim().isNotEmpty) 'usuario': usuario.trim(),
+      if (curp != null && curp.trim().isNotEmpty) 'curp': curp.trim().toUpperCase(),
+      if (rfc != null && rfc.trim().isNotEmpty) 'rfc': rfc.trim().toUpperCase(),
+    };
+    if (queryParams.isEmpty) return <String, dynamic>{};
+    final response = await _client.get(
+      '/api/v1/auth/register/disponibilidad',
+      queryParams: queryParams,
+    );
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'Formato de respuesta inesperado del servidor');
+  }
+
+  Future<Map<String, dynamic>> iniciarTotpRegistro({
+    required String correo,
+    required String usuario,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/register/totp',
+      body: {
+        'correo': correo.trim(),
+        'usuario': usuario.trim(),
+      },
+    );
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'Formato de respuesta inesperado del servidor');
+  }
+
+  Future<Map<String, dynamic>> consultarEstadoTotpPerfil() async {
+    final response = await _client.get('/api/v1/auth/me/totp/estado');
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'No se pudo consultar el estado de Google Authenticator');
+  }
+
+  Future<Map<String, dynamic>> iniciarTotpPerfil() async {
+    final response = await _client.post('/api/v1/auth/me/totp/iniciar', body: {});
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'No se pudo iniciar la vinculación con Google Authenticator');
+  }
+
+  Future<Map<String, dynamic>> activarTotpPerfil({
+    required String secret,
+    required String codigo,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/me/totp/activar',
+      body: {
+        'secret': secret.trim(),
+        'codigo': codigo.trim(),
+      },
+    );
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'No se pudo activar Google Authenticator');
+  }
+
+  Future<Map<String, dynamic>> desactivarTotpPerfil({
+    required String codigo,
+  }) async {
+    final response = await _client.post(
+      '/api/v1/auth/me/totp/desactivar',
+      body: {
+        'codigo': codigo.trim(),
+      },
+    );
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    throw ApiException(statusCode: 500, message: 'No se pudo desactivar Google Authenticator');
+  }
+
   Future<Map<String, dynamic>> enviarCodigoRegistro({
     required String correo,
     String? nombre,
@@ -58,6 +146,7 @@ class AuthService {
     String? curp,
     String? rfc,
     String? ocupacion,
+    String? profesion,
     String? empresa,
     double? ingresoMensual,
     String? calle,
@@ -73,6 +162,8 @@ class AuthService {
     String? telefonoAlternativo,
     required String usuario,
     required String contrasena,
+    String? totpSecret,
+    String? codigoTotp,
     String? codigoVerificacion,
   }) async {
     final cleanSegundo = segundoNombre?.trim();
@@ -80,6 +171,8 @@ class AuthService {
     final cleanFecha = fechaNacimiento.trim();
     final cleanSexo = sexo.trim();
     final cleanCode = codigoVerificacion?.trim();
+    final cleanTotpSecret = totpSecret?.trim();
+    final cleanCodigoTotp = codigoTotp?.trim();
     final response = await _client.post(
       '/api/v1/auth/register',
       body: {
@@ -96,6 +189,7 @@ class AuthService {
         if (curp != null && curp.trim().isNotEmpty) 'curp': curp.trim().toUpperCase(),
         if (rfc != null && rfc.trim().isNotEmpty) 'rfc': rfc.trim().toUpperCase(),
         if (ocupacion != null && ocupacion.trim().isNotEmpty) 'ocupacion': ocupacion.trim(),
+        if (profesion != null && profesion.trim().isNotEmpty) 'profesion': profesion.trim(),
         if (empresa != null && empresa.trim().isNotEmpty) 'empresa': empresa.trim(),
         if (ingresoMensual != null && ingresoMensual > 0) 'ingresoMensual': ingresoMensual,
         if (calle != null && calle.trim().isNotEmpty) 'calle': calle.trim(),
@@ -115,6 +209,8 @@ class AuthService {
           'telefonoAlternativo': telefonoAlternativo.trim(),
         'usuario': usuario.trim(),
         'contrasena': contrasena,
+        if (cleanTotpSecret != null && cleanTotpSecret.isNotEmpty) 'totpSecret': cleanTotpSecret,
+        if (cleanCodigoTotp != null && cleanCodigoTotp.isNotEmpty) 'codigoTotp': cleanCodigoTotp,
         if (cleanCode != null && cleanCode.isNotEmpty) 'codigoVerificacion': cleanCode,
       },
     );

@@ -4,9 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
+import '../services/catalog_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/mexico_catalogs.dart';
 import '../utils/validation_utils.dart';
+import '../widgets/totp_widgets.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -16,8 +18,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const String _mensajeCorreoDuplicado =
+      'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.';
+
   final _loginFormKey = GlobalKey<FormState>();
   final _regFormKey = GlobalKey<FormState>();
+  final List<GlobalKey> _stepChipKeys = List.generate(6, (_) => GlobalKey());
 
   bool _isRegisterMode = false;
   final bool _enrollBiometricOnLogin = false;
@@ -27,8 +33,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _contrasenaController = TextEditingController();
   bool _obscurePassword = true;
 
-  // Register Step 1: Identity
-  int _regStep = 1; // 1 = Identidad, 2 = Fiscal y Domicilio, 3 = Acceso, 4 = OTP 2FA
+  // Register Step 1..6
+  int _regStep = 1;
+
+  // Step 1: Datos Personales
   final _nombreController = TextEditingController();
   final _segundoNombreController = TextEditingController();
   final _apPaternoController = TextEditingController();
@@ -38,25 +46,35 @@ class _LoginScreenState extends State<LoginScreen> {
   String _nacionalidad = 'MEXICANA';
   String _estadoCivil = 'SOLTERO';
 
-  // Register Step 2: Fiscal (CURP / RFC), Tabuladores & SEPOMEX Address
+  // Step 2: Datos Fiscales
   String _entidadCodigo = 'DF';
   final _curpController = TextEditingController();
   final _rfcController = TextEditingController();
-  String _ocupacionSeleccionada = MexicoCatalogs.tabuladorProfesiones.first.label;
+  String? _curpDisponibilidadError;
+  String? _rfcDisponibilidadError;
+  bool _checkingFiscalDisponibilidad = false;
+
+  // Step 3: Ocupación e Ingresos
+  String _ocupacionCatalogo = MexicoCatalogs.catalogoOcupaciones.first;
+  String _profesionTabulador = MexicoCatalogs.tabuladorProfesiones.first.label;
   final _empresaController = TextEditingController();
   double _ingresoSeleccionado = MexicoCatalogs.tabuladorSueldos[2].montoRepresentativo;
+
+  // Step 4: Domicilio SEPOMEX
   String _tipoVialidad = 'Calle';
   final _calleController = TextEditingController();
   final _numExtController = TextEditingController();
   final _numIntController = TextEditingController();
   final _cpController = TextEditingController();
-  String _estadoDomicilioCodigo = 'DF';
-  String _municipioSeleccionado = 'Cuauhtémoc';
-  bool _coloniaManual = false;
-  String _coloniaSeleccionada = 'Juárez';
-  final _coloniaController = TextEditingController(text: 'Juárez');
+  String _estadoDomicilioCodigo = '';
+  String _estadoDomicilioNombre = '';
+  String _municipioSeleccionado = '';
+  List<String> _coloniasDelCp = <String>[];
+  String? _coloniaSeleccionada;
+  bool _loadingCpCatalogo = false;
+  String? _cpErrorRemoto;
 
-  // Register Step 3: Contact & Credentials
+  // Step 5: Contacto y Acceso
   final _correoController = TextEditingController();
   final _telefonoController = TextEditingController();
   final _telAltController = TextEditingController();
@@ -65,13 +83,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _regConfirmContrasenaController = TextEditingController();
   bool _obscureRegPassword = true;
   bool _obscureRegConfirmPassword = true;
+  String? _correoDisponibilidadError;
+  String? _usuarioDisponibilidadError;
+  bool _checkingCorreoDisponibilidad = false;
 
-  // Register Step 4: 2FA OTP
-  final _regOtpController = TextEditingController();
-  Timer? _regOtpTimer;
-  int _regOtpSecondsRemaining = 0;
-  String _regOtpSentTo = '';
-  String? _regOtpFeedback;
+  // Step 6: Google Authenticator (TOTP 30s)
+  Map<String, dynamic>? _totpSetupData;
+  final _regTotpController = TextEditingController();
+  Timer? _totpClockTimer;
+  int _totpSecondsLeft = TotpUtils.secondsRemainingInWindow();
+  String? _totpFeedback;
+
+  bool _warmingCloud = false;
+  bool _cloudReady = false;
   String? _inlineRegError;
   final Set<String> _blurredFields = <String>{};
 
@@ -81,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      unawaited(_warmUpRenderIfNeeded());
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (!auth.biometricsInitialized) {
         await auth.initBiometrics();
@@ -93,9 +118,34 @@ class _LoginScreenState extends State<LoginScreen> {
     });
   }
 
+  Future<void> _warmUpRenderIfNeeded() async {
+    final currentUrl = ApiClient().baseUrl.toLowerCase();
+    if (!currentUrl.contains('onrender.com')) {
+      if (mounted && (_warmingCloud || _cloudReady)) {
+        setState(() {
+          _warmingCloud = false;
+          _cloudReady = false;
+        });
+      }
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _warmingCloud = true;
+        _cloudReady = false;
+      });
+    }
+    final ok = await ApiClient().warmUpServer();
+    if (!mounted) return;
+    setState(() {
+      _warmingCloud = false;
+      _cloudReady = ok;
+    });
+  }
+
   @override
   void dispose() {
-    _regOtpTimer?.cancel();
+    _totpClockTimer?.cancel();
     _usuarioController.dispose();
     _contrasenaController.dispose();
     _nombreController.dispose();
@@ -109,7 +159,6 @@ class _LoginScreenState extends State<LoginScreen> {
     _calleController.dispose();
     _numExtController.dispose();
     _numIntController.dispose();
-    _coloniaController.dispose();
     _cpController.dispose();
     _correoController.dispose();
     _telefonoController.dispose();
@@ -117,32 +166,147 @@ class _LoginScreenState extends State<LoginScreen> {
     _regUsuarioController.dispose();
     _regContrasenaController.dispose();
     _regConfirmContrasenaController.dispose();
-    _regOtpController.dispose();
+    _regTotpController.dispose();
     _apiUrlController.dispose();
     super.dispose();
   }
 
-  String get _selectedEstadoNombre {
-    final est = MexicoCatalogs.obtenerEstadoPorNombreOCodigo(_estadoDomicilioCodigo);
-    return est?.nombre ?? 'Ciudad de México';
+  void _startTotpClockTimer({int periodSeconds = 30}) {
+    _totpClockTimer?.cancel();
+    _totpSecondsLeft = TotpUtils.secondsRemainingInWindow(periodSeconds: periodSeconds);
+    _totpClockTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _regStep != 6 || !_isRegisterMode) {
+        timer.cancel();
+        return;
+      }
+      setState(() {
+        _totpSecondsLeft = TotpUtils.secondsRemainingInWindow(periodSeconds: periodSeconds);
+      });
+    });
   }
 
-  void _onCodigoPostalChanged(String val) {
+  void _goToRegStep(int step) {
+    if (step != 6) {
+      _totpClockTimer?.cancel();
+    }
     setState(() {
-      if (val.length == 5) {
-        final res = MexicoCatalogs.resolverCodigoPostalMexicano(val);
-        if (res.valido && res.codigoRenapo != null) {
-          _estadoDomicilioCodigo = res.codigoRenapo!;
-          if (res.municipioSugerido != null) {
-            _municipioSeleccionado = res.municipioSugerido!;
-          }
-          if (!_coloniaManual && res.coloniasSugeridas.isNotEmpty) {
-            _coloniaSeleccionada = res.coloniasSugeridas.first;
-            _coloniaController.text = _coloniaSeleccionada;
-          }
-        }
+      _inlineRegError = null;
+      _regStep = step;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final idx = (step - 1).clamp(0, _stepChipKeys.length - 1);
+      final chipCtx = _stepChipKeys[idx].currentContext;
+      if (chipCtx != null) {
+        Scrollable.ensureVisible(
+          chipCtx,
+          duration: const Duration(milliseconds: 220),
+          alignment: 0.4,
+        );
       }
     });
+  }
+
+  String get _selectedEstadoNombre {
+    if (_estadoDomicilioNombre.trim().isNotEmpty) {
+      return _estadoDomicilioNombre.trim();
+    }
+    final est = MexicoCatalogs.obtenerEstadoPorNombreOCodigo(_estadoDomicilioCodigo);
+    return est?.nombre ?? '';
+  }
+
+  Future<void> _onCodigoPostalChanged(String val) async {
+    final clean = val.trim();
+    if (clean.length < 5) {
+      setState(() {
+        _estadoDomicilioCodigo = '';
+        _estadoDomicilioNombre = '';
+        _municipioSeleccionado = '';
+        _coloniasDelCp = <String>[];
+        _coloniaSeleccionada = null;
+        _loadingCpCatalogo = false;
+        _cpErrorRemoto = null;
+      });
+      return;
+    }
+
+    final localRes = MexicoCatalogs.resolverCodigoPostalMexicano(clean);
+    setState(() {
+      _coloniaSeleccionada = null;
+      _cpErrorRemoto = null;
+      if (localRes.valido) {
+        _estadoDomicilioCodigo = localRes.codigoRenapo ?? '';
+        _estadoDomicilioNombre = localRes.estadoNombre ?? '';
+        _municipioSeleccionado = localRes.municipioSugerido ?? '';
+        _coloniasDelCp = List<String>.from(localRes.coloniasSugeridas);
+        _loadingCpCatalogo = true;
+      } else {
+        _estadoDomicilioCodigo = '';
+        _estadoDomicilioNombre = '';
+        _municipioSeleccionado = '';
+        _coloniasDelCp = <String>[];
+        _loadingCpCatalogo = false;
+      }
+    });
+
+    if (!localRes.valido) return;
+
+    try {
+      final remote = await CatalogService().consultarCodigoPostal(clean);
+      if (!mounted || _cpController.text.trim() != clean) return;
+      if (remote != null) {
+        final valido = remote['valido'] != false;
+        if (!valido) {
+          setState(() {
+            _loadingCpCatalogo = false;
+            _estadoDomicilioCodigo = '';
+            _estadoDomicilioNombre = '';
+            _municipioSeleccionado = '';
+            _coloniasDelCp = <String>[];
+            _coloniaSeleccionada = null;
+            _cpErrorRemoto = (remote['mensaje']?.toString().trim().isNotEmpty ?? false)
+                ? remote['mensaje'].toString().trim()
+                : 'El C.P. $clean no está registrado en el catálogo oficial SEPOMEX.';
+          });
+          return;
+        }
+        final estadoRemoto = remote['estado']?.toString().trim() ?? '';
+        final codigoEstadoRemoto = remote['codigoEstado']?.toString().trim() ?? '';
+        final municipioRemoto = remote['municipio']?.toString().trim() ?? '';
+        final rawColonias = remote['colonias'];
+        final coloniasRemotas = rawColonias is List
+            ? rawColonias
+                .map((e) => e.toString().trim())
+                .where((e) => e.isNotEmpty)
+                .toSet()
+                .toList()
+            : <String>[];
+        setState(() {
+          _loadingCpCatalogo = false;
+          if (codigoEstadoRemoto.isNotEmpty) {
+            _estadoDomicilioCodigo = codigoEstadoRemoto;
+          }
+          if (estadoRemoto.isNotEmpty) {
+            _estadoDomicilioNombre = estadoRemoto;
+          }
+          if (municipioRemoto.isNotEmpty) {
+            _municipioSeleccionado = municipioRemoto;
+          }
+          if (coloniasRemotas.isNotEmpty) {
+            _coloniasDelCp = coloniasRemotas;
+          }
+          if (_coloniaSeleccionada != null &&
+              !_coloniasDelCp.contains(_coloniaSeleccionada)) {
+            _coloniaSeleccionada = null;
+          }
+        });
+      } else {
+        if (mounted) setState(() => _loadingCpCatalogo = false);
+      }
+    } catch (_) {
+      if (mounted && _cpController.text.trim() == clean) {
+        setState(() => _loadingCpCatalogo = false);
+      }
+    }
   }
 
   String _buildCalleCompleta() {
@@ -175,31 +339,12 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _startRegOtpCountdown(int seconds) {
-    _regOtpTimer?.cancel();
-    _regOtpSecondsRemaining = seconds > 0 ? seconds : 300;
-    _regOtpTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_regOtpSecondsRemaining > 1) {
-        setState(() => _regOtpSecondsRemaining--);
-      } else {
-        setState(() => _regOtpSecondsRemaining = 0);
-        timer.cancel();
-      }
-    });
-  }
-
-  String _formatCountdown(int secs) {
-    final m = (secs ~/ 60).toString().padLeft(2, '0');
-    final s = (secs % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
   void _autoGenerateFiscal() {
-    setState(() => _inlineRegError = null);
+    setState(() {
+      _inlineRegError = null;
+      _curpDisponibilidadError = null;
+      _rfcDisponibilidadError = null;
+    });
     final res = ValidationUtils.generarCurpYRfcSugeridos(
       nombre: _nombreController.text,
       segundoNombre: _segundoNombreController.text,
@@ -220,6 +365,100 @@ class _LoginScreenState extends State<LoginScreen> {
       _curpController.text = res.curp;
       _rfcController.text = res.rfc;
     });
+  }
+
+  Future<bool> _checkFiscalDisponibilidad({String? curp, String? rfc}) async {
+    final cleanCurp = curp?.trim().toUpperCase();
+    final cleanRfc = rfc?.trim().toUpperCase();
+    final checkCurp = (cleanCurp != null && ValidationUtils.esCurpValida(cleanCurp))
+        ? cleanCurp
+        : null;
+    final checkRfc = (cleanRfc != null && ValidationUtils.esRfcValido(cleanRfc))
+        ? cleanRfc
+        : null;
+    if (checkCurp == null && checkRfc == null) return true;
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    setState(() => _checkingFiscalDisponibilidad = true);
+    final resp = await auth.verificarDisponibilidad(curp: checkCurp, rfc: checkRfc);
+    if (!mounted) return false;
+    setState(() => _checkingFiscalDisponibilidad = false);
+    if (resp == null) return true;
+
+    final mensajes = resp['mensajes'] is Map ? (resp['mensajes'] as Map) : const {};
+    String? curpErr;
+    String? rfcErr;
+    if (checkCurp != null && resp['curpDisponible'] == false) {
+      final m = mensajes['curp']?.toString().trim();
+      curpErr = (m != null && m.isNotEmpty)
+          ? m
+          : 'Esta CURP ya está registrada en otra cuenta.';
+    }
+    if (checkRfc != null && resp['rfcDisponible'] == false) {
+      final m = mensajes['rfc']?.toString().trim();
+      rfcErr = (m != null && m.isNotEmpty)
+          ? m
+          : 'Este RFC ya está registrado en otra cuenta.';
+    }
+    if (curpErr != null || rfcErr != null) {
+      setState(() {
+        if (checkCurp != null) _curpDisponibilidadError = curpErr;
+        if (checkRfc != null) _rfcDisponibilidadError = rfcErr;
+      });
+      return false;
+    }
+    return true;
+  }
+
+  Future<bool> _checkContactoDisponibilidad({String? correo, String? usuario}) async {
+    final cleanMail = correo?.trim();
+    final cleanUser = usuario?.trim();
+    final checkMail = (cleanMail != null &&
+            ValidationUtils.esCorreoValido(cleanMail) &&
+            !ValidationUtils.esCorreoPlaceholder(cleanMail))
+        ? cleanMail
+        : null;
+    final checkUser = (cleanUser != null && ValidationUtils.esUsuarioValido(cleanUser))
+        ? cleanUser
+        : null;
+    if (checkMail == null && checkUser == null) return true;
+
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (checkMail != null) {
+      setState(() => _checkingCorreoDisponibilidad = true);
+    }
+    final resp = await auth.verificarDisponibilidad(
+      correo: checkMail,
+      usuario: checkUser,
+    );
+    if (!mounted) return false;
+    if (checkMail != null) {
+      setState(() => _checkingCorreoDisponibilidad = false);
+    }
+    if (resp == null) return true;
+
+    final mensajes = resp['mensajes'] is Map ? (resp['mensajes'] as Map) : const {};
+    String? mailErr;
+    String? userErr;
+    if (checkMail != null && resp['correoDisponible'] == false) {
+      final m = mensajes['correo']?.toString().trim();
+      mailErr = (m != null && m.isNotEmpty) ? m : _mensajeCorreoDuplicado;
+    }
+    if (checkUser != null && resp['usuarioDisponible'] == false) {
+      final m = mensajes['usuario']?.toString().trim();
+      userErr = (m != null && m.isNotEmpty)
+          ? m
+          : 'Este nombre de usuario ya está ocupado. Elige otro.';
+    }
+
+    if (mailErr != null || userErr != null) {
+      setState(() {
+        if (checkMail != null) _correoDisponibilidadError = mailErr;
+        if (checkUser != null) _usuarioDisponibilidadError = userErr;
+      });
+      return false;
+    }
+    return true;
   }
 
   String? _validateStep1() {
@@ -245,30 +484,44 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _validateStep2() {
     final curpErr = ValidationUtils.diagnosticarCurp(_curpController.text);
     if (curpErr != null) return curpErr;
+    if (_curpDisponibilidadError != null) return _curpDisponibilidadError;
     final rfcErr = ValidationUtils.diagnosticarRfc(_rfcController.text);
     if (rfcErr != null) return rfcErr;
-    if (_ocupacionSeleccionada.trim().isEmpty) {
-      return 'Selecciona tu profesión u ocupación del tabulador.';
+    if (_rfcDisponibilidadError != null) return _rfcDisponibilidadError;
+    return null;
+  }
+
+  String? _validateStep3() {
+    if (_ocupacionCatalogo.trim().isEmpty ||
+        !MexicoCatalogs.catalogoOcupaciones.contains(_ocupacionCatalogo)) {
+      return 'Selecciona tu ocupación del catálogo oficial.';
+    }
+    if (_profesionTabulador.trim().isEmpty) {
+      return 'Selecciona tu profesión del tabulador.';
     }
     final empErr = ValidationUtils.diagnosticarEmpresa(_empresaController.text);
     if (empErr != null) return empErr;
     if (_ingresoSeleccionado <= 0) {
       return 'Selecciona tu rango de sueldo mensual del tabulador.';
     }
+    return null;
+  }
+
+  String? _validateStep4() {
     final cpErr = ValidationUtils.diagnosticarCodigoPostal(_cpController.text);
     if (cpErr != null) return cpErr;
-    final cpRes = MexicoCatalogs.resolverCodigoPostalMexicano(_cpController.text);
-    if (cpRes.valido &&
-        cpRes.codigoRenapo != null &&
-        cpRes.codigoRenapo != _estadoDomicilioCodigo) {
-      return 'El C.P. ${_cpController.text} pertenece a ${cpRes.estadoNombre}, no a $_selectedEstadoNombre.';
+    if (_cpErrorRemoto != null && _cpErrorRemoto!.isNotEmpty) {
+      return _cpErrorRemoto;
     }
-    if (_municipioSeleccionado.trim().length < 2) {
-      return 'Selecciona tu municipio o alcaldía.';
+    if (_selectedEstadoNombre.trim().isEmpty || _municipioSeleccionado.trim().length < 2) {
+      return 'Ingresa un Código Postal válido de 5 dígitos para autocompletar Estado y Municipio.';
     }
-    final colVal = _coloniaManual ? _coloniaController.text : _coloniaSeleccionada;
-    final colErr = ValidationUtils.diagnosticarColonia(colVal);
-    if (colErr != null) return colErr;
+    if (_coloniaSeleccionada == null || _coloniaSeleccionada!.trim().isEmpty) {
+      return 'Selecciona una colonia perteneciente a tu código postal.';
+    }
+    if (!_coloniasDelCp.contains(_coloniaSeleccionada)) {
+      return 'Selecciona una colonia válida del catálogo de tu código postal.';
+    }
     final calleErr = ValidationUtils.diagnosticarCalle(_calleController.text);
     if (calleErr != null) return calleErr;
     final extErr = ValidationUtils.diagnosticarNumeroDomicilio(_numExtController.text);
@@ -282,12 +535,13 @@ class _LoginScreenState extends State<LoginScreen> {
     return null;
   }
 
-  String? _validateStep3() {
+  String? _validateStep5() {
     final mail = _correoController.text.trim();
     if (!ValidationUtils.esCorreoValido(mail)) return 'Ingresa un correo electrónico válido.';
     if (ValidationUtils.esCorreoPlaceholder(mail)) {
-      return 'Usa un correo electrónico real (Gmail, Outlook, etc.) para recibir tu código 2FA.';
+      return 'Usa un correo electrónico real (Gmail, Outlook, etc.).';
     }
+    if (_correoDisponibilidadError != null) return _correoDisponibilidadError;
     final telErr = ValidationUtils.diagnosticarTelefono(_telefonoController.text);
     if (telErr != null) return telErr;
     if (_telAltController.text.trim().isNotEmpty) {
@@ -296,6 +550,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     final usrErr = ValidationUtils.diagnosticarUsuario(_regUsuarioController.text);
     if (usrErr != null) return usrErr;
+    if (_usuarioDisponibilidadError != null) return _usuarioDisponibilidadError;
     if (!ValidationUtils.esContrasenaSegura(_regContrasenaController.text)) {
       return 'La contraseña requiere mínimo 8 caracteres, mayúscula, minúscula y número.';
     }
@@ -327,92 +582,149 @@ class _LoginScreenState extends State<LoginScreen> {
         _rfcController.text = suggested.rfc;
       }
     }
-    setState(() {
-      _inlineRegError = null;
-      _regStep = 2;
-    });
+    _goToRegStep(2);
   }
 
-  void _advanceFromStep2() {
+  Future<void> _advanceFromStep2() async {
     _regFormKey.currentState?.validate();
     final err = _validateStep2();
     if (err != null) {
       setState(() => _inlineRegError = err);
       return;
     }
-    setState(() {
-      _inlineRegError = null;
-      _regStep = 3;
-    });
+    final available = await _checkFiscalDisponibilidad(
+      curp: _curpController.text,
+      rfc: _rfcController.text,
+    );
+    if (!mounted) return;
+    if (!available) {
+      _regFormKey.currentState?.validate();
+      setState(() {
+        _inlineRegError = _curpDisponibilidadError ?? _rfcDisponibilidadError;
+      });
+      return;
+    }
+    _goToRegStep(3);
   }
 
-  Future<void> _sendRegistrationCode({bool isResend = false}) async {
+  void _advanceFromStep3() {
+    _regFormKey.currentState?.validate();
+    final err = _validateStep3();
+    if (err != null) {
+      setState(() => _inlineRegError = err);
+      return;
+    }
+    _goToRegStep(4);
+  }
+
+  void _advanceFromStep4() {
+    _regFormKey.currentState?.validate();
+    final err = _validateStep4();
+    if (err != null) {
+      setState(() => _inlineRegError = err);
+      return;
+    }
+    _goToRegStep(5);
+  }
+
+  Future<void> _advanceToTotpStep({bool isRegenerate = false}) async {
     setState(() {
       _inlineRegError = null;
-      _regOtpFeedback = null;
+      _totpFeedback = null;
     });
 
-    if (!isResend) {
+    final mail = _correoController.text.trim();
+    final usr = _regUsuarioController.text.trim();
+
+    if (!isRegenerate) {
+      // Check email/user availability immediately if syntactically valid so duplicate emails
+      // always surface right under the email field even before checking other steps.
+      if (ValidationUtils.esCorreoValido(mail) && !ValidationUtils.esCorreoPlaceholder(mail)) {
+        final okDisp = await _checkContactoDisponibilidad(correo: mail, usuario: usr);
+        if (!mounted) return;
+        if (!okDisp) {
+          _regFormKey.currentState?.validate();
+          setState(() {
+            _inlineRegError = _correoDisponibilidadError ?? _usuarioDisponibilidadError;
+          });
+          return;
+        }
+      }
+
       _regFormKey.currentState?.validate();
       final e1 = _validateStep1();
       if (e1 != null) {
-        setState(() {
-          _regStep = 1;
-          _inlineRegError = e1;
-        });
+        _goToRegStep(1);
+        setState(() => _inlineRegError = e1);
         return;
       }
       final e2 = _validateStep2();
       if (e2 != null) {
-        setState(() {
-          _regStep = 2;
-          _inlineRegError = e2;
-        });
+        _goToRegStep(2);
+        setState(() => _inlineRegError = e2);
         return;
       }
       final e3 = _validateStep3();
       if (e3 != null) {
-        setState(() {
-          _regStep = 3;
-          _inlineRegError = e3;
-        });
+        _goToRegStep(3);
+        setState(() => _inlineRegError = e3);
+        return;
+      }
+      final e4 = _validateStep4();
+      if (e4 != null) {
+        _goToRegStep(4);
+        setState(() => _inlineRegError = e4);
+        return;
+      }
+      final e5 = _validateStep5();
+      if (e5 != null) {
+        setState(() => _inlineRegError = e5);
         return;
       }
     }
 
     final auth = Provider.of<AuthProvider>(context, listen: false);
-    final email = _correoController.text.trim();
-    final expiresIn = await auth.enviarCodigoRegistro(
-      correo: email,
-      nombre: _nombreController.text.trim(),
-      usuario: _regUsuarioController.text.trim(),
-      curp: _curpController.text.trim().toUpperCase(),
-      rfc: _rfcController.text.trim().toUpperCase(),
+    final totpResp = await auth.iniciarTotpRegistro(
+      correo: mail,
+      usuario: usr,
     );
     if (!mounted) return;
-    if (expiresIn != null) {
+    if (totpResp != null) {
+      final period = (totpResp['periodoSegundos'] is int)
+          ? (totpResp['periodoSegundos'] as int)
+          : 30;
       setState(() {
-        _regStep = 4;
-        _regOtpSentTo = email;
-        _regOtpController.clear();
-        _regOtpFeedback = isResend
-            ? 'Se envió un nuevo código 2FA de 6 dígitos a tu correo.'
+        _totpSetupData = totpResp;
+        _regTotpController.clear();
+        _totpFeedback = isRegenerate
+            ? 'Se generó una nueva clave secreta y código QR para Google Authenticator.'
             : null;
       });
-      _startRegOtpCountdown(expiresIn);
+      _goToRegStep(6);
+      _startTotpClockTimer(periodSeconds: period);
     } else {
-      _showError(
-        auth.errorMessage ?? 'No fue posible enviar el código de verificación al correo.',
-      );
+      final errMsg = auth.errorMessage ?? 'No fue posible iniciar Google Authenticator.';
+      final lower = errMsg.toLowerCase();
+      if (lower.contains('correo') &&
+          (lower.contains('uso') || lower.contains('registrad') || lower.contains('existe'))) {
+        auth.clearError();
+        setState(() {
+          _correoDisponibilidadError = errMsg;
+          _inlineRegError = errMsg;
+        });
+      } else {
+        _showError(errMsg);
+      }
     }
   }
 
   Future<void> _submitRegister() async {
-    final code = _regOtpController.text.trim();
+    final code = _regTotpController.text.trim();
     if (!RegExp(r'^\d{6}$').hasMatch(code)) {
-      _showError('Ingresa el código de verificación de 6 dígitos enviado a tu correo.');
+      _showError('Ingresa el código dinámico de 6 dígitos de Google Authenticator.');
       return;
     }
+    final secret = (_totpSetupData?['secret'] ?? '').toString().trim();
     final auth = Provider.of<AuthProvider>(context, listen: false);
     final success = await auth.register(
       nombre: _nombreController.text.trim(),
@@ -427,7 +739,8 @@ class _LoginScreenState extends State<LoginScreen> {
       estadoCivil: _estadoCivil,
       curp: _curpController.text.trim().toUpperCase(),
       rfc: _rfcController.text.trim().toUpperCase(),
-      ocupacion: _ocupacionSeleccionada.trim(),
+      ocupacion: _ocupacionCatalogo.trim(),
+      profesion: _profesionTabulador.trim(),
       empresa: _empresaController.text.trim(),
       ingresoMensual: _ingresoSeleccionado,
       calle: _buildCalleCompleta(),
@@ -435,7 +748,7 @@ class _LoginScreenState extends State<LoginScreen> {
       numeroInterior: _numIntController.text.trim().isEmpty
           ? null
           : _numIntController.text.trim(),
-      colonia: (_coloniaManual ? _coloniaController.text : _coloniaSeleccionada).trim(),
+      colonia: (_coloniaSeleccionada ?? '').trim(),
       codigoPostal: _cpController.text.trim(),
       municipio: _municipioSeleccionado.trim(),
       estado: _selectedEstadoNombre,
@@ -447,12 +760,13 @@ class _LoginScreenState extends State<LoginScreen> {
           : _telAltController.text.trim(),
       usuario: _regUsuarioController.text.trim(),
       contrasena: _regContrasenaController.text,
-      codigoVerificacion: code,
+      totpSecret: secret,
+      codigoTotp: code,
     );
     if (!success && mounted) {
       _showError(auth.errorMessage ?? 'No fue posible registrar la cuenta');
     } else if (success) {
-      _regOtpTimer?.cancel();
+      _totpClockTimer?.cancel();
     }
   }
 
@@ -543,7 +857,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     label: const Text('Wi-Fi Casa', style: TextStyle(fontSize: 11)),
                     onPressed: () {
                       setDialogState(() {
-                        _apiUrlController.text = 'http://192.168.1.56:10000';
+                        _apiUrlController.text = 'http://10.21.51.77:10000';
                         inlineError = null;
                       });
                     },
@@ -582,6 +896,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 }
                 final normalized = ApiClient.normalizeBaseUrl(rawUrl);
                 await Provider.of<AuthProvider>(context, listen: false).saveApiUrl(normalized);
+                unawaited(_warmUpRenderIfNeeded());
                 if (!ctx.mounted) return;
                 Navigator.of(ctx).pop();
                 if (!mounted) return;
@@ -633,36 +948,41 @@ class _LoginScreenState extends State<LoginScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: AppTheme.brandAccent(context).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppTheme.brandAccent(context).withValues(alpha: 0.28),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppTheme.brandAccent(context).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: AppTheme.brandAccent(context).withValues(alpha: 0.28),
+                              ),
                             ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF10B981),
-                                  shape: BoxShape.circle,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 7,
+                                  height: 7,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFF10B981),
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Banca Privada · GestoPago',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.textPrimary(context),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    'Banca Privada · GestoPago',
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppTheme.textPrimary(context),
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                         Row(
@@ -758,6 +1078,59 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
 
+                    if (_warmingCloud || _cloudReady) ...[
+                      const SizedBox(height: 6),
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: (_cloudReady ? AppTheme.accentEmerald : AppTheme.secondaryBlue)
+                                .withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: (_cloudReady ? AppTheme.accentEmerald : AppTheme.secondaryBlue)
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (_warmingCloud)
+                                const SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.8,
+                                    color: AppTheme.secondaryBlue,
+                                  ),
+                                )
+                              else
+                                const Icon(
+                                  Icons.cloud_done_rounded,
+                                  size: 14,
+                                  color: AppTheme.accentEmerald,
+                                ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  _warmingCloud
+                                      ? 'Despertando servidor en la nube (Render)...'
+                                      : 'Nube (Render) activa y lista',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: _cloudReady
+                                        ? AppTheme.accentEmerald
+                                        : AppTheme.secondaryBlue,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 14),
 
                     if (auth.errorMessage != null && auth.errorMessage!.isNotEmpty) ...[
@@ -844,14 +1217,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       selected: {_isRegisterMode},
                       onSelectionChanged: (sel) {
                         auth.clearError();
-                        _regOtpTimer?.cancel();
+                        _totpClockTimer?.cancel();
                         setState(() {
                           _isRegisterMode = sel.first;
                           _regStep = 1;
                           _inlineRegError = null;
-                          _regOtpController.clear();
-                          _regOtpFeedback = null;
-                          _regOtpSecondsRemaining = 0;
+                          _regTotpController.clear();
+                          _totpFeedback = null;
                         });
                       },
                     ),
@@ -891,7 +1263,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(width: 6),
                               Flexible(
                                 child: Text(
-                                  'Expediente KYC Oficial · 2FA Brevo · GestoPago',
+                                  'Expediente KYC Oficial · Google Authenticator · GestoPago',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
@@ -904,7 +1276,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Validación normativa de CURP y RFC, acceso biométrico con huella digital y recibos PDF con ID_TX.',
+                            'Validación normativa de CURP y RFC, SEPOMEX, código dinámico TOTP cada 30s, biometría y recibos con leyenda oficial.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               fontSize: 11,
@@ -1161,66 +1533,131 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildRegisterStepper(Color accent) {
-    const labels = ['1. Identidad', '2. Fiscal', '3. Acceso', '4. 2FA'];
-    return Row(
-      children: List.generate(4, (idx) {
-        final stepNum = idx + 1;
-        final isActive = _regStep == stepNum;
-        final isDone = _regStep > stepNum;
-        return Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(right: idx < 3 ? 6 : 0),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(10),
-              onTap: isDone
-                  ? () => setState(() {
-                        _inlineRegError = null;
-                        _regStep = stepNum;
-                      })
-                  : null,
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-                decoration: BoxDecoration(
-                  color: isActive
-                      ? accent.withValues(alpha: 0.14)
-                      : isDone
-                          ? AppTheme.accentEmerald.withValues(alpha: 0.14)
-                          : AppTheme.elevatedBg(context),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isActive
-                        ? accent
-                        : isDone
-                            ? AppTheme.accentEmerald.withValues(alpha: 0.5)
-                            : AppTheme.borderCol(context),
-                  ),
-                ),
-                child: Text(
-                  labels[idx],
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    color: isActive
-                        ? accent
-                        : isDone
-                            ? AppTheme.accentEmerald
-                            : AppTheme.textSecondary(context),
-                  ),
+  Widget _buildRegisterStepper(Color accent, String currentStepTitle) {
+    const chipLabels = [
+      '1. Datos Personales',
+      '2. Datos Fiscales',
+      '3. Ocupación',
+      '4. Domicilio',
+      '5. Contacto',
+      '6. Autenticador',
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: accent.withValues(alpha: 0.35)),
+              ),
+              child: Text(
+                'Paso $_regStep de 6',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w900,
+                  color: accent,
                 ),
               ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Paso $_regStep de 6 · $currentStepTitle',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.textSecondary(context),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: _regStep / 6.0,
+            minHeight: 5,
+            backgroundColor: AppTheme.borderCol(context),
+            color: _regStep == 6 ? AppTheme.accentEmerald : accent,
           ),
-        );
-      }),
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: List.generate(6, (idx) {
+              final stepNum = idx + 1;
+              final isActive = _regStep == stepNum;
+              final isDone = _regStep > stepNum;
+              return Padding(
+                key: _stepChipKeys[idx],
+                padding: EdgeInsets.only(right: idx < 5 ? 6 : 0),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: isDone ? () => _goToRegStep(stepNum) : null,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? accent.withValues(alpha: 0.14)
+                          : isDone
+                              ? AppTheme.accentEmerald.withValues(alpha: 0.14)
+                              : AppTheme.elevatedBg(context),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isActive
+                            ? accent
+                            : isDone
+                                ? AppTheme.accentEmerald.withValues(alpha: 0.5)
+                                : AppTheme.borderCol(context),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isDone) ...[
+                          const Icon(
+                            Icons.check_circle_rounded,
+                            size: 13,
+                            color: AppTheme.accentEmerald,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Text(
+                          chipLabels[idx],
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: isActive
+                                ? accent
+                                : isDone
+                                    ? AppTheme.accentEmerald
+                                    : AppTheme.textSecondary(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _wrapBlurValidation({
     required String fieldId,
+    VoidCallback? onBlurExtra,
     required Widget Function(AutovalidateMode mode) builder,
   }) {
     final mode = _blurredFields.contains(fieldId)
@@ -1229,8 +1666,11 @@ class _LoginScreenState extends State<LoginScreen> {
     return Focus(
       canRequestFocus: false,
       onFocusChange: (hasFocus) {
-        if (!hasFocus && !_blurredFields.contains(fieldId)) {
-          setState(() => _blurredFields.add(fieldId));
+        if (!hasFocus) {
+          if (!_blurredFields.contains(fieldId)) {
+            setState(() => _blurredFields.add(fieldId));
+          }
+          onBlurExtra?.call();
         }
       },
       child: builder(mode),
@@ -1240,33 +1680,34 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget _buildRegisterForm(AuthProvider auth) {
     final pwd = _regContrasenaController.text;
     final accent = AppTheme.brandAccent(context);
-    final cpRes = _cpController.text.length == 5
-        ? MexicoCatalogs.resolverCodigoPostalMexicano(_cpController.text)
-        : null;
-    final municipiosDisponibles =
-        MexicoCatalogs.obtenerMunicipiosPorEstado(_estadoDomicilioCodigo);
-    final safeMunicipio = municipiosDisponibles.contains(_municipioSeleccionado)
-        ? _municipioSeleccionado
-        : (municipiosDisponibles.isNotEmpty ? municipiosDisponibles.first : 'Cuauhtémoc');
-    final estadoObj = MexicoCatalogs.obtenerEstadoPorNombreOCodigo(_estadoDomicilioCodigo);
-    final coloniasDisponibles = estadoObj?.coloniasBase ?? const ['Centro', 'Juárez'];
-    final safeColoniaDropdown = _coloniaManual
-        ? '__OTRA__'
-        : (coloniasDisponibles.contains(_coloniaSeleccionada)
-            ? _coloniaSeleccionada
-            : coloniasDisponibles.first);
+    final cpVerificado = _cpController.text.trim().length == 5 &&
+        _cpErrorRemoto == null &&
+        _selectedEstadoNombre.isNotEmpty &&
+        _municipioSeleccionado.isNotEmpty;
 
-    final titles = [
-      'Datos Personales del Titular',
-      'Expediente Fiscal, Tabuladores y Domicilio',
-      'Contacto Verificado y Credenciales',
-      'Verifica tu correo (2FA)',
+    const shortTitles = [
+      'Datos Personales',
+      'Datos Fiscales',
+      'Ocupación e Ingresos',
+      'Domicilio SEPOMEX',
+      'Contacto y Acceso',
+      'Autenticador de Google (TOTP 30s)',
     ];
-    final subtitles = [
-      'Ingresa tu nombre (2 a 40 letras) y apellidos (mín. 3 letras, +18 años).',
-      'CURP, RFC, tabulador oficial de profesión y sueldo, y catálogo SEPOMEX.',
-      'Configura tu correo real para recibir códigos 2FA y tu acceso Web + Móvil.',
-      'Ingresa el código de 6 dígitos enviado a tu correo para aperturar tu cuenta.',
+    const titles = [
+      'Datos Personales del Titular',
+      'Datos Fiscales (RENAPO / SAT)',
+      'Ocupación e Ingresos Mensuales',
+      'Domicilio en México (SEPOMEX)',
+      'Contacto Verificado y Acceso',
+      'Autenticador de Google (TOTP 30s)',
+    ];
+    const subtitles = [
+      'Ingresa tu nombre (2 a 40 letras) y apellidos (mín. 3 letras, mayor de 18 años).',
+      'Verifica o calcula tu CURP (18 caracteres) y RFC con homoclave (13 caracteres).',
+      'Selecciona tu ocupación del catálogo oficial, profesión, empresa y rango salarial.',
+      'Ingresa tu Código Postal de 5 dígitos para autocompletar Estado, Municipio y colonias.',
+      'Configura tu correo electrónico único, teléfono móvil y credenciales seguras.',
+      'Escanea el QR o copia la clave en Google Authenticator e ingresa el código de 6 dígitos.',
     ];
 
     return Form(
@@ -1274,33 +1715,15 @@ class _LoginScreenState extends State<LoginScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildRegisterStepper(accent),
+          _buildRegisterStepper(accent, shortTitles[_regStep - 1]),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  titles[_regStep - 1],
-                  style: TextStyle(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.textPrimary(context),
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: accent.withValues(alpha: 0.35)),
-                ),
-                child: Text(
-                  'Paso $_regStep de 4',
-                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: accent),
-                ),
-              ),
-            ],
+          Text(
+            titles[_regStep - 1],
+            style: TextStyle(
+              fontSize: 16.5,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary(context),
+            ),
           ),
           const SizedBox(height: 4),
           Text(
@@ -1328,7 +1751,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ],
           const SizedBox(height: 14),
 
-          // --- STEP 1: IDENTITY ---
+          // --- PASO 1: DATOS PERSONALES ---
           if (_regStep == 1) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1506,7 +1929,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
 
-          // --- STEP 2: FISCAL (CURP & RFC), TABULADORES & SEPOMEX ADDRESS ---
+          // --- PASO 2: DATOS FISCALES ---
           if (_regStep == 2) ...[
             Container(
               padding: const EdgeInsets.all(10),
@@ -1557,12 +1980,19 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 10),
             _wrapBlurValidation(
               fieldId: 'curp',
+              onBlurExtra: () {
+                if (ValidationUtils.esCurpValida(_curpController.text)) {
+                  unawaited(_checkFiscalDisponibilidad(curp: _curpController.text));
+                }
+              },
               builder: (mode) => TextFormField(
                 controller: _curpController,
-                autovalidateMode: mode,
+                autovalidateMode:
+                    _curpDisponibilidadError != null ? AutovalidateMode.always : mode,
                 maxLength: 18,
                 textCapitalization: TextCapitalization.characters,
-                validator: ValidationUtils.diagnosticarCurp,
+                validator: (v) =>
+                    ValidationUtils.diagnosticarCurp(v) ?? _curpDisponibilidadError,
                 onChanged: (val) {
                   final upper = val.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
                   if (upper != val) {
@@ -1571,14 +2001,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       selection: TextSelection.collapsed(offset: upper.length),
                     );
                   }
-                  setState(() => _inlineRegError = null);
+                  setState(() {
+                    _inlineRegError = null;
+                    _curpDisponibilidadError = null;
+                  });
                 },
                 decoration: InputDecoration(
                   labelText: 'CURP (18 caracteres) *',
                   counterText: '${_curpController.text.length}/18',
                   errorMaxLines: 2,
                   prefixIcon: const Icon(Icons.badge_outlined),
-                  suffixIcon: ValidationUtils.esCurpValida(_curpController.text)
+                  suffixIcon: (_curpDisponibilidadError == null &&
+                          ValidationUtils.esCurpValida(_curpController.text))
                       ? const Icon(
                           Icons.check_circle_rounded,
                           color: AppTheme.accentEmerald,
@@ -1591,12 +2025,19 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 10),
             _wrapBlurValidation(
               fieldId: 'rfc',
+              onBlurExtra: () {
+                if (ValidationUtils.esRfcValido(_rfcController.text)) {
+                  unawaited(_checkFiscalDisponibilidad(rfc: _rfcController.text));
+                }
+              },
               builder: (mode) => TextFormField(
                 controller: _rfcController,
-                autovalidateMode: mode,
+                autovalidateMode:
+                    _rfcDisponibilidadError != null ? AutovalidateMode.always : mode,
                 maxLength: 13,
                 textCapitalization: TextCapitalization.characters,
-                validator: ValidationUtils.diagnosticarRfc,
+                validator: (v) =>
+                    ValidationUtils.diagnosticarRfc(v) ?? _rfcDisponibilidadError,
                 onChanged: (val) {
                   final upper = val.toUpperCase().replaceAll(RegExp(r'[^A-ZÑ&0-9]'), '');
                   if (upper != val) {
@@ -1605,14 +2046,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       selection: TextSelection.collapsed(offset: upper.length),
                     );
                   }
-                  setState(() => _inlineRegError = null);
+                  setState(() {
+                    _inlineRegError = null;
+                    _rfcDisponibilidadError = null;
+                  });
                 },
                 decoration: InputDecoration(
                   labelText: 'RFC con Homoclave (13) *',
                   counterText: '${_rfcController.text.length}/13',
                   errorMaxLines: 2,
                   prefixIcon: const Icon(Icons.assignment_ind_outlined),
-                  suffixIcon: ValidationUtils.esRfcValido(_rfcController.text)
+                  suffixIcon: (_rfcDisponibilidadError == null &&
+                          ValidationUtils.esRfcValido(_rfcController.text))
                       ? const Icon(
                           Icons.check_circle_rounded,
                           color: AppTheme.accentEmerald,
@@ -1622,18 +2067,82 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Perfil Económico (Tabuladores Oficiales)',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: accent),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: _checkingFiscalDisponibilidad ? null : () => _goToRegStep(1),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                  label: const Text('Atrás'),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _checkingFiscalDisponibilidad ? null : _advanceFromStep2,
+                    icon: _checkingFiscalDisponibilidad
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Icon(Icons.arrow_forward_rounded, size: 18),
+                    label: Text(
+                      _checkingFiscalDisponibilidad
+                          ? 'Verificando...'
+                          : 'Continuar a Ocupación e Ingresos',
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+          ],
+
+          // --- PASO 3: OCUPACIÓN E INGRESOS ---
+          if (_regStep == 3) ...[
             DropdownButtonFormField<String>(
-              key: ValueKey('prof_$_ocupacionSeleccionada'),
-              initialValue: _ocupacionSeleccionada,
+              key: ValueKey('ocup_cat_$_ocupacionCatalogo'),
+              initialValue: _ocupacionCatalogo,
               isExpanded: true,
               decoration: const InputDecoration(
-                labelText: 'Profesión / Ocupación (Tabulador) *',
+                labelText: 'Ocupación (Catálogo) *',
+                prefixIcon: Icon(Icons.badge_rounded),
+              ),
+              items: MexicoCatalogs.catalogoOcupaciones
+                  .map(
+                    (oc) => DropdownMenuItem<String>(
+                      value: oc,
+                      child: Text(oc, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) {
+                if (v == null) return;
+                setState(() {
+                  _ocupacionCatalogo = v;
+                  _inlineRegError = null;
+                  final currentEmp = _empresaController.text.trim().toUpperCase();
+                  if (currentEmp.isEmpty) {
+                    if (v == 'Estudiante') {
+                      _empresaController.text = 'INSTITUCIÓN EDUCATIVA';
+                    } else if (v == 'Labores del hogar') {
+                      _empresaController.text = 'HOGAR';
+                    } else if (v == 'Jubilado(a) / Pensionado(a)') {
+                      _empresaController.text = 'PENSIONADO';
+                    } else if (v == 'Profesionista independiente') {
+                      _empresaController.text = 'INDEPENDIENTE';
+                    }
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              key: ValueKey('prof_$_profesionTabulador'),
+              initialValue: _profesionTabulador,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Profesión (Tabulador) *',
                 prefixIcon: Icon(Icons.work_outline_rounded),
               ),
               items: MexicoCatalogs.tabuladorProfesiones
@@ -1647,7 +2156,7 @@ class _LoginScreenState extends State<LoginScreen> {
               onChanged: (v) {
                 if (v == null) return;
                 setState(() {
-                  _ocupacionSeleccionada = v;
+                  _profesionTabulador = v;
                   _inlineRegError = null;
                   final prof = MexicoCatalogs.tabuladorProfesiones.firstWhere(
                     (p) => p.label == v,
@@ -1666,6 +2175,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   }
                 });
               },
+            ),
+            const SizedBox(height: 10),
+            _wrapBlurValidation(
+              fieldId: 'empresa',
+              builder: (mode) => TextFormField(
+                controller: _empresaController,
+                autovalidateMode: mode,
+                maxLength: 80,
+                validator: ValidationUtils.diagnosticarEmpresa,
+                onChanged: (_) {
+                  if (_inlineRegError != null) setState(() => _inlineRegError = null);
+                },
+                decoration: const InputDecoration(
+                  labelText: 'Empresa / Institución *',
+                  counterText: '',
+                  errorMaxLines: 2,
+                  prefixIcon: Icon(Icons.business_rounded),
+                ),
+              ),
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<double>(
@@ -1693,31 +2221,28 @@ class _LoginScreenState extends State<LoginScreen> {
                 }
               },
             ),
-            const SizedBox(height: 10),
-            _wrapBlurValidation(
-              fieldId: 'empresa',
-              builder: (mode) => TextFormField(
-                controller: _empresaController,
-                autovalidateMode: mode,
-                maxLength: 80,
-                validator: ValidationUtils.diagnosticarEmpresa,
-                onChanged: (_) {
-                  if (_inlineRegError != null) setState(() => _inlineRegError = null);
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Empresa / Institución *',
-                  counterText: '',
-                  errorMaxLines: 2,
-                  prefixIcon: Icon(Icons.business_rounded),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => _goToRegStep(2),
+                  icon: const Icon(Icons.arrow_back_rounded, size: 16),
+                  label: const Text('Atrás'),
                 ),
-              ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _advanceFromStep3,
+                    icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                    label: const Text('Continuar a Domicilio'),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Domicilio en México (Catálogo SEPOMEX)',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: accent),
-            ),
-            const SizedBox(height: 8),
+          ],
+
+          // --- PASO 4: DOMICILIO SEPOMEX ---
+          if (_regStep == 4) ...[
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1731,7 +2256,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       keyboardType: TextInputType.number,
                       maxLength: 5,
                       inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      validator: ValidationUtils.diagnosticarCodigoPostal,
+                      validator: (v) =>
+                          ValidationUtils.diagnosticarCodigoPostal(v) ?? _cpErrorRemoto,
                       onChanged: (val) {
                         _inlineRegError = null;
                         _onCodigoPostalChanged(val);
@@ -1740,13 +2266,22 @@ class _LoginScreenState extends State<LoginScreen> {
                         labelText: 'Código Postal (5 díg) *',
                         counterText: '',
                         errorMaxLines: 3,
-                        suffixIcon: (cpRes != null && cpRes.valido)
-                            ? const Icon(
-                                Icons.verified_rounded,
-                                color: AppTheme.accentEmerald,
-                                size: 18,
+                        suffixIcon: _loadingCpCatalogo
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
                               )
-                            : null,
+                            : cpVerificado
+                                ? const Icon(
+                                    Icons.verified_rounded,
+                                    color: AppTheme.accentEmerald,
+                                    size: 18,
+                                  )
+                                : null,
                       ),
                     ),
                   ),
@@ -1754,44 +2289,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   flex: 6,
-                  child: DropdownButtonFormField<String>(
-                    key: ValueKey('est_dom_$_estadoDomicilioCodigo'),
-                    initialValue: _estadoDomicilioCodigo,
-                    isExpanded: true,
-                    decoration: const InputDecoration(labelText: 'Estado (Catálogo) *'),
-                    items: MexicoCatalogs.catalogoEstados
-                        .map(
-                          (est) => DropdownMenuItem<String>(
-                            value: est.codigoRenapo,
-                            child: Text(est.nombre, overflow: TextOverflow.ellipsis),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (v) {
-                      if (v == null) return;
-                      final nuevoEst = MexicoCatalogs.obtenerEstadoPorNombreOCodigo(v);
-                      setState(() {
-                        _estadoDomicilioCodigo = v;
-                        _inlineRegError = null;
-                        if (nuevoEst != null && nuevoEst.municipios.isNotEmpty) {
-                          _municipioSeleccionado = nuevoEst.municipios.first;
-                        }
-                        if (!_coloniaManual &&
-                            nuevoEst != null &&
-                            nuevoEst.coloniasBase.isNotEmpty) {
-                          _coloniaSeleccionada = nuevoEst.coloniasBase.first;
-                          _coloniaController.text = _coloniaSeleccionada;
-                        }
-                      });
-                    },
+                  child: TextFormField(
+                    key: ValueKey('est_dom_auto_$_selectedEstadoNombre'),
+                    initialValue: _selectedEstadoNombre,
+                    readOnly: true,
+                    decoration: const InputDecoration(
+                      labelText: 'Estado (Automático) *',
+                      hintText: 'Se llena con C.P.',
+                    ),
                   ),
                 ),
               ],
             ),
-            if (cpRes != null && cpRes.valido) ...[
+            if (cpVerificado) ...[
               const SizedBox(height: 6),
               Text(
-                'SEPOMEX verificado: ${cpRes.estadoNombre} · ${cpRes.municipioSugerido}',
+                'SEPOMEX verificado: $_selectedEstadoNombre · $_municipioSeleccionado (${_coloniasDelCp.length} ${_coloniasDelCp.length == 1 ? "colonia" : "colonias"})',
                 style: const TextStyle(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w600,
@@ -1800,84 +2313,59 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ],
             const SizedBox(height: 10),
-            DropdownButtonFormField<String>(
-              key: ValueKey('mun_${_estadoDomicilioCodigo}_$safeMunicipio'),
-              initialValue: safeMunicipio,
-              isExpanded: true,
+            TextFormField(
+              key: ValueKey('mun_auto_$_municipioSeleccionado'),
+              initialValue: _municipioSeleccionado,
+              readOnly: true,
               decoration: const InputDecoration(
-                labelText: 'Municipio / Alcaldía (Catálogo) *',
+                labelText: 'Municipio / Alcaldía (Automático) *',
+                hintText: 'Se autocompleta con tu Código Postal',
                 prefixIcon: Icon(Icons.location_city_rounded),
               ),
-              items: municipiosDisponibles
-                  .map(
-                    (mun) => DropdownMenuItem<String>(
-                      value: mun,
-                      child: Text(mun, overflow: TextOverflow.ellipsis),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) {
-                  setState(() {
-                    _municipioSeleccionado = v;
-                    _inlineRegError = null;
-                  });
-                }
-              },
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
-              key: ValueKey('col_${_estadoDomicilioCodigo}_$safeColoniaDropdown'),
-              initialValue: safeColoniaDropdown,
+              key: ValueKey(
+                'col_cp_${_cpController.text}_${_coloniasDelCp.join("|")}_$_coloniaSeleccionada',
+              ),
+              initialValue: (_coloniaSeleccionada != null &&
+                      _coloniasDelCp.contains(_coloniaSeleccionada))
+                  ? _coloniaSeleccionada
+                  : null,
               isExpanded: true,
+              hint: Text(
+                _coloniasDelCp.isEmpty
+                    ? 'Ingresa primero tu C.P. de 5 dígitos'
+                    : _loadingCpCatalogo
+                        ? 'Consultando colonias SEPOMEX...'
+                        : 'Selecciona tu colonia (${_coloniasDelCp.length} opciones)',
+                overflow: TextOverflow.ellipsis,
+              ),
+              validator: (v) => (v == null || v.trim().isEmpty)
+                  ? 'Selecciona una colonia perteneciente a tu código postal.'
+                  : null,
               decoration: const InputDecoration(
-                labelText: 'Colonia / Asentamiento *',
+                labelText: 'Colonia (Catálogo del C.P.) *',
                 prefixIcon: Icon(Icons.map_outlined),
+                errorMaxLines: 2,
               ),
-              items: [
-                ...coloniasDisponibles.map(
-                  (col) => DropdownMenuItem<String>(
-                    value: col,
-                    child: Text(col, overflow: TextOverflow.ellipsis),
-                  ),
-                ),
-                const DropdownMenuItem<String>(
-                  value: '__OTRA__',
-                  child: Text('Otra colonia (escribir manual)...', overflow: TextOverflow.ellipsis),
-                ),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                setState(() {
-                  _inlineRegError = null;
-                  if (v == '__OTRA__') {
-                    _coloniaManual = true;
-                    _coloniaController.clear();
-                  } else {
-                    _coloniaManual = false;
-                    _coloniaSeleccionada = v;
-                    _coloniaController.text = v;
-                  }
-                });
-              },
+              items: _coloniasDelCp
+                  .map(
+                    (col) => DropdownMenuItem<String>(
+                      value: col,
+                      child: Text(col, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: _coloniasDelCp.isEmpty
+                  ? null
+                  : (v) {
+                      setState(() {
+                        _coloniaSeleccionada = v;
+                        _inlineRegError = null;
+                      });
+                    },
             ),
-            if (_coloniaManual) ...[
-              const SizedBox(height: 10),
-              _wrapBlurValidation(
-                fieldId: 'coloniaManual',
-                builder: (mode) => TextFormField(
-                  controller: _coloniaController,
-                  autovalidateMode: mode,
-                  maxLength: 60,
-                  validator: ValidationUtils.diagnosticarColonia,
-                  decoration: const InputDecoration(
-                    labelText: 'Nombre de tu Colonia *',
-                    counterText: '',
-                    errorMaxLines: 2,
-                  ),
-                ),
-              ),
-            ],
             const SizedBox(height: 10),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1989,17 +2477,14 @@ class _LoginScreenState extends State<LoginScreen> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: () => setState(() {
-                    _inlineRegError = null;
-                    _regStep = 1;
-                  }),
+                  onPressed: () => _goToRegStep(3),
                   icon: const Icon(Icons.arrow_back_rounded, size: 16),
                   label: const Text('Atrás'),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _advanceFromStep2,
+                    onPressed: _advanceFromStep4,
                     icon: const Icon(Icons.arrow_forward_rounded, size: 18),
                     label: const Text('Continuar a Contacto y Acceso'),
                   ),
@@ -2008,14 +2493,30 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
 
-          // --- STEP 3: CONTACT & ACCESS ---
-          if (_regStep == 3) ...[
+          // --- PASO 5: CONTACTO Y ACCESO ---
+          if (_regStep == 5) ...[
             _wrapBlurValidation(
               fieldId: 'correo',
+              onBlurExtra: () {
+                final mail = _correoController.text.trim();
+                if (ValidationUtils.esCorreoValido(mail) &&
+                    !ValidationUtils.esCorreoPlaceholder(mail)) {
+                  unawaited(_checkContactoDisponibilidad(correo: mail));
+                }
+              },
               builder: (mode) => TextFormField(
                 controller: _correoController,
-                autovalidateMode: mode,
+                autovalidateMode:
+                    _correoDisponibilidadError != null ? AutovalidateMode.always : mode,
                 keyboardType: TextInputType.emailAddress,
+                onChanged: (_) {
+                  if (_correoDisponibilidadError != null || _inlineRegError != null) {
+                    setState(() {
+                      _correoDisponibilidadError = null;
+                      _inlineRegError = null;
+                    });
+                  }
+                },
                 validator: (v) {
                   final mail = (v ?? '').trim();
                   if (!ValidationUtils.esCorreoValido(mail)) {
@@ -2024,12 +2525,35 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (ValidationUtils.esCorreoPlaceholder(mail)) {
                     return 'Usa un correo electrónico real (Gmail, Outlook, etc.).';
                   }
+                  if (_correoDisponibilidadError != null) {
+                    return _correoDisponibilidadError;
+                  }
                   return null;
                 },
-                decoration: const InputDecoration(
-                  labelText: 'Correo electrónico real (para 2FA y recibos) *',
-                  prefixIcon: Icon(Icons.mail_outline_rounded),
-                  errorMaxLines: 2,
+                decoration: InputDecoration(
+                  labelText: 'Correo electrónico real *',
+                  prefixIcon: const Icon(Icons.mail_outline_rounded),
+                  errorMaxLines: 3,
+                  suffixIcon: _checkingCorreoDisponibilidad
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : (_correoDisponibilidadError == null &&
+                              ValidationUtils.esCorreoValido(_correoController.text.trim()) &&
+                              !ValidationUtils.esCorreoPlaceholder(
+                                _correoController.text.trim(),
+                              ))
+                          ? const Icon(
+                              Icons.check_circle_rounded,
+                              color: AppTheme.accentEmerald,
+                              size: 18,
+                            )
+                          : null,
                 ),
               ),
             ),
@@ -2075,10 +2599,26 @@ class _LoginScreenState extends State<LoginScreen> {
             const SizedBox(height: 10),
             _wrapBlurValidation(
               fieldId: 'regUsuario',
+              onBlurExtra: () {
+                final usr = _regUsuarioController.text.trim();
+                if (ValidationUtils.esUsuarioValido(usr)) {
+                  unawaited(_checkContactoDisponibilidad(usuario: usr));
+                }
+              },
               builder: (mode) => TextFormField(
                 controller: _regUsuarioController,
-                autovalidateMode: mode,
-                validator: ValidationUtils.diagnosticarUsuario,
+                autovalidateMode:
+                    _usuarioDisponibilidadError != null ? AutovalidateMode.always : mode,
+                onChanged: (_) {
+                  if (_usuarioDisponibilidadError != null || _inlineRegError != null) {
+                    setState(() {
+                      _usuarioDisponibilidadError = null;
+                      _inlineRegError = null;
+                    });
+                  }
+                },
+                validator: (v) =>
+                    ValidationUtils.diagnosticarUsuario(v) ?? _usuarioDisponibilidadError,
                 decoration: const InputDecoration(
                   labelText: 'Usuario (mín. 4 caracteres) *',
                   prefixIcon: Icon(Icons.alternate_email_rounded),
@@ -2157,22 +2697,20 @@ class _LoginScreenState extends State<LoginScreen> {
             Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: auth.isLoading
+                  onPressed: (auth.isLoading || _checkingCorreoDisponibilidad)
                       ? null
-                      : () => setState(() {
-                            _inlineRegError = null;
-                            _regStep = 2;
-                          }),
+                      : () => _goToRegStep(4),
                   icon: const Icon(Icons.arrow_back_rounded, size: 16),
                   label: const Text('Atrás'),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed:
-                        auth.isLoading ? null : () => _sendRegistrationCode(isResend: false),
+                    onPressed: (auth.isLoading || _checkingCorreoDisponibilidad)
+                        ? null
+                        : () => _advanceToTotpStep(isRegenerate: false),
                     style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
-                    icon: auth.isLoading
+                    icon: (auth.isLoading || _checkingCorreoDisponibilidad)
                         ? const SizedBox(
                             width: 18,
                             height: 18,
@@ -2181,9 +2719,12 @@ class _LoginScreenState extends State<LoginScreen> {
                               color: Colors.white,
                             ),
                           )
-                        : const Icon(Icons.mark_email_unread_outlined, size: 18),
+                        : const Icon(Icons.qr_code_scanner_rounded, size: 18),
                     label: Text(
-                      auth.isLoading ? 'Enviando código...' : 'Enviar Código 2FA al Correo',
+                      (auth.isLoading || _checkingCorreoDisponibilidad)
+                          ? 'Preparando...'
+                          : 'Continuar a Google Authenticator',
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ),
@@ -2191,8 +2732,8 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ],
 
-          // --- STEP 4: 2FA OTP VERIFICATION ---
-          if (_regStep == 4) ...[
+          // --- PASO 6: GOOGLE AUTHENTICATOR (TOTP 30s) ---
+          if (_regStep == 6) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -2230,56 +2771,23 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: accent.withValues(alpha: 0.3)),
+            if (_totpSetupData != null)
+              TotpQrSetupCard(
+                secret: (_totpSetupData!['secret'] ?? '').toString(),
+                secretFormateado: _totpSetupData!['secretFormateado']?.toString(),
+                qrPngBase64: _totpSetupData!['qrPngBase64']?.toString(),
+                cuentaLabel: _totpSetupData!['cuenta']?.toString() ?? _correoController.text.trim(),
+                periodSeconds: (_totpSetupData!['periodoSegundos'] is int)
+                    ? (_totpSetupData!['periodoSegundos'] as int)
+                    : 30,
+                secondsLeft: _totpSecondsLeft,
+                onCopied: () {
+                  setState(() {
+                    _totpFeedback = 'Clave secreta copiada al portapapeles.';
+                  });
+                },
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.mark_email_read_outlined, size: 18, color: accent),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _regOtpSentTo.isNotEmpty ? _regOtpSentTo : _correoController.text.trim(),
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary(context),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: _regOtpSecondsRemaining > 0
-                          ? AppTheme.cardBg(context)
-                          : Colors.amber.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                        color: _regOtpSecondsRemaining > 0
-                            ? AppTheme.borderCol(context)
-                            : Colors.amber,
-                      ),
-                    ),
-                    child: Text(
-                      _regOtpSecondsRemaining > 0
-                          ? _formatCountdown(_regOtpSecondsRemaining)
-                          : 'Expirado',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        fontFamily: 'monospace',
-                        color: _regOtpSecondsRemaining > 0 ? accent : Colors.amber.shade700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_regOtpFeedback != null) ...[
+            if (_totpFeedback != null) ...[
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(10),
@@ -2289,7 +2797,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   border: Border.all(color: AppTheme.accentEmerald.withValues(alpha: 0.4)),
                 ),
                 child: Text(
-                  _regOtpFeedback!,
+                  _totpFeedback!,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -2300,7 +2808,7 @@ class _LoginScreenState extends State<LoginScreen> {
             ],
             const SizedBox(height: 14),
             TextField(
-              controller: _regOtpController,
+              controller: _regTotpController,
               keyboardType: TextInputType.number,
               maxLength: 6,
               textAlign: TextAlign.center,
@@ -2316,15 +2824,15 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
-                labelText: 'Código 2FA (6 dígitos)',
+                labelText: 'Código Google Authenticator (6 dígitos)',
                 hintText: '000000',
                 counterText: '',
-                prefixIcon: Icon(Icons.pin_rounded),
+                prefixIcon: Icon(Icons.phonelink_lock_rounded),
               ),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: (auth.isLoading || _regOtpController.text.trim().length < 6)
+              onPressed: (auth.isLoading || _regTotpController.text.trim().length < 6)
                   ? null
                   : _submitRegister,
               style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
@@ -2344,13 +2852,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: auth.isLoading
                         ? null
                         : () {
-                            _regOtpTimer?.cancel();
                             auth.clearError();
-                            setState(() {
-                              _regStep = 3;
-                              _regOtpController.clear();
-                              _regOtpFeedback = null;
-                            });
+                            _regTotpController.clear();
+                            _totpFeedback = null;
+                            _goToRegStep(5);
                           },
                     icon: const Icon(Icons.arrow_back_rounded, size: 16),
                     label: const Text('Editar datos', style: TextStyle(fontSize: 12)),
@@ -2361,9 +2866,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: TextButton.icon(
                     onPressed: auth.isLoading
                         ? null
-                        : () => _sendRegistrationCode(isResend: true),
+                        : () => _advanceToTotpStep(isRegenerate: true),
                     icon: const Icon(Icons.refresh_rounded, size: 16),
-                    label: const Text('Reenviar código', style: TextStyle(fontSize: 12)),
+                    label: const Text('Nueva clave QR', style: TextStyle(fontSize: 12)),
                   ),
                 ),
               ],

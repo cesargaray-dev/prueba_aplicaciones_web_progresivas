@@ -76,4 +76,7 @@ public class ItemHistorialPagoDTO {
 
     @Schema(description = "URL oficial del logotipo del proveedor", example = "https://gestopago.portalventas.net/sistema/images/gestopago/servicios/76.png")
     private String logoUrl;
+
+    @Schema(description = "Leyenda oficial de comprobante y aclaraciones")
+    private String leyenda;
 }

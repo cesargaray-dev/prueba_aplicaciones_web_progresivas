@@ -60,6 +60,9 @@ public class Cliente {
     @Column(name = "ocupacion", nullable = false, columnDefinition = "TEXT")
     private String ocupacion;
 
+    @Column(name = "profesion", columnDefinition = "TEXT")
+    private String profesion;
+
     @Column(name = "empresa", nullable = false, columnDefinition = "TEXT")
     private String empresa;
 

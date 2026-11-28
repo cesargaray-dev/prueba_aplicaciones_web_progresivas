@@ -76,6 +76,9 @@ public class PagoServicio {
     @Column(name = "concepto", nullable = false, columnDefinition = "TEXT")
     private String concepto;
 
+    @Column(name = "leyenda", columnDefinition = "TEXT")
+    private String leyenda;
+
     @Column(name = "fecha_operacion", nullable = false, updatable = false)
     private LocalDateTime fechaOperacion;
 

@@ -17,6 +17,7 @@ class UserSession {
   final String? nacionalidad;
   final String? estadoCivil;
   final String? ocupacion;
+  final String? profesion;
   final String? empresa;
   final double? ingresoMensual;
   final String? calle;
@@ -34,6 +35,7 @@ class UserSession {
   final String? rol;
   final bool sesionPreviaCerrada;
   final String? avisoSesion;
+  final bool totpHabilitado;
 
   UserSession({
     required this.token,
@@ -54,6 +56,7 @@ class UserSession {
     this.nacionalidad,
     this.estadoCivil,
     this.ocupacion,
+    this.profesion,
     this.empresa,
     this.ingresoMensual,
     this.calle,
@@ -71,6 +74,7 @@ class UserSession {
     this.rol,
     this.sesionPreviaCerrada = false,
     this.avisoSesion,
+    this.totpHabilitado = false,
   });
 
   bool get isAdmin => esAdmin || usuario.trim().toLowerCase() == 'admin' || rol == 'ADMIN';
@@ -99,6 +103,7 @@ class UserSession {
       nacionalidad: json['nacionalidad']?.toString(),
       estadoCivil: json['estadoCivil']?.toString(),
       ocupacion: json['ocupacion']?.toString(),
+      profesion: json['profesion']?.toString(),
       empresa: json['empresa']?.toString(),
       ingresoMensual: json['ingresoMensual'] is num
           ? (json['ingresoMensual'] as num).toDouble()
@@ -120,6 +125,7 @@ class UserSession {
       rol: json['rol']?.toString() ?? (adminFlag ? 'ADMIN' : 'CLIENTE'),
       sesionPreviaCerrada: json['sesionPreviaCerrada'] == true,
       avisoSesion: json['avisoSesion']?.toString(),
+      totpHabilitado: json['totpHabilitado'] == true,
     );
   }
 
@@ -143,6 +149,7 @@ class UserSession {
       'nacionalidad': nacionalidad,
       'estadoCivil': estadoCivil,
       'ocupacion': ocupacion,
+      'profesion': profesion,
       'empresa': empresa,
       'ingresoMensual': ingresoMensual,
       'calle': calle,
@@ -160,6 +167,7 @@ class UserSession {
       'rol': rol,
       'sesionPreviaCerrada': sesionPreviaCerrada,
       'avisoSesion': avisoSesion,
+      'totpHabilitado': totpHabilitado,
     };
   }
 
@@ -182,6 +190,7 @@ class UserSession {
     String? nacionalidad,
     String? estadoCivil,
     String? ocupacion,
+    String? profesion,
     String? empresa,
     double? ingresoMensual,
     String? calle,
@@ -199,6 +208,7 @@ class UserSession {
     String? rol,
     bool? sesionPreviaCerrada,
     String? avisoSesion,
+    bool? totpHabilitado,
   }) {
     return UserSession(
       token: token ?? this.token,
@@ -219,6 +229,7 @@ class UserSession {
       nacionalidad: nacionalidad ?? this.nacionalidad,
       estadoCivil: estadoCivil ?? this.estadoCivil,
       ocupacion: ocupacion ?? this.ocupacion,
+      profesion: profesion ?? this.profesion,
       empresa: empresa ?? this.empresa,
       ingresoMensual: ingresoMensual ?? this.ingresoMensual,
       calle: calle ?? this.calle,
@@ -236,6 +247,7 @@ class UserSession {
       rol: rol ?? this.rol,
       sesionPreviaCerrada: sesionPreviaCerrada ?? this.sesionPreviaCerrada,
       avisoSesion: avisoSesion ?? this.avisoSesion,
+      totpHabilitado: totpHabilitado ?? this.totpHabilitado,
     );
   }
 

@@ -5,11 +5,15 @@ import { ReceiptModal } from '../components/ReceiptModal';
 import { paymentApi } from '../api/paymentApi';
 import { MockAuthProvider, mockPagoSuccess, mockTelcelProduct } from './testUtils';
 
-describe('ReceiptModal 3-State Result View (F12)', () => {
-  it('renders EXITOSA state with Brevo resend, PDF download (and print fallback), print, and copy', async () => {
+describe('ReceiptModal 3-State Result View & Official Leyenda', () => {
+  it('renders EXITOSA state with official Leyenda, Brevo resend, PDF download, print, and copy including leyenda', async () => {
     const user = userEvent.setup();
     const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true, writable: true });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
 
     vi.spyOn(paymentApi, 'descargarComprobantePdf').mockResolvedValueOnce(
       new Blob(['pdf'], { type: 'application/pdf' })
@@ -34,10 +38,16 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
 
     expect(screen.getByText('¡Operación Exitosa!')).toBeInTheDocument();
     expect(screen.getByText('Folio: FT-20261120-1010')).toBeInTheDocument();
+    expect(screen.getByText('LEYENDA OFICIAL Y ACLARACIONES')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Conserve este comprobante digital como constancia oficial de pago/i)
+    ).toBeInTheDocument();
 
     // PDF download
     await user.click(screen.getByRole('button', { name: /Descargar PDF/i }));
-    await waitFor(() => expect(paymentApi.descargarComprobantePdf).toHaveBeenCalledWith('FT-20261120-1010'));
+    await waitFor(() =>
+      expect(paymentApi.descargarComprobantePdf).toHaveBeenCalledWith('FT-20261120-1010')
+    );
 
     // PDF fallback to window.print()
     vi.spyOn(paymentApi, 'descargarComprobantePdf').mockRejectedValueOnce(new Error('404'));
@@ -47,9 +57,11 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
     );
     expect(window.print).toHaveBeenCalled();
 
-    // Copy
+    // Copy includes LEYENDA OFICIAL Y ACLARACIONES
     await user.click(screen.getByRole('button', { name: /Copiar/i }));
-    expect(writeText).toHaveBeenCalled();
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('LEYENDA OFICIAL Y ACLARACIONES:')
+    );
 
     // Resend Brevo
     await user.click(screen.getByRole('button', { name: 'Reenviar' }));
@@ -57,7 +69,7 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
     await waitFor(() => expect(screen.getByText('Enviado OK')).toBeInTheDocument());
   });
 
-  it('renders PENDIENTE state with UPC warning and Ir al Historial button', async () => {
+  it('renders PENDIENTE state with UPC warning, official Leyenda, NO Descargar PDF button, and Ir al Historial', async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     const onGoToHistory = vi.fn();
@@ -72,6 +84,7 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
             estadoOperacion: 'PENDIENTE',
             upc: 'UPC-900',
             mensajeOperacion: 'En espera de conciliación',
+            leyenda: 'Leyenda personalizada de conciliación bancaria.',
           }}
           product={mockTelcelProduct}
           referencia="5512345678"
@@ -83,6 +96,7 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
     expect(screen.getByText('Operación Pendiente / No Confirmada')).toBeInTheDocument();
     expect(screen.getByText('UPC: UPC-900')).toBeInTheDocument();
     expect(screen.getByText(/Nunca trates esta operación como exitosa/i)).toBeInTheDocument();
+    expect(screen.getByText('Leyenda personalizada de conciliación bancaria.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Descargar PDF/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Ir al Historial/i }));
@@ -90,8 +104,15 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
     expect(onGoToHistory).toHaveBeenCalled();
   });
 
-  it('renders RECHAZADA state with untouched balance notice and hides success/Brevo actions', () => {
+  it('renders RECHAZADA -1 Recarga Telcel ticket with Origen no valido and rejected official Leyenda', async () => {
+    const user = userEvent.setup();
     const onClose = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    });
 
     render(
       <MockAuthProvider>
@@ -100,21 +121,38 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
           onClose={onClose}
           receipt={{
             estadoOperacion: 'RECHAZADA',
-            codigoProveedor: '06',
-            mensajeOperacion: 'Servicio no disponible temporalmente',
+            codigoProveedor: '-1',
+            numeroAutorizacion: '-1',
+            motivoProveedor: 'Origen no valido',
+            firmaDigital: 'AbCdEf123456...XyZ9==',
+            upc: 'GP1234567890',
+            folioTicket: 'FT-20261127-ABCD',
+            mensajeOperacion:
+              'Recarga Telcel $20 — Operación rechazada: Origen no valido (Respuesta GestoPago: -1 | Código: -1).',
             montoPagado: 20,
             saldoRestanteCuenta: 500,
           }}
           product={mockTelcelProduct}
-          referencia="5512345678"
+          referencia="1111111111"
         />
       </MockAuthProvider>
     );
 
-    expect(screen.getByText('No se pudo validar en GestoPago')).toBeInTheDocument();
-    expect(screen.getByText(/Intento enviado a GestoPago · No se pudo validar/i)).toBeInTheDocument();
-    expect(screen.getByText(/Código 06/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Operación rechazada/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Recarga Telcel/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Origen no valido/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/-1/).length).toBeGreaterThan(0);
+    expect(screen.getByText('LEYENDA OFICIAL Y ACLARACIONES')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Operación no aplicada: no se realizó ningún cargo a su cuenta/i)
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Descargar PDF/i })).toBeInTheDocument();
     expect(screen.queryByText(/Comprobante enviado vía Brevo/i)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Copiar/i }));
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('Respuesta GestoPago: -1 y su Folio de Ticket: FT-20261127-ABCD.')
+    );
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalled();

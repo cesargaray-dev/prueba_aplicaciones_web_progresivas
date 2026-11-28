@@ -45,6 +45,21 @@ public class LoginCliente {
     @Column(name = "bloqueado", nullable = false)
     private Boolean bloqueado = false;
 
+    @Column(name = "token_sesion_activa", columnDefinition = "TEXT")
+    private String tokenSesionActiva;
+
+    @Column(name = "token_sesion_desplazada", columnDefinition = "TEXT")
+    private String tokenSesionDesplazada;
+
+    @Column(name = "sesion_expira_en")
+    private LocalDateTime sesionExpiraEn;
+
+    @Column(name = "totp_secret", columnDefinition = "TEXT")
+    private String totpSecret;
+
+    @Column(name = "totp_habilitado", nullable = false)
+    private Boolean totpHabilitado = false;
+
     @Column(name = "fecha_registro", nullable = false, updatable = false)
     private LocalDateTime fechaRegistro;
 

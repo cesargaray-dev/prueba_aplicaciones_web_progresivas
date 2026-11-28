@@ -20,6 +20,7 @@ import {
   Wallet,
   KeyRound,
   Fingerprint,
+  PlusCircle,
 } from 'lucide-react';
 
 const extractMsg = (err: unknown): string =>
@@ -58,6 +59,42 @@ export const AdminUsersPage: React.FC = () => {
   // Bulk delete all non-admin users State
   const [isDeleteAllOpen, setIsDeleteAllOpen] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
+
+  // Admin Deposit (Ingresar Dinero) Modal State
+  const [depositingUser, setDepositingUser] = useState<AdminUserItem | null>(null);
+  const [depositMonto, setDepositMonto] = useState('200');
+  const [depositConcepto, setDepositConcepto] = useState('Ingreso de saldo por administrador');
+  const [isDepositing, setIsDepositing] = useState(false);
+
+  const handleAdminDeposit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositingUser) return;
+    const montoNum = parseFloat(depositMonto);
+    if (Number.isNaN(montoNum) || montoNum <= 0 || montoNum > 1000000) {
+      setFeedback({ type: 'error', msg: 'Ingresa un monto válido mayor a $0.00 MXN.' });
+      return;
+    }
+    setIsDepositing(true);
+    setFeedback(null);
+    try {
+      const updated = await adminApi.abonarSaldoUsuario(depositingUser.clienteId, {
+        monto: montoNum,
+        concepto: depositConcepto.trim() || 'Ingreso de saldo por administrador',
+      });
+      setUsers((prev) =>
+        prev.map((item) => (item.clienteId === updated.clienteId ? updated : item))
+      );
+      setFeedback({
+        type: 'success',
+        msg: `Se ingresaron ${formatCurrency(montoNum)} a la cuenta de @${updated.usuario}. Nuevo saldo: ${formatCurrency(updated.saldo)}.`,
+      });
+      setDepositingUser(null);
+    } catch (err: unknown) {
+      setFeedback({ type: 'error', msg: extractMsg(err) });
+    } finally {
+      setIsDepositing(false);
+    }
+  };
 
   const loadUsers = useCallback(async () => {
     setIsLoading(true);
@@ -505,6 +542,20 @@ export const AdminUsersPage: React.FC = () => {
                       <div className="inline-flex items-center gap-1.5">
                         <button
                           type="button"
+                          onClick={() => {
+                            setFeedback(null);
+                            setDepositMonto('200');
+                            setDepositConcepto('Ingreso de saldo por administrador');
+                            setDepositingUser(u);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold transition-colors"
+                          title="Ingresar dinero a esta cuenta"
+                        >
+                          <PlusCircle className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Ingresar Saldo</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => openEditModal(u)}
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold transition-colors"
                           title="Editar usuario, saldo y contraseña"
@@ -941,6 +992,99 @@ export const AdminUsersPage: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Ingresar Dinero (Admin Deposit) Modal */}
+      {depositingUser && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Ingresar saldo a cuenta"
+        >
+          <div className="bg-white rounded-3xl shadow-2xl border border-emerald-200 w-full max-w-md overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-700 px-6 py-4 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-extrabold flex items-center gap-2">
+                  <Wallet className="w-4 h-4" />
+                  <span>Ingresar Dinero a @{depositingUser.usuario}</span>
+                </h3>
+                <p className="text-xs text-emerald-100 font-mono">
+                  Cuenta {depositingUser.numeroCuenta} &bull; Actual: {formatCurrency(depositingUser.saldo)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDepositingUser(null)}
+                className="p-1.5 rounded-full hover:bg-white/15"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAdminDeposit} className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-4 gap-2">
+                {['100', '200', '500', '1000'].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setDepositMonto(amt)}
+                    className={`py-2 rounded-xl font-bold border transition-colors ${
+                      depositMonto === amt
+                        ? 'bg-emerald-700 text-white border-emerald-700'
+                        : 'bg-emerald-50 text-emerald-900 border-emerald-200 hover:bg-emerald-100'
+                    }`}
+                  >
+                    +${amt}
+                  </button>
+                ))}
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Monto a ingresar (MXN) *</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000000}
+                  step="0.01"
+                  required
+                  value={depositMonto}
+                  onChange={(e) => setDepositMonto(e.target.value)}
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 font-mono font-bold text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 block mb-1">Concepto del depósito</label>
+                <input
+                  type="text"
+                  maxLength={120}
+                  value={depositConcepto}
+                  onChange={(e) => setDepositConcepto(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDepositingUser(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isDepositing}
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-bold shadow-md inline-flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isDepositing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  <span>Confirmar Ingreso</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Delete All Non-Admin Users Modal */}
       {isDeleteAllOpen && (
         <div

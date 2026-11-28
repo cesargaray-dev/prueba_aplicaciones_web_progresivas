@@ -151,10 +151,12 @@ class AuthProvider with ChangeNotifier {
 
   void _startSessionMonitor() {
     _sessionMonitorTimer?.cancel();
-    _sessionMonitorTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+    _sessionMonitorTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _verifySessionAlive();
     });
   }
+
+  Future<void> verifySessionNow() => _verifySessionAlive();
 
   Future<void> _verifySessionAlive() async {
     if (_session == null) return;
@@ -445,6 +447,156 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<Map<String, dynamic>?> verificarDisponibilidad({
+    String? correo,
+    String? usuario,
+    String? curp,
+    String? rfc,
+  }) async {
+    try {
+      return await _authService.verificarDisponibilidad(
+        correo: correo,
+        usuario: usuario,
+        curp: curp,
+        rfc: rfc,
+      );
+    } on ApiException catch (e) {
+      if (e.statusCode == 409) {
+        return <String, dynamic>{
+          if (correo != null && correo.trim().isNotEmpty) 'correoDisponible': false,
+          'mensajes': <String, dynamic>{
+            if (correo != null && correo.trim().isNotEmpty) 'correo': e.message,
+          },
+        };
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> iniciarTotpRegistro({
+    required String correo,
+    required String usuario,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final resp = await _authService.iniciarTotpRegistro(
+        correo: correo,
+        usuario: usuario,
+      );
+      _isLoading = false;
+      notifyListeners();
+      return resp;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _errorMessage = 'No fue posible generar tu clave de Google Authenticator.';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> consultarEstadoTotpPerfil() async {
+    if (_session == null) return null;
+    try {
+      final resp = await _authService.consultarEstadoTotpPerfil();
+      if (_session != null && resp.containsKey('totpHabilitado')) {
+        _session = _session!.copyWith(totpHabilitado: resp['totpHabilitado'] == true);
+        notifyListeners();
+      }
+      return resp;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> iniciarTotpPerfil() async {
+    if (_session == null) return null;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final resp = await _authService.iniciarTotpPerfil();
+      _isLoading = false;
+      notifyListeners();
+      return resp;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _errorMessage = 'No fue posible iniciar la vinculación con Google Authenticator.';
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
+  }
+
+  Future<bool> activarTotpPerfil({
+    required String secret,
+    required String codigo,
+  }) async {
+    if (_session == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final resp = await _authService.activarTotpPerfil(secret: secret, codigo: codigo);
+      final enabled = resp['totpHabilitado'] != false;
+      _session = _session?.copyWith(totpHabilitado: enabled);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      _errorMessage = 'No fue posible activar Google Authenticator.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> desactivarTotpPerfil({required String codigo}) async {
+    if (_session == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final resp = await _authService.desactivarTotpPerfil(codigo: codigo);
+      final enabled = resp['totpHabilitado'] == true;
+      _session = _session?.copyWith(totpHabilitado: enabled);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (_) {
+      _errorMessage = 'No fue posible desactivar Google Authenticator.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Future<int?> enviarCodigoRegistro({
     required String correo,
     String? nombre,
@@ -493,6 +645,7 @@ class AuthProvider with ChangeNotifier {
     String? curp,
     String? rfc,
     String? ocupacion,
+    String? profesion,
     String? empresa,
     double? ingresoMensual,
     String? calle,
@@ -508,6 +661,8 @@ class AuthProvider with ChangeNotifier {
     String? telefonoAlternativo,
     required String usuario,
     required String contrasena,
+    String? totpSecret,
+    String? codigoTotp,
     String? codigoVerificacion,
   }) async {
     _isLoading = true;
@@ -527,6 +682,7 @@ class AuthProvider with ChangeNotifier {
         curp: curp,
         rfc: rfc,
         ocupacion: ocupacion,
+        profesion: profesion,
         empresa: empresa,
         ingresoMensual: ingresoMensual,
         calle: calle,
@@ -542,6 +698,8 @@ class AuthProvider with ChangeNotifier {
         telefonoAlternativo: telefonoAlternativo,
         usuario: usuario,
         contrasena: contrasena,
+        totpSecret: totpSecret,
+        codigoTotp: codigoTotp,
         codigoVerificacion: codigoVerificacion,
       );
       _session = session;

@@ -81,6 +81,9 @@ public class RegisterRequestDTO {
     @Size(max = 100, message = "La ocupación no debe exceder 100 caracteres")
     private String ocupacion;
 
+    @Size(max = 120, message = "La profesión no debe exceder 120 caracteres")
+    private String profesion;
+
     @Size(max = 150, message = "La empresa no debe exceder 150 caracteres")
     private String empresa;
 
@@ -116,4 +119,10 @@ public class RegisterRequestDTO {
 
     @Pattern(regexp = "^$|^\\d{6}$", message = "El código de verificación 2FA debe tener 6 dígitos numéricos")
     private String codigoVerificacion;
+
+    @Size(max = 128, message = "El secreto de Google Authenticator es inválido")
+    private String totpSecret;
+
+    @Pattern(regexp = "^$|^\\d{6}$", message = "El código de Google Authenticator debe tener 6 dígitos numéricos")
+    private String codigoTotp;
 }

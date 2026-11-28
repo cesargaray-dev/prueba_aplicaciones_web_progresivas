@@ -20,7 +20,12 @@ import type { ProductDTO } from '../types/catalog';
 import { useAuth } from '../context/useAuth';
 import { paymentApi } from '../api/paymentApi';
 import { BrandLogo } from './BrandLogo';
-import { esCorreoPlaceholder, esCorreoValido, esRecargaTelefonica } from '../utils/validation';
+import {
+  esCorreoPlaceholder,
+  esCorreoValido,
+  esRecargaTelefonica,
+  obtenerLeyendaComprobante,
+} from '../utils/validation';
 
 interface ReceiptModalProps {
   isOpen: boolean;
@@ -90,6 +95,43 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
   const isRejected = resultState === 'RECHAZADA';
 
   const isRecarga = product ? esRecargaTelefonica(product) : false;
+  const serviceNameClean = (receipt.servicio || product?.service || 'Servicio').trim();
+  const rawProductClean = (receipt.producto || product?.name || '').trim();
+  const displayTicketProduct = (() => {
+    if (isRecarga) {
+      const lowProd = rawProductClean.toLowerCase();
+      const lowServ = serviceNameClean.toLowerCase();
+      if (lowProd.includes('recarga') && lowProd.includes(lowServ)) return rawProductClean;
+      if (lowProd.startsWith('recarga')) {
+        const rest = rawProductClean.slice(7).trim();
+        return rest ? `Recarga ${serviceNameClean} ${rest}` : `Recarga ${serviceNameClean}`;
+      }
+      return rawProductClean
+        ? `Recarga ${serviceNameClean} - ${rawProductClean}`
+        : `Recarga ${serviceNameClean}`;
+    }
+    return rawProductClean || serviceNameClean;
+  })();
+
+  const motivoRechazoGestoPago = (() => {
+    const rawMotivo = (receipt.motivoProveedor || '').trim();
+    if (rawMotivo) return rawMotivo;
+    const msg = (receipt.mensajeOperacion || receipt.mensaje || '').trim();
+    if (/origen\s+(no\s+)?valido/i.test(msg)) return 'Origen no valido';
+    return msg || 'Origen no valido';
+  })();
+
+  const numeroRespuestaGestoPago =
+    receipt.numeroAutorizacion ||
+    (receipt.codigoProveedor === '-1' ? '-1' : undefined) ||
+    (isRejected ? '-1' : undefined);
+
+  const leyendaTexto = obtenerLeyendaComprobante({
+    leyenda: receipt.leyenda,
+    esRechazada: isRejected,
+    numAuth: isRejected ? numeroRespuestaGestoPago : receipt.numeroAutorizacion,
+    folio: receipt.folioTicket,
+  });
 
   const formatCurrency = (amount?: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(amount ?? 0);
@@ -125,15 +167,24 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
 
   const handleCopy = async () => {
     const summary =
-      `COMPROBANTE DE PAGO GESTOPAGO - BANCO DIGITAL (${resultState})\n` +
-      `Servicio: ${receipt.servicio || product?.service || 'N/A'} - ${receipt.producto || product?.name || ''}\n` +
-      `ID Transacción GestoPago (ID_TX): ${receipt.idTransaccion ?? 'N/A'}\n` +
-      `No. Autorización GestoPago: ${receipt.numeroAutorizacion || 'N/A'}\n` +
+      `TICKET DE OPERACIÓN GESTOPAGO - BANCO DIGITAL\n` +
+      `Operación / Producto: ${displayTicketProduct}\n` +
+      `Resultado: ${isRejected ? 'Operación rechazada' : resultState}\n` +
+      (isRejected
+        ? `Motivo GestoPago: ${motivoRechazoGestoPago}\n` +
+          `Número Respuesta GestoPago: ${numeroRespuestaGestoPago || '-1'}${
+            receipt.codigoProveedor && receipt.codigoProveedor !== numeroRespuestaGestoPago
+              ? ` (Código: ${receipt.codigoProveedor})`
+              : ''
+          }\n`
+        : `ID Transacción GestoPago (ID_TX): ${receipt.idTransaccion ?? 'N/A'}\n` +
+          `No. Autorización GestoPago: ${receipt.numeroAutorizacion || 'N/A'}\n`) +
       `Folio UPC GestoPago: ${receipt.upc || 'N/A'}\n` +
       `Folio Ticket: ${receipt.folioTicket || 'N/A'}\n` +
       `Referencia: ${referencia}\n` +
       `Monto: ${formatCurrency(receipt.montoPagado)}\n` +
-      `Fecha: ${receipt.fechaHoraOperacion || fallbackDate}`;
+      `Fecha: ${receipt.fechaHoraOperacion || fallbackDate}\n\n` +
+      `LEYENDA OFICIAL Y ACLARACIONES:\n${leyendaTexto}`;
     try {
       await navigator.clipboard.writeText(summary);
       setCopied(true);
@@ -215,13 +266,8 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
         gradient: 'from-red-600 to-rose-700',
         subtextClass: 'text-red-100',
         icon: <XCircle className="w-10 h-10 text-white" />,
-        title: receipt.upc || receipt.codigoProveedor
-          ? 'No se pudo validar en GestoPago'
-          : 'Operación Rechazada',
-        subtitle:
-          receipt.mensajeOperacion ||
-          receipt.mensaje ||
-          'Se intentó realizar el pago con GestoPago, pero no se pudo validar la operación. No se aplicó ningún cargo.',
+        title: 'Operación rechazada',
+        subtitle: `${displayTicketProduct} · ${motivoRechazoGestoPago} (${numeroRespuestaGestoPago || '-1'})`,
       };
 
   return (
@@ -288,7 +334,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                   size="sm"
                 />
                 <span className="text-xs font-bold text-slate-700">
-                  {receipt.producto || product?.name}
+                  {displayTicketProduct}
                 </span>
               </div>
             )}
@@ -312,19 +358,22 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
             <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 flex items-start gap-2.5 text-red-900 text-xs">
               <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="font-bold">Intento enviado a GestoPago · No se pudo validar (Sin cargo)</p>
+                <p className="font-bold">
+                  {displayTicketProduct} — Operación rechazada ({motivoRechazoGestoPago})
+                </p>
                 <p className="text-[11px] leading-relaxed">
-                  {receipt.codigoProveedor
-                    ? `Respuesta real de GestoPago — Código ${receipt.codigoProveedor}. `
-                    : ''}
-                  La solicitud se transmitió al proveedor, pero no pudo ser validada/autorizada. Tu saldo permanece 100% intacto.
+                  Se generó y firmó el payload AES-256 hacia GestoPago, respondiendo{' '}
+                  <strong>{numeroRespuestaGestoPago || '-1'}</strong> ({motivoRechazoGestoPago}). No se realizó ningún cargo a tu cuenta.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Official GestoPago Proof of Purchase OR Unvalidated Attempt Banner */}
-          {(receipt.idTransaccion || receipt.numeroAutorizacion || receipt.upc || receipt.codigoProveedor) && (
+          {/* Official GestoPago Proof of Purchase OR Rejected Signed Request Ticket */}
+          {(receipt.idTransaccion ||
+            numeroRespuestaGestoPago ||
+            receipt.upc ||
+            receipt.codigoProveedor) && (
             <div
               className={`p-3.5 rounded-2xl bg-gradient-to-br ${
                 isSuccess
@@ -336,7 +385,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-300">
                   {isSuccess
                     ? '✓ Compra Confirmada por GestoPago'
-                    : '⚡ Intento Real GestoPago · No se pudo validar'}
+                    : '⚡ Respuesta GestoPago · Operación Rechazada'}
                 </span>
                 <span
                   className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${
@@ -345,17 +394,39 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                       : 'bg-rose-500/25 border-rose-300/40 text-rose-200'
                   }`}
                 >
-                  COD {receipt.codigoProveedor || (isSuccess ? '01' : 'ERR')}
+                  {isSuccess
+                    ? `COD ${receipt.codigoProveedor || '01'}`
+                    : `GESTOPAGO: ${numeroRespuestaGestoPago || '-1'}`}
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-1.5 text-xs">
                 {!isSuccess && (
-                  <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
-                    <span className="text-rose-200 font-semibold">Validación GestoPago:</span>
-                    <span className="font-mono font-black text-amber-200 text-xs">
-                      NO SE PUDO VALIDAR
-                    </span>
-                  </div>
+                  <>
+                    <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                      <span className="text-rose-200 font-semibold">Operación:</span>
+                      <span className="font-bold text-white text-xs text-right">
+                        {displayTicketProduct}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                      <span className="text-rose-200 font-semibold">Estado:</span>
+                      <span className="font-mono font-black text-rose-200 text-xs">
+                        Operación rechazada
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                      <span className="text-rose-200 font-semibold">Motivo GestoPago:</span>
+                      <span className="font-mono font-black text-amber-200 text-xs">
+                        {motivoRechazoGestoPago}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                      <span className="text-rose-200 font-semibold">Número GestoPago:</span>
+                      <span className="font-mono font-black text-white text-sm tracking-wider">
+                        {numeroRespuestaGestoPago || '-1'}
+                      </span>
+                    </div>
+                  </>
                 )}
                 {receipt.idTransaccion !== undefined && receipt.idTransaccion !== null && (
                   <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
@@ -365,13 +436,11 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                     </span>
                   </div>
                 )}
-                {receipt.numeroAutorizacion && (
+                {isSuccess && receipt.numeroAutorizacion && (
                   <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
                     <span className="text-blue-200 font-semibold">No. Autorización GestoPago:</span>
                     <span className="font-mono font-black text-white text-sm tracking-wider break-all">
-                      {receipt.numeroAutorizacion === '-1'
-                        ? '-1 (No validado)'
-                        : receipt.numeroAutorizacion}
+                      {receipt.numeroAutorizacion}
                     </span>
                   </div>
                 )}
@@ -380,6 +449,14 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                     <span className="text-blue-200/85 font-medium">Folio UPC GestoPago:</span>
                     <span className="font-mono font-bold text-sky-200 break-all">
                       {receipt.upc}
+                    </span>
+                  </div>
+                )}
+                {receipt.firmaDigital && (
+                  <div className="flex items-center justify-between gap-2 bg-white/5 rounded-xl px-3 py-1">
+                    <span className="text-blue-200/85 font-medium">Firma AES-256 (signed):</span>
+                    <span className="font-mono text-[10px] text-slate-200 break-all">
+                      {receipt.firmaDigital}
                     </span>
                   </div>
                 )}
@@ -444,6 +521,14 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                 {formatCurrency(receipt.saldoRestanteCuenta ?? user?.saldo ?? 0)}
               </span>
             </div>
+          </div>
+
+          {/* Official Regulatory Legend & Clarifications (Visible in UI and Print) */}
+          <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 space-y-1">
+            <p className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-800">
+              LEYENDA OFICIAL Y ACLARACIONES
+            </p>
+            <p className="text-[11px] leading-relaxed font-medium">{leyendaTexto}</p>
           </div>
 
           {/* Real Email Delivery Status & Resend (ONLY on EXITOSA) */}
@@ -512,8 +597,8 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
 
           {/* Actions */}
           <div className="no-print pt-2 flex flex-col gap-2">
-            <div className={`grid ${isSuccess ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
-              {isSuccess && (
+            <div className={`grid ${!isPending && Boolean(isSuccess || receipt.folioTicket) ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+              {!isPending && Boolean(isSuccess || receipt.folioTicket) && (
                 <button
                   type="button"
                   onClick={handleDownloadPdf}

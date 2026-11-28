@@ -154,8 +154,9 @@ class ApiClient {
     if (lower.contains('timeout') || lower.contains('timed out')) {
       return ApiException(
         statusCode: 0,
-        message:
-            'El servidor ($host) tardó demasiado en responder. Si usa Render en reposo puede tardar ~45s; intenta de nuevo o cambia de servidor.',
+        message: host.contains('onrender.com')
+            ? 'El servidor en la nube ($host) tardó demasiado en responder. Si estaba en reposo puede tardar ~60-90s en encender, o si usas Wi-Fi Telmex activa 1.1.1.1 (WARP) / Datos Móviles o elige Wi-Fi Casa.'
+            : 'El servidor ($host) tardó demasiado en responder. Intenta de nuevo o verifica la red.',
       );
     }
     return ApiException(
@@ -187,7 +188,18 @@ class ApiClient {
     }
     final lowerMsg = message.toLowerCase();
     if (normalizedPath.startsWith('/api/v1/pagos/servicios') &&
-        lowerMsg.contains('2fa')) {
+        (lowerMsg.contains('2fa') ||
+            lowerMsg.contains('totp') ||
+            lowerMsg.contains('autenticador') ||
+            lowerMsg.contains('código') ||
+            lowerMsg.contains('codigo'))) {
+      return true;
+    }
+    if (normalizedPath.startsWith('/api/v1/auth/me/totp') &&
+        (lowerMsg.contains('totp') ||
+            lowerMsg.contains('autenticador') ||
+            lowerMsg.contains('código') ||
+            lowerMsg.contains('codigo'))) {
       return true;
     }
     if (normalizedPath.startsWith('/api/v1/auth/me/contrasena') &&
@@ -217,6 +229,28 @@ class ApiClient {
     }
   }
 
+  Duration get _requestTimeout => baseUrl.toLowerCase().contains('onrender.com')
+      ? const Duration(seconds: 110)
+      : const Duration(seconds: 45);
+
+  bool _shouldRetryCloudColdStart(String path, int statusCode) {
+    if (!baseUrl.toLowerCase().contains('onrender.com')) return false;
+    if (path.contains('/pagos/servicios')) return false;
+    return statusCode == 502 || statusCode == 503 || statusCode == 504;
+  }
+
+  Future<bool> warmUpServer() async {
+    try {
+      final uri = Uri.parse('$baseUrl/actuator/health');
+      final response = await _httpClient
+          .get(uri, headers: const {'Accept': 'application/json'})
+          .timeout(_requestTimeout);
+      return response.statusCode >= 200 && response.statusCode < 400;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
     Uri uri = Uri.parse('$baseUrl$path');
     if (queryParams != null && queryParams.isNotEmpty) {
@@ -224,9 +258,15 @@ class ApiClient {
     }
 
     try {
-      final response = await _httpClient
+      var response = await _httpClient
           .get(uri, headers: _buildHeaders())
-          .timeout(const Duration(seconds: 45));
+          .timeout(_requestTimeout);
+      if (_shouldRetryCloudColdStart(path, response.statusCode)) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        response = await _httpClient
+            .get(uri, headers: _buildHeaders())
+            .timeout(_requestTimeout);
+      }
 
       return _processResponse(response, path: path);
     } catch (e) {
@@ -247,7 +287,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .get(uri, headers: _buildHeaders(extra: {'Accept': accept}))
-          .timeout(const Duration(seconds: 20));
+          .timeout(_requestTimeout);
 
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return response.bodyBytes;
@@ -267,9 +307,15 @@ class ApiClient {
     final payload = body != null ? jsonEncode(body) : null;
 
     try {
-      final response = await _httpClient
+      var response = await _httpClient
           .post(uri, headers: _buildHeaders(), body: payload)
-          .timeout(const Duration(seconds: 45));
+          .timeout(_requestTimeout);
+      if (_shouldRetryCloudColdStart(path, response.statusCode)) {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        response = await _httpClient
+            .post(uri, headers: _buildHeaders(), body: payload)
+            .timeout(_requestTimeout);
+      }
 
       final parsed = _processResponse(response, path: path);
       return (statusCode: response.statusCode, body: parsed);
@@ -290,7 +336,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .put(uri, headers: _buildHeaders(), body: payload)
-          .timeout(const Duration(seconds: 45));
+          .timeout(_requestTimeout);
 
       return _processResponse(response, path: path);
     } catch (e) {
@@ -307,7 +353,7 @@ class ApiClient {
     try {
       final response = await _httpClient
           .delete(uri, headers: _buildHeaders())
-          .timeout(const Duration(seconds: 45));
+          .timeout(_requestTimeout);
 
       return _processResponse(response, path: path);
     } catch (e) {

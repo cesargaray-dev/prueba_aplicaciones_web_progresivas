@@ -1597,9 +1597,73 @@ class PagoServicioServiceImplTest {
         assertEquals("RECHAZADA", ex.getDetalleTicket().getEstadoOperacion());
         assertEquals("55", ex.getDetalleTicket().getCodigoProveedor());
         assertEquals("-1", ex.getDetalleTicket().getNumeroAutorizacion());
+        assertEquals("Origen no valido", ex.getDetalleTicket().getMotivoProveedor());
+        assertNotNull(ex.getDetalleTicket().getFirmaDigital());
         assertNotNull(ex.getDetalleTicket().getFolioTicket());
         assertNotNull(ex.getDetalleTicket().getUpc());
-        assertTrue(ex.getDetalleTicket().getMensajeOperacion().contains("no se pudo validar"));
+        assertTrue(ex.getDetalleTicket().getMensajeOperacion().contains("Operación rechazada"));
+        assertTrue(ex.getDetalleTicket().getMensajeOperacion().contains("Origen no valido"));
+        assertTrue(ex.getDetalleTicket().getMensajeOperacion().contains("-1"));
+        assertEquals(new BigDecimal("1000.00"), saldoCuenta.getSaldo());
+        verifyNoInteractions(saldoRepository);
+    }
+
+    @Test
+    void testProcesarPagoServicio_recargaTelcelRespuestaMenosUnoOrigenNoValido_generaTicketExactoSinCargo() {
+        when(cuentaRepository.findByNumeroCuenta(NUMERO_CUENTA)).thenReturn(Optional.of(cuentaActiva));
+        pagoServicioService.propagarCodigo2FA(NUMERO_CUENTA, "123456");
+
+        ProductDTO telcelProd = ProductDTO.builder()
+                .id("403")
+                .serviceId("133")
+                .service("Telcel")
+                .name("Recarga $20")
+                .frontType("1")
+                .price("20.00")
+                .categoryId("3")
+                .build();
+        ProductListResponse cat = new ProductListResponse();
+        cat.setData(List.of(telcelProd));
+        when(productService.obtenerListaProductos()).thenReturn(cat);
+
+        GestoPagoToken token1 = new GestoPagoToken();
+        token1.setToken("token-valido");
+        when(tokenService.obtenerTokenActivo(83, "GPS83-TPV-17")).thenReturn(Optional.of(token1));
+
+        String xmlMenosUno = "<?xml version='1.0' encoding='UTF-8'?>" +
+                "<RESPONSE>" +
+                "  <NUM_AUTORIZACION>-1</NUM_AUTORIZACION>" +
+                "  <MENSAJE>" +
+                "    <CODIGO>-1</CODIGO>" +
+                "    <TEXTO>Origen no valido</TEXTO>" +
+                "  </MENSAJE>" +
+                "</RESPONSE>";
+
+        when(gestoPagoTxClient.sendTx(anyString(), anyString(), eq("Bearer token-valido"), eq("TEST_API_KEY")))
+                .thenReturn(xmlMenosUno);
+
+        PagoServicioRequestDTO req = PagoServicioRequestDTO.builder()
+                .numeroCuenta(NUMERO_CUENTA)
+                .idServicio(133)
+                .idProducto(403)
+                .monto(new BigDecimal("20.00"))
+                .telefono("1111111111")
+                .referencia("1111111111")
+                .codigo2FA("123456")
+                .build();
+
+        PagoServicioProveedorException ex = assertThrows(
+                PagoServicioProveedorException.class,
+                () -> pagoServicioService.procesarPagoServicio(req)
+        );
+        PagoServicioResponseDTO ticket = ex.getDetalleTicket();
+        assertNotNull(ticket);
+        assertEquals("RECHAZADA", ticket.getEstadoOperacion());
+        assertEquals("Recarga Telcel $20", ticket.getProducto());
+        assertEquals("Origen no valido", ticket.getMotivoProveedor());
+        assertEquals("-1", ticket.getCodigoProveedor());
+        assertEquals("-1", ticket.getNumeroAutorizacion());
+        assertNotNull(ticket.getFirmaDigital());
         assertEquals(new BigDecimal("1000.00"), saldoCuenta.getSaldo());
         verifyNoInteractions(saldoRepository);
     }

@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../utils/receipt_downloader.dart';
 import '../utils/validation_utils.dart';
 import 'brand_avatar.dart';
+import 'official_legend_card.dart';
 
 class HistoryReceiptSheet extends StatefulWidget {
   final HistoryItem item;
@@ -271,7 +272,10 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                 Divider(height: 16, color: AppTheme.borderCol(context)),
                 _buildRow('Concepto', item.concepto),
 
-                const SizedBox(height: 18),
+                const SizedBox(height: 16),
+                OfficialLegendCard(leyenda: item.leyendaEfectiva),
+
+                const SizedBox(height: 16),
 
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -342,7 +346,8 @@ class _HistoryReceiptSheetState extends State<HistoryReceiptSheet> {
                           final text = 'Comprobante ${item.servicio}\n'
                               'Folio: ${item.folioTicket}\n'
                               'Autorización: ${item.numeroAutorizacion}\n'
-                              'Monto: ${currencyFormatter.format(item.monto)}';
+                              'Monto: ${currencyFormatter.format(item.monto)}\n'
+                              'Leyenda Oficial: ${item.leyendaEfectiva}';
                           Clipboard.setData(ClipboardData(text: text));
                           setState(() {
                             _sentOk = true;

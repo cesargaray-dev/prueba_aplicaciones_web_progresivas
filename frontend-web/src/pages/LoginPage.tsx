@@ -17,8 +17,6 @@ import {
   ArrowLeft,
   ArrowRight,
   RefreshCw,
-  KeyRound,
-  Clock,
   Sparkles,
   FileBadge,
   MapPin,
@@ -28,14 +26,20 @@ import {
   Moon,
   Award,
   CreditCard,
+  Smartphone,
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
+import { authApi } from '../api/authApi';
+import { catalogApi } from '../api/catalogApi';
+import { ApiError } from '../api/client';
+import type { TotpSetupResponse } from '../types/auth';
+import { TotpSetupCard } from '../components/TotpSetupCard';
 import {
   CATALOGO_ESTADOS_SEPOMEX,
+  CATALOGO_OCUPACIONES,
   TABULADOR_PROFESIONES,
   TABULADOR_SUELDOS,
   TIPOS_VIALIDAD,
-  obtenerMunicipiosPorEstado,
   resolverCodigoPostalMexicano,
 } from '../data/mexicoCatalogs';
 import {
@@ -63,44 +67,69 @@ import {
 } from '../utils/validation';
 
 type AuthMode = 'login' | 'register';
-type RegisterStep = 1 | 2 | 3 | 4;
+type RegisterStep = 1 | 2 | 3 | 4 | 5 | 6;
+
+const DUPLICATE_EMAIL_MESSAGE =
+  'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.';
+const DUPLICATE_USUARIO_MESSAGE =
+  'Este nombre de usuario ya está en uso en otra cuenta. Elige uno distinto.';
 
 const STEP_META: { step: RegisterStep; shortLabel: string; title: string; subtitle: string }[] = [
   {
     step: 1,
-    shortLabel: 'Identidad',
-    title: 'Datos Personales del Titular',
-    subtitle: 'Ingresa tu nombre legal completo y fecha de nacimiento tal como aparecen en tu identificación oficial.',
+    shortLabel: 'Personales',
+    title: 'Datos Personales',
+    subtitle:
+      'Ingresa tu nombre legal completo, fecha y entidad de nacimiento tal como aparecen en tu identificación oficial.',
   },
   {
     step: 2,
-    shortLabel: 'Fiscal y Domicilio',
-    title: 'Expediente Fiscal (CURP / RFC) y Domicilio',
-    subtitle: 'Valida tu clave RENAPO, RFC con homoclave, perfil económico y domicilio en México.',
+    shortLabel: 'Fiscales',
+    title: 'Datos Fiscales',
+    subtitle:
+      'Valida tu clave CURP de 18 caracteres y tu RFC con homoclave de 13 caracteres ante RENAPO y SAT.',
   },
   {
     step: 3,
-    shortLabel: 'Acceso',
-    title: 'Contacto Verificado y Credenciales',
-    subtitle: 'Configura tu correo real para recibir códigos 2FA vía Brevo y tus credenciales únicas Web + Móvil.',
+    shortLabel: 'Ocupación',
+    title: 'Ocupación e Ingresos',
+    subtitle:
+      'Selecciona tu ocupación del catálogo oficial, profesión del tabulador CNBV, institución e ingreso mensual.',
   },
   {
     step: 4,
-    shortLabel: 'Código 2FA',
-    title: 'Verifica tu Correo Electrónico (2FA)',
-    subtitle: 'Ingresa el código de seguridad de 6 dígitos enviado a tu bandeja para aperturar tu cuenta digital.',
+    shortLabel: 'Domicilio',
+    title: 'Domicilio SEPOMEX',
+    subtitle:
+      'Ingresa tu código postal de 5 dígitos para autocompletar estado, municipio y catálogo oficial de colonias.',
+  },
+  {
+    step: 5,
+    shortLabel: 'Contacto',
+    title: 'Contacto y Acceso',
+    subtitle:
+      'Configura tu correo electrónico único, teléfono móvil de 10 dígitos y credenciales seguras de acceso.',
+  },
+  {
+    step: 6,
+    shortLabel: 'Autenticador',
+    title: 'Autenticador de Google (TOTP 30s)',
+    subtitle:
+      'Escanea el código QR en Google Authenticator e ingresa el código dinámico de 6 dígitos para activar tu cuenta.',
   },
 ];
 
+const OCUPACION_EMPRESA_SUGERIDA: Record<string, string> = {
+  'Profesionista independiente': 'INDEPENDIENTE',
+  'Trabajador(a) por cuenta propia / Oficio': 'ACTIVIDAD PROPIA',
+  Estudiante: 'INSTITUCIÓN EDUCATIVA',
+  'Labores del hogar': 'HOGAR',
+  'Jubilado(a) / Pensionado(a)': 'PENSIONADO',
+  'Desempleado(a) / En búsqueda de empleo': 'SIN EMPLEO ACTUAL',
+};
+
 export const LoginPage: React.FC = () => {
-  const {
-    login,
-    enviarCodigoRegistro,
-    register,
-    isLoading,
-    sessionExpiredMessage,
-    clearSessionExpired,
-  } = useAuth();
+  const { login, register, isLoading, sessionExpiredMessage, clearSessionExpired } = useAuth();
 
   const [mode, setMode] = useState<AuthMode>('login');
   const [isDark, setIsDark] = useState<boolean>(() => {
@@ -118,7 +147,7 @@ export const LoginPage: React.FC = () => {
   const [contrasena, setContrasena] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Register Step 1: Identity
+  // Register Step 1: Datos Personales
   const [regStep, setRegStep] = useState<RegisterStep>(1);
   const [nombre, setNombre] = useState('');
   const [segundoNombre, setSegundoNombre] = useState('');
@@ -128,38 +157,55 @@ export const LoginPage: React.FC = () => {
   const [sexo, setSexo] = useState<'HOMBRE' | 'MUJER'>('HOMBRE');
   const [nacionalidad, setNacionalidad] = useState('MEXICANA');
   const [estadoCivil, setEstadoCivil] = useState('SOLTERO');
-
-  // Register Step 2: Fiscal (CURP / RFC), Economic & Address
   const [entidadCodigo, setEntidadCodigo] = useState('DF');
+
+  // Register Step 2: Datos Fiscales (CURP & RFC + live availability)
   const [curp, setCurp] = useState('');
   const [rfc, setRfc] = useState('');
-  const [ocupacion, setOcupacion] = useState(TABULADOR_PROFESIONES[0].label);
+  const [curpTakenMsg, setCurpTakenMsg] = useState<string | null>(null);
+  const [rfcTakenMsg, setRfcTakenMsg] = useState<string | null>(null);
+  const [checkingFiscal, setCheckingFiscal] = useState(false);
+
+  // Register Step 3: Ocupación e Ingresos
+  const [ocupacion, setOcupacion] = useState<string>(CATALOGO_OCUPACIONES[0]);
+  const [profesion, setProfesion] = useState<string>(TABULADOR_PROFESIONES[0].label);
   const [empresa, setEmpresa] = useState('');
-  const [ingresoMensual, setIngresoMensual] = useState(String(TABULADOR_SUELDOS[2].montoRepresentativo));
+  const [ingresoMensual, setIngresoMensual] = useState(
+    String(TABULADOR_SUELDOS[2].montoRepresentativo)
+  );
+
+  // Register Step 4: Domicilio SEPOMEX
   const [tipoVialidad, setTipoVialidad] = useState('Calle');
   const [calle, setCalle] = useState('');
   const [numeroExterior, setNumeroExterior] = useState('');
   const [numeroInterior, setNumeroInterior] = useState('');
   const [codigoPostal, setCodigoPostal] = useState('');
-  const [estadoDomicilioCodigo, setEstadoDomicilioCodigo] = useState('DF');
-  const [municipio, setMunicipio] = useState('Cuauhtémoc');
-  const [coloniaModoManual, setColoniaModoManual] = useState(false);
-  const [colonia, setColonia] = useState('Juárez');
+  const [estadoDomicilioCodigo, setEstadoDomicilioCodigo] = useState('');
+  const [estadoDomicilioNombre, setEstadoDomicilioNombre] = useState('');
+  const [municipio, setMunicipio] = useState('');
+  const [coloniasDelCp, setColoniasDelCp] = useState<string[]>([]);
+  const [colonia, setColonia] = useState('');
+  const [cpLoading, setCpLoading] = useState(false);
+  const [cpApiError, setCpApiError] = useState<string | null>(null);
 
-  // Register Step 3: Contact & Credentials
+  // Register Step 5: Contacto y Acceso
   const [correo, setCorreo] = useState('');
+  const [correoTakenMsg, setCorreoTakenMsg] = useState<string | null>(null);
+  const [checkingCorreo, setCheckingCorreo] = useState(false);
   const [telefonoMovil, setTelefonoMovil] = useState('');
   const [telefonoAlternativo, setTelefonoAlternativo] = useState('');
   const [regUsuario, setRegUsuario] = useState('');
+  const [usuarioTakenMsg, setUsuarioTakenMsg] = useState<string | null>(null);
+  const [checkingUsuario, setCheckingUsuario] = useState(false);
   const [regContrasena, setRegContrasena] = useState('');
   const [confirmarContrasena, setConfirmarContrasena] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
 
-  // Register Step 4: 2FA OTP
-  const [codigoVerificacion, setCodigoVerificacion] = useState('');
-  const [otpCountdown, setOtpCountdown] = useState(0);
-  const [otpSentTo, setOtpSentTo] = useState('');
-  const [otpFeedback, setOtpFeedback] = useState<string | null>(null);
+  // Register Step 6: Autenticador de Google (TOTP 30s)
+  const [totpSetup, setTotpSetup] = useState<TotpSetupResponse | null>(null);
+  const [totpSetupLoading, setTotpSetupLoading] = useState(false);
+  const [codigoTotp, setCodigoTotp] = useState('');
+  const [totpFeedback, setTotpFeedback] = useState<string | null>(null);
 
   // Per-field touched state for immediate onBlur & live validation
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -174,23 +220,10 @@ export const LoginPage: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (regStep !== 4 || otpCountdown <= 0) return;
-    const timer = setInterval(() => {
-      setOtpCountdown((prev) => (prev > 1 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [regStep, otpCountdown]);
-
-  const cpResolution = codigoPostal ? resolverCodigoPostalMexicano(codigoPostal) : null;
-  const domicilioEstadoObj =
-    CATALOGO_ESTADOS_SEPOMEX.find((e) => e.codigoRenapo === estadoDomicilioCodigo) ||
-    CATALOGO_ESTADOS_SEPOMEX[0];
-  const selectedStateName = domicilioEstadoObj.nombre;
-  const municipiosDisponibles = obtenerMunicipiosPorEstado(estadoDomicilioCodigo);
-  const coloniasDisponibles = cpResolution?.valido
-    ? cpResolution.coloniasSugeridas
-    : domicilioEstadoObj.coloniasBase.map((c) => c.trim());
+  const selectedStateName =
+    estadoDomicilioNombre ||
+    CATALOGO_ESTADOS_SEPOMEX.find((e) => e.codigoRenapo === estadoDomicilioCodigo)?.nombre ||
+    '';
 
   // Live per-field diagnostics
   const nombreErr = diagnosticarNombre(nombre, 'El nombre', true);
@@ -202,23 +235,32 @@ export const LoginPage: React.FC = () => {
     : 'Debes ingresar una fecha válida y ser mayor de 18 años.';
 
   const curpDiag = diagnosticarCurp(curp);
-  const curpOk = esCurpValida(curp);
+  const curpOk = esCurpValida(curp) && !curpTakenMsg;
   const rfcDiag = diagnosticarRfc(rfc);
-  const rfcOk = esRfcValido(rfc);
+  const rfcOk = esRfcValido(rfc) && !rfcTakenMsg;
+
+  const ocupacionErr = !ocupacion.trim()
+    ? 'Selecciona tu ocupación del catálogo oficial.'
+    : null;
+  const profesionErr = !profesion.trim()
+    ? 'Selecciona tu profesión del tabulador.'
+    : null;
   const empresaErr = diagnosticarEmpresa(empresa);
-  const cpDiag = diagnosticarCodigoPostal(codigoPostal);
-  const cpMismatchErr =
-    !cpDiag && cpResolution?.codigoRenapo && cpResolution.codigoRenapo !== estadoDomicilioCodigo
-      ? `El C.P. ${codigoPostal} pertenece a ${cpResolution.estadoNombre}, no a ${selectedStateName}.`
-      : null;
+
+  const cpDiag = cpApiError || diagnosticarCodigoPostal(codigoPostal);
   const calleErr = diagnosticarCalle(calle);
   const numExtErr = diagnosticarNumeroDomicilio(numeroExterior, true, 'El número exterior');
   const numIntErr = diagnosticarNumeroDomicilio(numeroInterior, false, 'El número interior');
-  const coloniaErr = diagnosticarColonia(colonia);
-  const municipioErr = municipio.trim().length < 2 ? 'Selecciona tu municipio o alcaldía.' : null;
+  const coloniaErr = !colonia.trim()
+    ? 'Selecciona una colonia perteneciente a tu código postal.'
+    : diagnosticarColonia(colonia);
+  const municipioErr =
+    municipio.trim().length < 2
+      ? 'Ingresa un código postal válido para autocompletar el municipio.'
+      : null;
 
   const correoTrim = correo.trim();
-  const correoErr = !correoTrim
+  const correoFormatErr = !correoTrim
     ? 'El correo electrónico es obligatorio.'
     : !esCorreoValido(correoTrim)
     ? 'Ingresa un correo electrónico con formato válido (ej. nombre@gmail.com).'
@@ -227,10 +269,8 @@ export const LoginPage: React.FC = () => {
     : null;
   const phoneDiag = diagnosticarTelefono(telefonoMovil);
   const phoneOk = esTelefonoMexicanoValido(telefonoMovil);
-  const telAltErr = telefonoAlternativo.trim()
-    ? diagnosticarTelefono(telefonoAlternativo)
-    : null;
-  const regUsuarioErr = !regUsuario.trim()
+  const telAltErr = telefonoAlternativo.trim() ? diagnosticarTelefono(telefonoAlternativo) : null;
+  const regUsuarioFormatErr = !regUsuario.trim()
     ? 'El nombre de usuario es obligatorio (4 a 50 caracteres).'
     : !esUsuarioValido(regUsuario)
     ? 'El usuario debe tener entre 4 y 50 caracteres (letras, números, . _ -).'
@@ -267,57 +307,175 @@ export const LoginPage: React.FC = () => {
   ];
   const pwdStrength = pwdRules.filter((r) => r.ok).length;
 
-  const formatCountdown = (secs: number) => {
-    const mins = Math.floor(secs / 60)
-      .toString()
-      .padStart(2, '0');
-    const rem = (secs % 60).toString().padStart(2, '0');
-    return `${mins}:${rem}`;
-  };
-
   const handleModeChange = (nextMode: AuthMode) => {
     setMode(nextMode);
     setError(null);
     setTouched({});
     setRegStep(1);
-    setCodigoVerificacion('');
-    setOtpCountdown(0);
-    setOtpFeedback(null);
+    setTotpSetup(null);
+    setCodigoTotp('');
+    setTotpFeedback(null);
+  };
+
+  // Availability check helpers (CURP, RFC, Correo, Usuario)
+  const checkFiscalAvailability = async (params: {
+    curp?: string;
+    rfc?: string;
+  }): Promise<boolean> => {
+    const cleanCurp = params.curp?.trim().toUpperCase();
+    const cleanRfc = params.rfc?.trim().toUpperCase();
+    if (!cleanCurp && !cleanRfc) return true;
+
+    setCheckingFiscal(true);
+    try {
+      const res = await authApi.verificarDisponibilidadRegistro({
+        curp: cleanCurp,
+        rfc: cleanRfc,
+      });
+      let available = true;
+      if (cleanCurp && res.curpDisponible === false) {
+        setCurpTakenMsg(
+          res.mensajes?.curp || 'Esta CURP ya está registrada en otra cuenta.'
+        );
+        available = false;
+      }
+      if (cleanRfc && res.rfcDisponible === false) {
+        setRfcTakenMsg(
+          res.mensajes?.rfc || 'Este RFC ya está registrado en otra cuenta.'
+        );
+        available = false;
+      }
+      return available;
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 0) {
+        return true;
+      }
+      if (err instanceof ApiError && (err.status === 409 || err.status === 400)) {
+        if (/curp/i.test(err.message)) {
+          setCurpTakenMsg(err.message);
+          return false;
+        }
+        if (/rfc/i.test(err.message)) {
+          setRfcTakenMsg(err.message);
+          return false;
+        }
+      }
+      return true;
+    } finally {
+      setCheckingFiscal(false);
+    }
+  };
+
+  const checkContactAvailability = async (params: {
+    correo?: string;
+    usuario?: string;
+  }): Promise<boolean> => {
+    const cleanCorreo = params.correo?.trim();
+    const cleanUsr = params.usuario?.trim();
+    if (!cleanCorreo && !cleanUsr) return true;
+
+    if (cleanCorreo) setCheckingCorreo(true);
+    if (cleanUsr) setCheckingUsuario(true);
+    try {
+      const res = await authApi.verificarDisponibilidadRegistro({
+        correo: cleanCorreo,
+        usuario: cleanUsr,
+      });
+      let available = true;
+      if (cleanCorreo && res.correoDisponible === false) {
+        setCorreoTakenMsg(DUPLICATE_EMAIL_MESSAGE);
+        available = false;
+      }
+      if (cleanUsr && res.usuarioDisponible === false) {
+        setUsuarioTakenMsg(res.mensajes?.usuario || DUPLICATE_USUARIO_MESSAGE);
+        available = false;
+      }
+      return available;
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.status === 0) {
+        return true;
+      }
+      if (err instanceof ApiError && err.status === 409) {
+        setCorreoTakenMsg(DUPLICATE_EMAIL_MESSAGE);
+        return false;
+      }
+      return true;
+    } finally {
+      if (cleanCorreo) setCheckingCorreo(false);
+      if (cleanUsr) setCheckingUsuario(false);
+    }
   };
 
   const handleCodigoPostalChange = (rawVal: string) => {
     const clean = rawVal.replace(/\D/g, '').slice(0, 5);
     setCodigoPostal(clean);
-    if (clean.length === 5) {
-      markTouched('codigoPostal');
-      const res = resolverCodigoPostalMexicano(clean);
-      if (res.valido && res.codigoRenapo) {
-        setEstadoDomicilioCodigo(res.codigoRenapo);
-        if (res.municipioSugerido) {
-          setMunicipio(res.municipioSugerido);
+    setColonia('');
+    setCpApiError(null);
+
+    if (clean.length < 5) {
+      setEstadoDomicilioCodigo('');
+      setEstadoDomicilioNombre('');
+      setMunicipio('');
+      setColoniasDelCp([]);
+      setCpLoading(false);
+      return;
+    }
+
+    markTouched('codigoPostal');
+    const localRes = resolverCodigoPostalMexicano(clean);
+    if (!localRes.valido) {
+      setEstadoDomicilioCodigo('');
+      setEstadoDomicilioNombre('');
+      setMunicipio('');
+      setColoniasDelCp([]);
+      return;
+    }
+
+    setEstadoDomicilioCodigo(localRes.codigoRenapo || 'DF');
+    setEstadoDomicilioNombre(localRes.estadoNombre || '');
+    setMunicipio(localRes.municipioSugerido || '');
+    setColoniasDelCp(localRes.coloniasSugeridas);
+    setCpLoading(true);
+
+    catalogApi
+      .consultarCodigoPostal(clean)
+      .then((sepomex) => {
+        if (!sepomex.valido) {
+          setEstadoDomicilioCodigo('');
+          setEstadoDomicilioNombre('');
+          setMunicipio('');
+          setColoniasDelCp([]);
+          setCpApiError(
+            sepomex.mensaje ||
+              `El código postal ${clean} no existe en el catálogo oficial SEPOMEX.`
+          );
+          return;
         }
-        if (!coloniaModoManual && res.coloniasSugeridas.length > 0) {
-          setColonia(res.coloniasSugeridas[0]);
-        }
-      }
+        setEstadoDomicilioCodigo(sepomex.codigoEstado || localRes.codigoRenapo || 'DF');
+        setEstadoDomicilioNombre(sepomex.estado || localRes.estadoNombre || '');
+        setMunicipio(sepomex.municipio || localRes.municipioSugerido || '');
+        setColoniasDelCp(sepomex.colonias);
+        setColonia('');
+      })
+      .catch(() => {
+        // Offline SEPOMEX fallback preserved
+      })
+      .finally(() => {
+        setCpLoading(false);
+      });
+  };
+
+  const handleOcupacionCatalogChange = (nuevaOcupacion: string) => {
+    setOcupacion(nuevaOcupacion);
+    const sugerida = OCUPACION_EMPRESA_SUGERIDA[nuevaOcupacion];
+    if (sugerida && !empresa.trim()) {
+      setEmpresa(sugerida);
     }
   };
 
-  const handleEstadoDomicilioChange = (nuevoCodigo: string) => {
-    setEstadoDomicilioCodigo(nuevoCodigo);
-    const munis = obtenerMunicipiosPorEstado(nuevoCodigo);
-    if (munis.length > 0) {
-      setMunicipio(munis[0]);
-    }
-    const estObj = CATALOGO_ESTADOS_SEPOMEX.find((e) => e.codigoRenapo === nuevoCodigo);
-    if (estObj && !coloniaModoManual && estObj.coloniasBase.length > 0) {
-      setColonia(estObj.coloniasBase[0].trim());
-    }
-  };
-
-  const handleOcupacionChange = (nuevaOcupacionLabel: string) => {
-    setOcupacion(nuevaOcupacionLabel);
-    const item = TABULADOR_PROFESIONES.find((p) => p.label === nuevaOcupacionLabel);
+  const handleProfesionChange = (nuevaProfesionLabel: string) => {
+    setProfesion(nuevaProfesionLabel);
+    const item = TABULADOR_PROFESIONES.find((p) => p.label === nuevaProfesionLabel);
     if (item?.empresaSugerida && !empresa.trim()) {
       setEmpresa(item.empresaSugerida);
     }
@@ -340,6 +498,9 @@ export const LoginPage: React.FC = () => {
     }
     setCurp(generated.curp);
     setRfc(generated.rfc);
+    setCurpTakenMsg(null);
+    setRfcTakenMsg(null);
+    void checkFiscalAvailability({ curp: generated.curp, rfc: generated.rfc });
   };
 
   const validateStep1 = (): string | null => {
@@ -353,15 +514,25 @@ export const LoginPage: React.FC = () => {
 
   const validateStep2 = (): string | null => {
     if (curpDiag) return curpDiag;
+    if (curpTakenMsg) return curpTakenMsg;
     if (rfcDiag) return rfcDiag;
-    if (!ocupacion.trim()) return 'Selecciona tu profesión u ocupación del tabulador.';
+    if (rfcTakenMsg) return rfcTakenMsg;
+    return null;
+  };
+
+  const validateStep3 = (): string | null => {
+    if (ocupacionErr) return ocupacionErr;
+    if (profesionErr) return profesionErr;
     if (empresaErr) return empresaErr;
     const ingresoNum = parseFloat(ingresoMensual);
     if (Number.isNaN(ingresoNum) || ingresoNum <= 0) {
       return 'Selecciona tu rango de ingreso mensual del tabulador.';
     }
+    return null;
+  };
+
+  const validateStep4 = (): string | null => {
     if (cpDiag) return cpDiag;
-    if (cpMismatchErr) return cpMismatchErr;
     if (municipioErr) return municipioErr;
     if (coloniaErr) return coloniaErr;
     if (calleErr) return calleErr;
@@ -370,11 +541,13 @@ export const LoginPage: React.FC = () => {
     return null;
   };
 
-  const validateStep3 = (): string | null => {
-    if (correoErr) return correoErr;
+  const validateStep5 = (): string | null => {
+    if (correoFormatErr) return correoFormatErr;
+    if (correoTakenMsg) return correoTakenMsg;
     if (phoneDiag) return phoneDiag;
     if (telAltErr) return `Teléfono alternativo: ${telAltErr}`;
-    if (regUsuarioErr) return regUsuarioErr;
+    if (regUsuarioFormatErr) return regUsuarioFormatErr;
+    if (usuarioTakenMsg) return usuarioTakenMsg;
     if (regContrasenaErr) return regContrasenaErr;
     if (confirmarContrasenaErr) return confirmarContrasenaErr;
     return null;
@@ -399,17 +572,23 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     setError(null);
     clearSessionExpired();
+
     if (regStep === 1) {
-      markManyTouched(['nombre', 'segundoNombre', 'apellidoPaterno', 'apellidoMaterno', 'fechaNacimiento']);
+      markManyTouched([
+        'nombre',
+        'segundoNombre',
+        'apellidoPaterno',
+        'apellidoMaterno',
+        'fechaNacimiento',
+      ]);
       const err1 = validateStep1();
       if (err1) {
         setError(err1);
         return;
       }
-      // Pre-suggest CURP & RFC if empty so the user sees them ready to verify/adjust
       if (!curp && !rfc) {
         const suggested = generarCurpYRfcSugeridos({
           nombre,
@@ -423,18 +602,43 @@ export const LoginPage: React.FC = () => {
         if (suggested) {
           setCurp(suggested.curp);
           setRfc(suggested.rfc);
+          void checkFiscalAvailability({ curp: suggested.curp, rfc: suggested.rfc });
         }
       }
       setRegStep(2);
       return;
     }
+
     if (regStep === 2) {
+      markManyTouched(['curp', 'rfc']);
+      const err2 = validateStep2();
+      if (err2) {
+        if (err2 !== curpTakenMsg && err2 !== rfcTakenMsg) {
+          setError(err2);
+        }
+        return;
+      }
+      const fiscalOk = await checkFiscalAvailability({ curp, rfc });
+      if (!fiscalOk) {
+        return;
+      }
+      setRegStep(3);
+      return;
+    }
+
+    if (regStep === 3) {
+      markManyTouched(['ocupacion', 'profesion', 'empresa', 'ingresoMensual']);
+      const err3 = validateStep3();
+      if (err3) {
+        setError(err3);
+        return;
+      }
+      setRegStep(4);
+      return;
+    }
+
+    if (regStep === 4) {
       markManyTouched([
-        'curp',
-        'rfc',
-        'ocupacion',
-        'empresa',
-        'ingresoMensual',
         'codigoPostal',
         'municipio',
         'colonia',
@@ -442,35 +646,50 @@ export const LoginPage: React.FC = () => {
         'numeroExterior',
         'numeroInterior',
       ]);
-      const err2 = validateStep2();
-      if (err2) {
-        setError(err2);
+      const err4 = validateStep4();
+      if (err4) {
+        setError(err4);
         return;
       }
-      setRegStep(3);
+      setRegStep(5);
     }
   };
 
-  const handleSendRegCode = async (isResend = false) => {
+  const handleProceedToTotp = async (isRegenerate = false) => {
     setError(null);
-    setOtpFeedback(null);
+    setTotpFeedback(null);
     clearSessionExpired();
 
     const err1 = validateStep1();
     if (err1) {
-      markManyTouched(['nombre', 'segundoNombre', 'apellidoPaterno', 'apellidoMaterno', 'fechaNacimiento']);
+      markManyTouched([
+        'nombre',
+        'segundoNombre',
+        'apellidoPaterno',
+        'apellidoMaterno',
+        'fechaNacimiento',
+      ]);
       setRegStep(1);
       setError(err1);
       return;
     }
     const err2 = validateStep2();
     if (err2) {
+      markManyTouched(['curp', 'rfc']);
+      setRegStep(2);
+      if (err2 !== curpTakenMsg && err2 !== rfcTakenMsg) setError(err2);
+      return;
+    }
+    const err3 = validateStep3();
+    if (err3) {
+      markManyTouched(['ocupacion', 'profesion', 'empresa', 'ingresoMensual']);
+      setRegStep(3);
+      setError(err3);
+      return;
+    }
+    const err4 = validateStep4();
+    if (err4) {
       markManyTouched([
-        'curp',
-        'rfc',
-        'ocupacion',
-        'empresa',
-        'ingresoMensual',
         'codigoPostal',
         'municipio',
         'colonia',
@@ -478,10 +697,11 @@ export const LoginPage: React.FC = () => {
         'numeroExterior',
         'numeroInterior',
       ]);
-      setRegStep(2);
-      setError(err2);
+      setRegStep(4);
+      setError(err4);
       return;
     }
+
     markManyTouched([
       'correo',
       'telefonoMovil',
@@ -490,64 +710,91 @@ export const LoginPage: React.FC = () => {
       'regContrasena',
       'confirmarContrasena',
     ]);
-    const err3 = validateStep3();
-    if (err3) {
-      setRegStep(3);
-      setError(err3);
+    const err5 = validateStep5();
+    if (err5) {
+      setRegStep(5);
+      if (err5 !== correoTakenMsg && err5 !== usuarioTakenMsg) {
+        setError(err5);
+      }
       return;
     }
 
-    const emailTrim = correo.trim();
+    setTotpSetupLoading(true);
     try {
-      const resp = await enviarCodigoRegistro({
-        correo: emailTrim,
-        nombre: nombre.trim(),
+      const contactOk = await checkContactAvailability({
+        correo: correoTrim,
         usuario: regUsuario.trim(),
-        curp: curp.trim().toUpperCase(),
-        rfc: rfc.trim().toUpperCase(),
       });
-      setOtpSentTo(resp.correoDestino || emailTrim);
-      setOtpCountdown(resp.expiraEnSegundos || 300);
-      setCodigoVerificacion('');
-      setRegStep(4);
-      if (isResend) {
-        setOtpFeedback('Se envió un nuevo código 2FA de 6 dígitos a tu correo.');
+      if (!contactOk) {
+        setRegStep(5);
+        return;
+      }
+
+      const setup = await authApi.iniciarTotpRegistro({
+        correo: correoTrim,
+        usuario: regUsuario.trim(),
+      });
+      setTotpSetup(setup);
+      setCodigoTotp('');
+      setRegStep(6);
+      if (isRegenerate) {
+        setTotpFeedback('Se generó una nueva llave QR para Google Authenticator.');
       }
     } catch (err: unknown) {
+      if (
+        (err instanceof ApiError && err.status === 409) ||
+        (err instanceof Error && /correo.*ya.*uso/i.test(err.message))
+      ) {
+        setCorreoTakenMsg(DUPLICATE_EMAIL_MESSAGE);
+        setRegStep(5);
+        return;
+      }
+      if (err instanceof ApiError && err.status === 400 && /usuario/i.test(err.message)) {
+        setUsuarioTakenMsg(err.message);
+        setRegStep(5);
+        return;
+      }
       const errorMsg =
         err instanceof Error
           ? err.message
-          : 'No fue posible enviar el código de verificación a tu correo.';
+          : 'No fue posible generar la configuración de Google Authenticator.';
       setError(errorMsg);
+    } finally {
+      setTotpSetupLoading(false);
     }
   };
 
   const buildCalleCompleta = (): string => {
     const cleanCalle = calle.trim();
-    const startsWithPrefix = /^(calle|av\.?|avenida|blvd\.?|boulevard|calz\.?|calzada|priv\.?|privada|cerr\.?|cerrada|prol\.?|prolongaci[oó]n|cto\.?|circuito|andador|carr\.?|carretera|viaducto|retorno)\b/i.test(
-      cleanCalle
-    );
+    const startsWithPrefix =
+      /^(calle|av\.?|avenida|blvd\.?|boulevard|calz\.?|calzada|priv\.?|privada|cerr\.?|cerrada|prol\.?|prolongaci[oó]n|cto\.?|circuito|andador|carr\.?|carretera|viaducto|retorno)\b/i.test(
+        cleanCalle
+      );
     return startsWithPrefix ? cleanCalle : `${tipoVialidad} ${cleanCalle}`.trim();
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (regStep === 1 || regStep === 2) {
-      handleNextStep();
+    if (regStep === 1 || regStep === 2 || regStep === 3 || regStep === 4) {
+      await handleNextStep();
       return;
     }
-    if (regStep === 3) {
-      await handleSendRegCode(false);
+    if (regStep === 5) {
+      await handleProceedToTotp(false);
       return;
     }
 
     setError(null);
-    setOtpFeedback(null);
+    setTotpFeedback(null);
     clearSessionExpired();
 
-    const cleanCode = codigoVerificacion.trim();
+    const cleanCode = codigoTotp.trim();
     if (!/^\d{6}$/.test(cleanCode)) {
-      setError('Ingresa el código de verificación de 6 dígitos enviado a tu correo.');
+      setError('Ingresa el código de 6 dígitos generado en Google Authenticator.');
+      return;
+    }
+    if (!totpSetup?.secret) {
+      setError('Genera primero tu código QR de Google Authenticator.');
       return;
     }
 
@@ -564,6 +811,7 @@ export const LoginPage: React.FC = () => {
         curp: curp.trim().toUpperCase(),
         rfc: rfc.trim().toUpperCase(),
         ocupacion: ocupacion.trim(),
+        profesion: profesion.trim(),
         empresa: empresa.trim(),
         ingresoMensual: parseFloat(ingresoMensual) || 20000,
         calle: buildCalleCompleta(),
@@ -574,14 +822,23 @@ export const LoginPage: React.FC = () => {
         municipio: municipio.trim(),
         estado: selectedStateName,
         pais: 'México',
-        correo: correo.trim(),
+        correo: correoTrim,
         telefonoMovil: telefonoMovil.trim(),
         telefonoAlternativo: telefonoAlternativo.trim() || undefined,
         usuario: regUsuario.trim(),
         contrasena: regContrasena,
-        codigoVerificacion: cleanCode,
+        totpSecret: totpSetup.secret,
+        codigoTotp: cleanCode,
       });
     } catch (err: unknown) {
+      if (
+        (err instanceof ApiError && err.status === 409) ||
+        (err instanceof Error && /correo.*ya.*uso/i.test(err.message))
+      ) {
+        setCorreoTakenMsg(DUPLICATE_EMAIL_MESSAGE);
+        setRegStep(5);
+        return;
+      }
       const errorMsg =
         err instanceof Error ? err.message : 'No fue posible completar el registro.';
       setError(errorMsg);
@@ -589,6 +846,7 @@ export const LoginPage: React.FC = () => {
   };
 
   const currentMeta = STEP_META[regStep - 1];
+  const isBusy = isLoading || totpSetupLoading;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#040814] via-[#0A193B] to-[#060D20] flex flex-col justify-between p-4 sm:p-6 lg:p-8 relative overflow-hidden">
@@ -650,10 +908,10 @@ export const LoginPage: React.FC = () => {
 
               <div className="space-y-2">
                 <h2 className="text-xl sm:text-2xl font-extrabold leading-snug text-white">
-                  Pagos de servicios, recargas al instante y seguridad bancaria 2FA.
+                  Pagos de servicios, recargas al instante y seguridad Google Authenticator.
                 </h2>
                 <p className="text-xs sm:text-sm text-blue-100/80 leading-relaxed">
-                  Opera tus recibos CFE, agua, internet, TAG y tiempo aire con comprobantes oficiales PDF, folio de autorización y validación en tiempo real.
+                  Opera tus recibos CFE, agua, internet, TAG y tiempo aire con comprobantes oficiales PDF, leyenda regulatoria y validación TOTP en tiempo real.
                 </p>
               </div>
 
@@ -667,13 +925,13 @@ export const LoginPage: React.FC = () => {
                     </span>
                   </div>
                   <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/30 text-[10px] font-bold text-emerald-300">
-                    Bono Apertura
+                    TOTP 30s Activo
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 pt-1 text-xs">
                   <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
-                    <p className="text-[10px] text-blue-200/75">Saldo de Bienvenida</p>
-                    <p className="text-sm font-black text-white mt-0.5">$200.00 MXN</p>
+                    <p className="text-[10px] text-blue-200/75">Apertura Digital</p>
+                    <p className="text-sm font-black text-white mt-0.5">6 Pasos Guiados</p>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
                     <p className="text-[10px] text-blue-200/75">Comisión por Pago</p>
@@ -688,17 +946,17 @@ export const LoginPage: React.FC = () => {
                   {
                     icon: FileBadge,
                     title: 'Expediente KYC Completo (CURP y RFC)',
-                    desc: 'Validación normativa RENAPO, SAT e IFT con apertura inmediata de cuenta de 16 dígitos.',
+                    desc: 'Validación normativa RENAPO, SAT, SEPOMEX y catálogo oficial de ocupaciones.',
                   },
                   {
-                    icon: ShieldCheck,
-                    title: 'Doble Factor 2FA por Correo (Brevo)',
-                    desc: 'Código OTP único de 6 dígitos para validar tu registro y autorizar cada operación.',
+                    icon: Smartphone,
+                    title: 'Google Authenticator (TOTP cada 30s)',
+                    desc: 'Código dinámico de 6 dígitos sincronizado con tu celular para registro y pagos.',
                   },
                   {
                     icon: Award,
                     title: 'Trazabilidad Oficial GestoPago',
-                    desc: 'Cada recibo incluye ID_TX, Número de Autorización, Folio UPC y descarga PDF.',
+                    desc: 'Cada recibo incluye ID_TX, Número de Autorización, Leyenda Oficial y descarga PDF.',
                   },
                 ].map((item) => {
                   const Icon = item.icon;
@@ -869,7 +1127,9 @@ export const LoginPage: React.FC = () => {
                   </button>
 
                   <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-3 text-xs">
-                    <span className="text-slate-600 font-medium">¿Aún no eres titular en Banco Digital?</span>
+                    <span className="text-slate-600 font-medium">
+                      ¿Aún no eres titular en Banco Digital?
+                    </span>
                     <button
                       type="button"
                       onClick={() => handleModeChange('register')}
@@ -882,9 +1142,33 @@ export const LoginPage: React.FC = () => {
                 </form>
               ) : (
                 <form onSubmit={handleRegisterSubmit} noValidate className="space-y-4">
-                  {/* 4-Step Interactive Progress Header */}
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-4 gap-1.5">
+                  {/* 6-Step Visual Stepper: Title, Paso X de 6, Progress Bar & Step Pills */}
+                  <div className="space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h2 className="text-lg font-black text-slate-900">{currentMeta.title}</h2>
+                        <p className="text-xs text-slate-500">{currentMeta.subtitle}</p>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 shrink-0">
+                        Paso {regStep} de 6
+                      </span>
+                    </div>
+
+                    <div
+                      role="progressbar"
+                      aria-label="Progreso de creación de cuenta"
+                      aria-valuemin={1}
+                      aria-valuemax={6}
+                      aria-valuenow={regStep}
+                      className="w-full h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-200/70"
+                    >
+                      <div
+                        className="h-full bg-gradient-to-r from-blue-900 via-blue-600 to-emerald-500 transition-all duration-300 rounded-full"
+                        style={{ width: `${(regStep / 6) * 100}%` }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                       {STEP_META.map((item) => {
                         const isActive = regStep === item.step;
                         const isDone = regStep > item.step;
@@ -892,14 +1176,14 @@ export const LoginPage: React.FC = () => {
                           <button
                             key={item.step}
                             type="button"
-                            disabled={item.step > regStep || isLoading}
+                            disabled={item.step > regStep || isBusy}
                             onClick={() => {
                               if (item.step < regStep) {
                                 setError(null);
                                 setRegStep(item.step);
                               }
                             }}
-                            className={`p-2 rounded-xl border text-left transition-all ${
+                            className={`p-1.5 rounded-xl border text-left transition-all ${
                               isActive
                                 ? 'bg-blue-50 border-blue-400 text-blue-950 shadow-sm'
                                 : isDone
@@ -908,37 +1192,30 @@ export const LoginPage: React.FC = () => {
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-black uppercase">
+                              <span className="text-[9.5px] font-black uppercase">
                                 Paso {item.step}
                               </span>
-                              {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />}
+                              {isDone && <CheckCircle2 className="w-3 h-3 text-emerald-600" />}
                             </div>
-                            <p className="text-[11px] font-bold truncate mt-0.5">
+                            <p className="text-[10.5px] font-bold truncate mt-0.5">
                               {item.shortLabel}
                             </p>
                           </button>
                         );
                       })}
                     </div>
-
-                    <div className="flex items-start justify-between gap-2 pt-1">
-                      <div>
-                        <h2 className="text-lg font-black text-slate-900">{currentMeta.title}</h2>
-                        <p className="text-xs text-slate-500">{currentMeta.subtitle}</p>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-blue-50 text-blue-800 border border-blue-200 shrink-0">
-                        Paso {regStep} de 4
-                      </span>
-                    </div>
                   </div>
 
-                  {/* STEP 1: PERSONAL IDENTITY */}
+                  {/* PASO 1: DATOS PERSONALES */}
                   {regStep === 1 && (
                     <div className="space-y-3.5 animate-in fade-in">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <label htmlFor="reg-nombre" className="text-[11px] font-bold text-slate-700">
+                            <label
+                              htmlFor="reg-nombre"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
                               Nombre (2–40 letras) *
                             </label>
                             <span className="text-[10px] font-mono text-slate-400">
@@ -952,14 +1229,26 @@ export const LoginPage: React.FC = () => {
                             value={nombre}
                             onChange={(e) => setNombre(e.target.value)}
                             onBlur={() => markTouched('nombre')}
-                            aria-invalid={showFieldError('nombre', nombreErr, hasInvalidNameChars(nombre))}
+                            aria-invalid={showFieldError(
+                              'nombre',
+                              nombreErr,
+                              nombre.length > 0 && Boolean(nombreErr)
+                            )}
                             placeholder="Ej. César"
                             className={fieldInputClass(
-                              showFieldError('nombre', nombreErr, hasInvalidNameChars(nombre)),
+                              showFieldError(
+                                'nombre',
+                                nombreErr,
+                                nombre.length > 0 && Boolean(nombreErr)
+                              ),
                               Boolean(nombre.trim() && !nombreErr)
                             )}
                           />
-                          {showFieldError('nombre', nombreErr, hasInvalidNameChars(nombre)) && (
+                          {showFieldError(
+                            'nombre',
+                            nombreErr,
+                            nombre.length > 0 && Boolean(nombreErr)
+                          ) && (
                             <p className="text-[11px] text-red-600 font-semibold">{nombreErr}</p>
                           )}
                         </div>
@@ -1005,7 +1294,9 @@ export const LoginPage: React.FC = () => {
                             segundoNombreErr,
                             hasInvalidNameChars(segundoNombre)
                           ) && (
-                            <p className="text-[11px] text-red-600 font-semibold">{segundoNombreErr}</p>
+                            <p className="text-[11px] text-red-600 font-semibold">
+                              {segundoNombreErr}
+                            </p>
                           )}
                         </div>
 
@@ -1031,14 +1322,14 @@ export const LoginPage: React.FC = () => {
                             aria-invalid={showFieldError(
                               'apellidoPaterno',
                               apPaternoErr,
-                              hasInvalidNameChars(apellidoPaterno)
+                              apellidoPaterno.length > 0 && Boolean(apPaternoErr)
                             )}
                             placeholder="Ej. Garay"
                             className={fieldInputClass(
                               showFieldError(
                                 'apellidoPaterno',
                                 apPaternoErr,
-                                hasInvalidNameChars(apellidoPaterno)
+                                apellidoPaterno.length > 0 && Boolean(apPaternoErr)
                               ),
                               Boolean(apellidoPaterno.trim() && !apPaternoErr)
                             )}
@@ -1046,7 +1337,7 @@ export const LoginPage: React.FC = () => {
                           {showFieldError(
                             'apellidoPaterno',
                             apPaternoErr,
-                            hasInvalidNameChars(apellidoPaterno)
+                            apellidoPaterno.length > 0 && Boolean(apPaternoErr)
                           ) && (
                             <p className="text-[11px] text-red-600 font-semibold">{apPaternoErr}</p>
                           )}
@@ -1074,14 +1365,14 @@ export const LoginPage: React.FC = () => {
                             aria-invalid={showFieldError(
                               'apellidoMaterno',
                               apMaternoErr,
-                              hasInvalidNameChars(apellidoMaterno)
+                              apellidoMaterno.length > 0 && Boolean(apMaternoErr)
                             )}
                             placeholder="Ej. García"
                             className={fieldInputClass(
                               showFieldError(
                                 'apellidoMaterno',
                                 apMaternoErr,
-                                hasInvalidNameChars(apellidoMaterno)
+                                apellidoMaterno.length > 0 && Boolean(apMaternoErr)
                               ),
                               Boolean(apellidoMaterno.trim() && !apMaternoErr)
                             )}
@@ -1089,14 +1380,14 @@ export const LoginPage: React.FC = () => {
                           {showFieldError(
                             'apellidoMaterno',
                             apMaternoErr,
-                            hasInvalidNameChars(apellidoMaterno)
+                            apellidoMaterno.length > 0 && Boolean(apMaternoErr)
                           ) && (
                             <p className="text-[11px] text-red-600 font-semibold">{apMaternoErr}</p>
                           )}
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="space-y-1">
                           <label
                             htmlFor="reg-fecha-nac"
@@ -1121,6 +1412,7 @@ export const LoginPage: React.FC = () => {
                             <p className="text-[11px] text-red-600 font-semibold">{fechaNacErr}</p>
                           )}
                         </div>
+
                         <div className="space-y-1">
                           <label htmlFor="reg-sexo" className="text-[11px] font-bold text-slate-700">
                             Sexo *
@@ -1133,6 +1425,27 @@ export const LoginPage: React.FC = () => {
                           >
                             <option value="HOMBRE">Hombre (H)</option>
                             <option value="MUJER">Mujer (M)</option>
+                          </select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-entidad"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Entidad de nacimiento *
+                          </label>
+                          <select
+                            id="reg-entidad"
+                            value={entidadCodigo}
+                            onChange={(e) => setEntidadCodigo(e.target.value)}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          >
+                            {ESTADOS_MEXICO.map((st) => (
+                              <option key={st.code} value={st.code}>
+                                {st.name} ({st.code})
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -1181,57 +1494,43 @@ export const LoginPage: React.FC = () => {
                         type="submit"
                         className="w-full py-3 bg-gradient-to-r from-blue-950 to-blue-700 hover:from-blue-900 hover:to-blue-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
                       >
-                        <span>Continuar a Datos Fiscales y Domicilio</span>
+                        <span>Continuar a Datos Fiscales</span>
                         <ArrowRight className="w-4 h-4" />
                       </button>
                     </div>
                   )}
 
-                  {/* STEP 2: FISCAL (CURP & RFC), ECONOMIC TABULATORS & SEPOMEX ADDRESS */}
+                  {/* PASO 2: DATOS FISCALES (CURP & RFC + DISPONIBILIDAD) */}
                   {regStep === 2 && (
-                    <div className="space-y-3.5 animate-in fade-in">
-                      <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="space-y-4 animate-in fade-in">
+                      <div className="p-3.5 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                         <div className="text-xs text-indigo-950">
                           <p className="font-extrabold flex items-center gap-1.5">
-                            <FileBadge className="w-3.5 h-3.5 text-indigo-700" />
+                            <FileBadge className="w-4 h-4 text-indigo-700" />
                             <span>Asistente Oficial RENAPO / SAT</span>
                           </p>
                           <p className="text-[11px] text-indigo-800/85">
-                            Genera tu estructura oficial de CURP y RFC a partir de tus datos y edita tu homoclave si lo requieres.
+                            Autocalcula tu estructura oficial de CURP y RFC a partir de tus datos personales y edita tu homoclave si lo requieres.
                           </p>
                         </div>
                         <button
                           type="button"
                           onClick={handleAutoGenerateFiscal}
-                          className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-800 text-white text-[11px] font-extrabold shrink-0 shadow-sm transition-colors"
+                          className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-indigo-900 hover:bg-indigo-800 text-white text-xs font-extrabold shrink-0 shadow-sm transition-colors"
                         >
                           <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                           <span>Calcular CURP / RFC</span>
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="reg-entidad"
-                            className="text-[11px] font-bold text-slate-700"
-                          >
-                            Entidad de Nacimiento *
-                          </label>
-                          <select
-                            id="reg-entidad"
-                            value={entidadCodigo}
-                            onChange={(e) => setEntidadCodigo(e.target.value)}
-                            className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                          >
-                            {ESTADOS_MEXICO.map((st) => (
-                              <option key={st.code} value={st.code}>
-                                {st.name} ({st.code})
-                              </option>
-                            ))}
-                          </select>
+                      {checkingFiscal && (
+                        <div className="flex items-center gap-2 text-[11px] font-semibold text-blue-700">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Verificando disponibilidad de CURP y RFC...</span>
                         </div>
+                      )}
 
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <label htmlFor="reg-curp" className="text-[11px] font-bold text-slate-700">
                             CURP (18 caracteres) *
@@ -1242,38 +1541,56 @@ export const LoginPage: React.FC = () => {
                               type="text"
                               maxLength={18}
                               value={curp}
-                              onBlur={() => markTouched('curp')}
-                              onChange={(e) =>
-                                setCurp(
-                                  e.target.value
-                                    .toUpperCase()
-                                    .replace(/[^A-Z0-9]/g, '')
-                                    .slice(0, 18)
-                                )
-                              }
+                              onBlur={() => {
+                                markTouched('curp');
+                                if (esCurpValida(curp)) {
+                                  void checkFiscalAvailability({ curp });
+                                }
+                              }}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                  .toUpperCase()
+                                  .replace(/[^A-Z0-9]/g, '')
+                                  .slice(0, 18);
+                                setCurp(val);
+                                if (curpTakenMsg) setCurpTakenMsg(null);
+                                if (esCurpValida(val)) {
+                                  void checkFiscalAvailability({ curp: val });
+                                }
+                              }}
                               placeholder="XXXX000000HDFXXX00"
-                              className={`w-full pl-3 pr-7 py-2 bg-slate-50 border rounded-xl text-[11px] font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
-                                curpOk
+                              className={`w-full pl-3 pr-8 py-2.5 bg-slate-50 border rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
+                                curpTakenMsg || showFieldError('curp', curpDiag)
+                                  ? 'border-red-400 focus:ring-red-400 bg-red-50/30'
+                                  : curpOk
                                   ? 'border-emerald-400 focus:ring-emerald-500'
-                                  : showFieldError('curp', curpDiag)
-                                  ? 'border-red-400 focus:ring-red-400'
                                   : curp
                                   ? 'border-amber-300 focus:ring-amber-400'
                                   : 'border-slate-200 focus:ring-blue-600'
                               }`}
                             />
                             {curpOk && (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 absolute right-2 top-2.5" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-2.5" />
                             )}
                           </div>
-                          {showFieldError('curp', curpDiag, Boolean(curp && curp.length === 18)) && (
-                            <p className="text-[10.5px] text-red-600 font-semibold">{curpDiag}</p>
+                          {curpTakenMsg ? (
+                            <div
+                              role="alert"
+                              className="p-2 rounded-xl bg-red-50 border border-red-200 flex items-start gap-1.5 text-[11px] text-red-700 font-bold"
+                            >
+                              <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                              <span>{curpTakenMsg}</span>
+                            </div>
+                          ) : (
+                            showFieldError('curp', curpDiag, Boolean(curp && curp.length === 18)) && (
+                              <p className="text-[11px] text-red-600 font-semibold">{curpDiag}</p>
+                            )
                           )}
                         </div>
 
                         <div className="space-y-1">
                           <label htmlFor="reg-rfc" className="text-[11px] font-bold text-slate-700">
-                            RFC con Homoclave (13) *
+                            RFC con Homoclave (13 caracteres) *
                           </label>
                           <div className="relative">
                             <input
@@ -1281,381 +1598,51 @@ export const LoginPage: React.FC = () => {
                               type="text"
                               maxLength={13}
                               value={rfc}
-                              onBlur={() => markTouched('rfc')}
-                              onChange={(e) =>
-                                setRfc(
-                                  e.target.value
-                                    .toUpperCase()
-                                    .replace(/[^A-ZÑ&0-9]/g, '')
-                                    .slice(0, 13)
-                                )
-                              }
+                              onBlur={() => {
+                                markTouched('rfc');
+                                if (esRfcValido(rfc)) {
+                                  void checkFiscalAvailability({ rfc });
+                                }
+                              }}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                  .toUpperCase()
+                                  .replace(/[^A-ZÑ&0-9]/g, '')
+                                  .slice(0, 13);
+                                setRfc(val);
+                                if (rfcTakenMsg) setRfcTakenMsg(null);
+                                if (esRfcValido(val)) {
+                                  void checkFiscalAvailability({ rfc: val });
+                                }
+                              }}
                               placeholder="XXXX000000XXX"
-                              className={`w-full pl-3 pr-7 py-2 bg-slate-50 border rounded-xl text-[11px] font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
-                                rfcOk
+                              className={`w-full pl-3 pr-8 py-2.5 bg-slate-50 border rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
+                                rfcTakenMsg || showFieldError('rfc', rfcDiag)
+                                  ? 'border-red-400 focus:ring-red-400 bg-red-50/30'
+                                  : rfcOk
                                   ? 'border-emerald-400 focus:ring-emerald-500'
-                                  : showFieldError('rfc', rfcDiag)
-                                  ? 'border-red-400 focus:ring-red-400'
                                   : rfc
                                   ? 'border-amber-300 focus:ring-amber-400'
                                   : 'border-slate-200 focus:ring-blue-600'
                               }`}
                             />
                             {rfcOk && (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 absolute right-2 top-2.5" />
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-2.5" />
                             )}
                           </div>
-                          {showFieldError('rfc', rfcDiag, Boolean(rfc && rfc.length === 13)) && (
-                            <p className="text-[10.5px] text-red-600 font-semibold">{rfcDiag}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Economic Profile: Tabulador de Profesiones y Tabulador de Sueldo */}
-                      <div className="space-y-2.5 pt-1 border-t border-slate-100">
-                        <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                          <Briefcase className="w-3.5 h-3.5 text-blue-700" />
-                          <span>Perfil Económico (Tabulador Oficial CNBV)</span>
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-ocupacion"
-                              className="text-[11px] font-bold text-slate-700"
+                          {rfcTakenMsg ? (
+                            <div
+                              role="alert"
+                              className="p-2 rounded-xl bg-red-50 border border-red-200 flex items-start gap-1.5 text-[11px] text-red-700 font-bold"
                             >
-                              Tabulador de Profesión / Ocupación *
-                            </label>
-                            <select
-                              id="reg-ocupacion"
-                              value={ocupacion}
-                              onChange={(e) => handleOcupacionChange(e.target.value)}
-                              onBlur={() => markTouched('ocupacion')}
-                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            >
-                              {Array.from(new Set(TABULADOR_PROFESIONES.map((p) => p.sector))).map(
-                                (sector) => (
-                                  <optgroup key={sector} label={sector}>
-                                    {TABULADOR_PROFESIONES.filter((p) => p.sector === sector).map(
-                                      (prof) => (
-                                        <option key={prof.clave} value={prof.label}>
-                                          {prof.label}
-                                        </option>
-                                      )
-                                    )}
-                                  </optgroup>
-                                )
-                              )}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-ingreso"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Tabulador de Sueldo / Ingreso Mensual *
-                            </label>
-                            <select
-                              id="reg-ingreso"
-                              value={ingresoMensual}
-                              onChange={(e) => setIngresoMensual(e.target.value)}
-                              onBlur={() => markTouched('ingresoMensual')}
-                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            >
-                              {TABULADOR_SUELDOS.map((s) => (
-                                <option key={s.clave} value={String(s.montoRepresentativo)}>
-                                  {s.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="reg-empresa"
-                            className="text-[11px] font-bold text-slate-700"
-                          >
-                            Empresa / Institución / Actividad *
-                          </label>
-                          <input
-                            id="reg-empresa"
-                            type="text"
-                            maxLength={80}
-                            value={empresa}
-                            onChange={(e) => setEmpresa(e.target.value)}
-                            onBlur={() => markTouched('empresa')}
-                            placeholder="Ej. Grupo Bimbo, UNAM, Independiente..."
-                            className={fieldInputClass(
-                              showFieldError('empresa', empresaErr),
-                              Boolean(empresa.trim() && !empresaErr),
-                              'py-2'
-                            )}
-                          />
-                          {showFieldError('empresa', empresaErr) && (
-                            <p className="text-[11px] text-red-600 font-semibold">{empresaErr}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Address: SEPOMEX Postal Code -> State -> Municipality Catalog -> Colonia Catalog -> Street */}
-                      <div className="space-y-2.5 pt-1 border-t border-slate-100">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                            <MapPin className="w-3.5 h-3.5 text-blue-700" />
-                            <span>Domicilio en México (Catálogo SEPOMEX)</span>
-                          </p>
-                          {cpResolution?.valido && !cpMismatchErr && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              ✓ C.P. {codigoPostal} · {cpResolution.estadoNombre}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-cp"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Código Postal (5 díg) *
-                            </label>
-                            <input
-                              id="reg-cp"
-                              type="text"
-                              inputMode="numeric"
-                              maxLength={5}
-                              value={codigoPostal}
-                              onChange={(e) => handleCodigoPostalChange(e.target.value)}
-                              onBlur={() => markTouched('codigoPostal')}
-                              placeholder="06600"
-                              className={fieldInputClass(
-                                showFieldError(
-                                  'codigoPostal',
-                                  cpDiag || cpMismatchErr,
-                                  codigoPostal.length === 5
-                                ),
-                                Boolean(cpResolution?.valido && !cpMismatchErr),
-                                'py-2 font-mono font-bold'
-                              )}
-                            />
-                            {showFieldError(
-                              'codigoPostal',
-                              cpDiag || cpMismatchErr,
-                              codigoPostal.length === 5
-                            ) && (
-                              <p className="text-[10.5px] text-red-600 font-semibold">
-                                {cpDiag || cpMismatchErr}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-estado-dom"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Estado (Catálogo) *
-                            </label>
-                            <select
-                              id="reg-estado-dom"
-                              value={estadoDomicilioCodigo}
-                              onChange={(e) => handleEstadoDomicilioChange(e.target.value)}
-                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            >
-                              {CATALOGO_ESTADOS_SEPOMEX.map((est) => (
-                                <option key={est.codigoRenapo} value={est.codigoRenapo}>
-                                  {est.nombre}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-municipio"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Municipio / Alcaldía *
-                            </label>
-                            <select
-                              id="reg-municipio"
-                              value={municipio}
-                              onChange={(e) => setMunicipio(e.target.value)}
-                              onBlur={() => markTouched('municipio')}
-                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            >
-                              {municipiosDisponibles.map((mun) => (
-                                <option key={mun} value={mun}>
-                                  {mun}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                          <div className="sm:col-span-5 space-y-1">
-                            <label
-                              htmlFor="reg-colonia-select"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Colonia / Asentamiento *
-                            </label>
-                            <select
-                              id="reg-colonia-select"
-                              value={coloniaModoManual ? '__OTRA__' : colonia}
-                              onChange={(e) => {
-                                if (e.target.value === '__OTRA__') {
-                                  setColoniaModoManual(true);
-                                  setColonia('');
-                                } else {
-                                  setColoniaModoManual(false);
-                                  setColonia(e.target.value);
-                                }
-                              }}
-                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            >
-                              {coloniasDisponibles.map((col) => (
-                                <option key={col} value={col}>
-                                  {col}
-                                </option>
-                              ))}
-                              <option value="__OTRA__">Otra colonia (escribir manualmente)...</option>
-                            </select>
-                            {coloniaModoManual && (
-                              <input
-                                id="reg-colonia"
-                                type="text"
-                                maxLength={60}
-                                value={colonia}
-                                onChange={(e) => setColonia(e.target.value)}
-                                onBlur={() => markTouched('colonia')}
-                                placeholder="Escribe tu colonia o fraccionamiento"
-                                className={fieldInputClass(
-                                  showFieldError('colonia', coloniaErr),
-                                  Boolean(colonia.trim() && !coloniaErr),
-                                  'mt-1.5 py-2'
-                                )}
-                              />
-                            )}
-                            {showFieldError('colonia', coloniaErr) && (
-                              <p className="text-[10.5px] text-red-600 font-semibold">{coloniaErr}</p>
-                            )}
-                          </div>
-
-                          <div className="sm:col-span-3 space-y-1">
-                            <label
-                              htmlFor="reg-tipo-vialidad"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Vialidad *
-                            </label>
-                            <select
-                              id="reg-tipo-vialidad"
-                              value={tipoVialidad}
-                              onChange={(e) => setTipoVialidad(e.target.value)}
-                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            >
-                              {TIPOS_VIALIDAD.map((v) => (
-                                <option key={v.clave} value={v.prefijo}>
-                                  {v.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-
-                          <div className="sm:col-span-4 space-y-1">
-                            <label
-                              htmlFor="reg-calle"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Nombre de Calle (3–80) *
-                            </label>
-                            <input
-                              id="reg-calle"
-                              type="text"
-                              maxLength={80}
-                              value={calle}
-                              onChange={(e) => setCalle(e.target.value)}
-                              onBlur={() => markTouched('calle')}
-                              placeholder="Paseo de la Reforma"
-                              className={fieldInputClass(
-                                showFieldError('calle', calleErr),
-                                Boolean(calle.trim() && !calleErr),
-                                'py-2'
-                              )}
-                            />
-                            {showFieldError('calle', calleErr) && (
-                              <p className="text-[10.5px] text-red-600 font-semibold">{calleErr}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between">
-                              <label
-                                htmlFor="reg-num-ext"
-                                className="text-[11px] font-bold text-slate-700"
-                              >
-                                Núm. Exterior *
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setNumeroExterior('S/N');
-                                  markTouched('numeroExterior');
-                                }}
-                                className="text-[10px] font-extrabold text-blue-700 hover:underline"
-                              >
-                                Usar S/N
-                              </button>
+                              <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                              <span>{rfcTakenMsg}</span>
                             </div>
-                            <input
-                              id="reg-num-ext"
-                              type="text"
-                              maxLength={10}
-                              value={numeroExterior}
-                              onChange={(e) => setNumeroExterior(e.target.value)}
-                              onBlur={() => markTouched('numeroExterior')}
-                              placeholder="222 o S/N"
-                              className={fieldInputClass(
-                                showFieldError('numeroExterior', numExtErr),
-                                Boolean(numeroExterior.trim() && !numExtErr),
-                                'py-2'
-                              )}
-                            />
-                            {showFieldError('numeroExterior', numExtErr) && (
-                              <p className="text-[10.5px] text-red-600 font-semibold">{numExtErr}</p>
-                            )}
-                          </div>
-
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-num-int"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Núm. Interior (opcional)
-                            </label>
-                            <input
-                              id="reg-num-int"
-                              type="text"
-                              maxLength={10}
-                              value={numeroInterior}
-                              onChange={(e) => setNumeroInterior(e.target.value)}
-                              onBlur={() => markTouched('numeroInterior')}
-                              placeholder="Ej. 4B"
-                              className={fieldInputClass(
-                                showFieldError('numeroInterior', numIntErr),
-                                Boolean(numeroInterior.trim() && !numIntErr),
-                                'py-2'
-                              )}
-                            />
-                            {showFieldError('numeroInterior', numIntErr) && (
-                              <p className="text-[10.5px] text-red-600 font-semibold">{numIntErr}</p>
-                            )}
-                          </div>
+                          ) : (
+                            showFieldError('rfc', rfcDiag, Boolean(rfc && rfc.length === 13)) && (
+                              <p className="text-[11px] text-red-600 font-semibold">{rfcDiag}</p>
+                            )
+                          )}
                         </div>
                       </div>
 
@@ -1673,6 +1660,407 @@ export const LoginPage: React.FC = () => {
                         </button>
                         <button
                           type="submit"
+                          disabled={isBusy}
+                          className="flex-1 py-2.5 px-4 bg-gradient-to-r from-blue-950 to-blue-700 hover:from-blue-900 hover:to-blue-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all disabled:opacity-60"
+                        >
+                          <span>Continuar a Ocupación e Ingresos</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PASO 3: OCUPACIÓN E INGRESOS */}
+                  {regStep === 3 && (
+                    <div className="space-y-3.5 animate-in fade-in">
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-2.5 text-xs text-slate-700">
+                        <Briefcase className="w-4 h-4 text-blue-800 shrink-0" />
+                        <span>
+                          Perfil económico normativo CNBV: selecciona tu ocupación oficial, tu profesión específica y tu rango de ingresos mensuales.
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-ocupacion"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Catálogo de Ocupación *
+                          </label>
+                          <select
+                            id="reg-ocupacion"
+                            value={ocupacion}
+                            onChange={(e) => handleOcupacionCatalogChange(e.target.value)}
+                            onBlur={() => markTouched('ocupacion')}
+                            className={fieldInputClass(
+                              showFieldError('ocupacion', ocupacionErr),
+                              Boolean(ocupacion.trim() && !ocupacionErr),
+                              'font-semibold'
+                            )}
+                          >
+                            <option value="">-- Selecciona una ocupación --</option>
+                            {CATALOGO_OCUPACIONES.map((oc) => (
+                              <option key={oc} value={oc}>
+                                {oc}
+                              </option>
+                            ))}
+                          </select>
+                          {showFieldError('ocupacion', ocupacionErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{ocupacionErr}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-profesion"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Tabulador de Profesión *
+                          </label>
+                          <select
+                            id="reg-profesion"
+                            value={profesion}
+                            onChange={(e) => handleProfesionChange(e.target.value)}
+                            onBlur={() => markTouched('profesion')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          >
+                            {Array.from(new Set(TABULADOR_PROFESIONES.map((p) => p.sector))).map(
+                              (sector) => (
+                                <optgroup key={sector} label={sector}>
+                                  {TABULADOR_PROFESIONES.filter((p) => p.sector === sector).map(
+                                    (prof) => (
+                                      <option key={prof.clave} value={prof.label}>
+                                        {prof.label}
+                                      </option>
+                                    )
+                                  )}
+                                </optgroup>
+                              )
+                            )}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-empresa"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Empresa / Institución / Actividad *
+                          </label>
+                          <input
+                            id="reg-empresa"
+                            type="text"
+                            maxLength={80}
+                            value={empresa}
+                            onChange={(e) => setEmpresa(e.target.value)}
+                            onBlur={() => markTouched('empresa')}
+                            placeholder="Ej. Grupo Bimbo, UNAM, Independiente..."
+                            className={fieldInputClass(
+                              showFieldError('empresa', empresaErr),
+                              Boolean(empresa.trim() && !empresaErr)
+                            )}
+                          />
+                          {showFieldError('empresa', empresaErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{empresaErr}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-ingreso"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Tabulador de Sueldo Mensual *
+                          </label>
+                          <select
+                            id="reg-ingreso"
+                            value={ingresoMensual}
+                            onChange={(e) => setIngresoMensual(e.target.value)}
+                            onBlur={() => markTouched('ingresoMensual')}
+                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          >
+                            {TABULADOR_SUELDOS.map((s) => (
+                              <option key={s.clave} value={String(s.montoRepresentativo)}>
+                                {s.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError(null);
+                            setRegStep(2);
+                          }}
+                          className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold inline-flex items-center gap-1.5"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                          <span>Anterior</span>
+                        </button>
+                        <button
+                          type="submit"
+                          className="flex-1 py-2.5 px-4 bg-gradient-to-r from-blue-950 to-blue-700 hover:from-blue-900 hover:to-blue-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
+                        >
+                          <span>Continuar a Domicilio</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PASO 4: DOMICILIO SEPOMEX */}
+                  {regStep === 4 && (
+                    <div className="space-y-3.5 animate-in fade-in">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-blue-700" />
+                          <span>Domicilio en México (Autocompletado por C.P. SEPOMEX)</span>
+                        </p>
+                        {cpLoading ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 inline-flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Consultando SEPOMEX...
+                          </span>
+                        ) : estadoDomicilioNombre && !cpDiag ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            ✓ C.P. {codigoPostal} · {estadoDomicilioNombre}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                        <div className="space-y-1">
+                          <label htmlFor="reg-cp" className="text-[11px] font-bold text-slate-700">
+                            Código Postal (5 díg) *
+                          </label>
+                          <input
+                            id="reg-cp"
+                            type="text"
+                            inputMode="numeric"
+                            maxLength={5}
+                            value={codigoPostal}
+                            onChange={(e) => handleCodigoPostalChange(e.target.value)}
+                            onBlur={() => markTouched('codigoPostal')}
+                            placeholder="Ej. 37800 o 06600"
+                            className={fieldInputClass(
+                              showFieldError('codigoPostal', cpDiag, codigoPostal.length === 5),
+                              Boolean(estadoDomicilioNombre && !cpDiag),
+                              'py-2 font-mono font-bold'
+                            )}
+                          />
+                          {showFieldError('codigoPostal', cpDiag, codigoPostal.length === 5) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{cpDiag}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-estado-dom"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Estado (Automático) *
+                          </label>
+                          <input
+                            id="reg-estado-dom"
+                            type="text"
+                            readOnly
+                            value={estadoDomicilioNombre}
+                            placeholder="Se llena con tu C.P."
+                            className="w-full px-2.5 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 cursor-not-allowed"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-municipio"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Municipio / Alcaldía (Auto) *
+                          </label>
+                          <input
+                            id="reg-municipio"
+                            type="text"
+                            readOnly
+                            value={municipio}
+                            placeholder="Se llena con tu C.P."
+                            className="w-full px-2.5 py-2 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 cursor-not-allowed"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                        <div className="sm:col-span-5 space-y-1">
+                          <label
+                            htmlFor="reg-colonia-select"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Colonia (Catálogo del C.P.) *
+                          </label>
+                          <select
+                            id="reg-colonia-select"
+                            disabled={coloniasDelCp.length === 0}
+                            value={colonia}
+                            onChange={(e) => {
+                              setColonia(e.target.value);
+                              markTouched('colonia');
+                            }}
+                            onBlur={() => markTouched('colonia')}
+                            className={fieldInputClass(
+                              showFieldError('colonia', coloniaErr),
+                              Boolean(colonia.trim() && !coloniaErr),
+                              'py-2 font-semibold disabled:opacity-60 disabled:cursor-not-allowed'
+                            )}
+                          >
+                            <option value="">
+                              {coloniasDelCp.length === 0
+                                ? 'Ingresa primero un C.P. válido...'
+                                : `-- Selecciona colonia (${coloniasDelCp.length}) --`}
+                            </option>
+                            {coloniasDelCp.map((col) => (
+                              <option key={col} value={col}>
+                                {col}
+                              </option>
+                            ))}
+                          </select>
+                          {showFieldError('colonia', coloniaErr) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{coloniaErr}</p>
+                          )}
+                        </div>
+
+                        <div className="sm:col-span-3 space-y-1">
+                          <label
+                            htmlFor="reg-tipo-vialidad"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Vialidad *
+                          </label>
+                          <select
+                            id="reg-tipo-vialidad"
+                            value={tipoVialidad}
+                            onChange={(e) => setTipoVialidad(e.target.value)}
+                            className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          >
+                            {TIPOS_VIALIDAD.map((v) => (
+                              <option key={v.clave} value={v.prefijo}>
+                                {v.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="sm:col-span-4 space-y-1">
+                          <label
+                            htmlFor="reg-calle"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Nombre de Calle (3–80) *
+                          </label>
+                          <input
+                            id="reg-calle"
+                            type="text"
+                            maxLength={80}
+                            value={calle}
+                            onChange={(e) => setCalle(e.target.value)}
+                            onBlur={() => markTouched('calle')}
+                            placeholder="Paseo de la Reforma"
+                            className={fieldInputClass(
+                              showFieldError('calle', calleErr),
+                              Boolean(calle.trim() && !calleErr),
+                              'py-2'
+                            )}
+                          />
+                          {showFieldError('calle', calleErr) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{calleErr}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <label
+                              htmlFor="reg-num-ext"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Núm. Exterior *
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNumeroExterior('S/N');
+                                markTouched('numeroExterior');
+                              }}
+                              className="text-[10px] font-extrabold text-blue-700 hover:underline"
+                            >
+                              Usar S/N
+                            </button>
+                          </div>
+                          <input
+                            id="reg-num-ext"
+                            type="text"
+                            maxLength={10}
+                            value={numeroExterior}
+                            onChange={(e) => setNumeroExterior(e.target.value)}
+                            onBlur={() => markTouched('numeroExterior')}
+                            placeholder="222 o S/N"
+                            className={fieldInputClass(
+                              showFieldError('numeroExterior', numExtErr),
+                              Boolean(numeroExterior.trim() && !numExtErr),
+                              'py-2'
+                            )}
+                          />
+                          {showFieldError('numeroExterior', numExtErr) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{numExtErr}</p>
+                          )}
+                        </div>
+
+                        <div className="space-y-1">
+                          <label
+                            htmlFor="reg-num-int"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Núm. Interior (opcional)
+                          </label>
+                          <input
+                            id="reg-num-int"
+                            type="text"
+                            maxLength={10}
+                            value={numeroInterior}
+                            onChange={(e) => setNumeroInterior(e.target.value)}
+                            onBlur={() => markTouched('numeroInterior')}
+                            placeholder="Ej. 4B"
+                            className={fieldInputClass(
+                              showFieldError('numeroInterior', numIntErr),
+                              Boolean(numeroInterior.trim() && !numIntErr),
+                              'py-2'
+                            )}
+                          />
+                          {showFieldError('numeroInterior', numIntErr) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{numIntErr}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setError(null);
+                            setRegStep(3);
+                          }}
+                          className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold inline-flex items-center gap-1.5"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                          <span>Anterior</span>
+                        </button>
+                        <button
+                          type="submit"
                           className="flex-1 py-2.5 px-4 bg-gradient-to-r from-blue-950 to-blue-700 hover:from-blue-900 hover:to-blue-600 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md flex items-center justify-center gap-2 transition-all"
                         >
                           <span>Continuar a Contacto y Acceso</span>
@@ -1682,32 +2070,76 @@ export const LoginPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* STEP 3: CONTACT & CREDENTIALS */}
-                  {regStep === 3 && (
+                  {/* PASO 5: CONTACTO Y ACCESO (CON VALIDACIÓN INMEDIATA DE CORREO/USUARIO DUPLICADO) */}
+                  {regStep === 5 && (
                     <div className="space-y-3.5 animate-in fade-in">
                       <div className="space-y-1">
-                        <label htmlFor="reg-correo" className="text-[11px] font-bold text-slate-700">
-                          Correo electrónico real (para 2FA y comprobantes) *
-                        </label>
+                        <div className="flex items-center justify-between gap-2">
+                          <label
+                            htmlFor="reg-correo"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Correo electrónico real *
+                          </label>
+                          {checkingCorreo && (
+                            <span className="text-[10px] font-semibold text-blue-700 inline-flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Verificando correo...
+                            </span>
+                          )}
+                        </div>
                         <div className="relative">
                           <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3 pointer-events-none" />
                           <input
                             id="reg-correo"
                             type="email"
                             value={correo}
-                            onChange={(e) => setCorreo(e.target.value)}
-                            onBlur={() => markTouched('correo')}
+                            onChange={(e) => {
+                              setCorreo(e.target.value);
+                              if (correoTakenMsg) setCorreoTakenMsg(null);
+                            }}
+                            onBlur={() => {
+                              markTouched('correo');
+                              const trimmed = correo.trim();
+                              if (trimmed && esCorreoValido(trimmed) && !esCorreoPlaceholder(trimmed)) {
+                                void checkContactAvailability({ correo: trimmed });
+                              }
+                            }}
+                            aria-invalid={
+                              Boolean(correoTakenMsg) || showFieldError('correo', correoFormatErr)
+                            }
                             placeholder="tucorreo@gmail.com"
                             className={fieldInputClass(
-                              showFieldError('correo', correoErr),
-                              Boolean(correoTrim && !correoErr),
+                              Boolean(correoTakenMsg) || showFieldError('correo', correoFormatErr),
+                              Boolean(correoTrim && !correoFormatErr && !correoTakenMsg),
                               'pl-9 pr-3'
                             )}
-                            disabled={isLoading}
+                            disabled={isBusy}
                           />
                         </div>
-                        {showFieldError('correo', correoErr) && (
-                          <p className="text-[11px] text-red-600 font-semibold">{correoErr}</p>
+                        {correoTakenMsg ? (
+                          <div
+                            role="alert"
+                            className="p-2.5 rounded-xl bg-red-50 border border-red-300 flex items-start justify-between gap-2 text-red-700 text-[11px]"
+                          >
+                            <div className="flex items-start gap-1.5">
+                              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                              <span className="font-bold leading-snug">{correoTakenMsg}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleModeChange('login')}
+                              className="text-[10.5px] font-extrabold underline text-red-800 hover:text-red-950 shrink-0"
+                            >
+                              Iniciar sesión
+                            </button>
+                          </div>
+                        ) : (
+                          showFieldError('correo', correoFormatErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">
+                              {correoFormatErr}
+                            </p>
+                          )
                         )}
                       </div>
 
@@ -1743,7 +2175,7 @@ export const LoginPage: React.FC = () => {
                                   ? 'border-red-400 focus:ring-red-400'
                                   : 'border-slate-200 focus:ring-blue-600'
                               }`}
-                              disabled={isLoading}
+                              disabled={isBusy}
                             />
                             {phoneOk && (
                               <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-2.5" />
@@ -1781,7 +2213,7 @@ export const LoginPage: React.FC = () => {
                               Boolean(telefonoAlternativo && !telAltErr),
                               'font-mono'
                             )}
-                            disabled={isLoading}
+                            disabled={isBusy}
                           />
                           {showFieldError('telefonoAlternativo', telAltErr) && (
                             <p className="text-[11px] text-red-600 font-semibold">{telAltErr}</p>
@@ -1790,26 +2222,63 @@ export const LoginPage: React.FC = () => {
                       </div>
 
                       <div className="space-y-1">
-                        <label htmlFor="reg-usuario" className="text-[11px] font-bold text-slate-700">
-                          Usuario (4–50 caracteres) *
-                        </label>
+                        <div className="flex items-center justify-between gap-2">
+                          <label
+                            htmlFor="reg-usuario"
+                            className="text-[11px] font-bold text-slate-700"
+                          >
+                            Usuario (4–50 caracteres) *
+                          </label>
+                          {checkingUsuario && (
+                            <span className="text-[10px] font-semibold text-blue-700 inline-flex items-center gap-1">
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                              Verificando usuario...
+                            </span>
+                          )}
+                        </div>
                         <input
                           id="reg-usuario"
                           type="text"
                           maxLength={50}
                           value={regUsuario}
-                          onChange={(e) => setRegUsuario(e.target.value)}
-                          onBlur={() => markTouched('regUsuario')}
+                          onChange={(e) => {
+                            setRegUsuario(e.target.value);
+                            if (usuarioTakenMsg) setUsuarioTakenMsg(null);
+                          }}
+                          onBlur={() => {
+                            markTouched('regUsuario');
+                            const trimmedUsr = regUsuario.trim();
+                            if (trimmedUsr && esUsuarioValido(trimmedUsr)) {
+                              void checkContactAvailability({ usuario: trimmedUsr });
+                            }
+                          }}
+                          aria-invalid={
+                            Boolean(usuarioTakenMsg) ||
+                            showFieldError('regUsuario', regUsuarioFormatErr)
+                          }
                           placeholder="min. 4 caracteres (letras, números, ._-)"
                           className={fieldInputClass(
-                            showFieldError('regUsuario', regUsuarioErr),
-                            Boolean(regUsuario.trim() && !regUsuarioErr),
+                            Boolean(usuarioTakenMsg) ||
+                              showFieldError('regUsuario', regUsuarioFormatErr),
+                            Boolean(regUsuario.trim() && !regUsuarioFormatErr && !usuarioTakenMsg),
                             'font-mono'
                           )}
-                          disabled={isLoading}
+                          disabled={isBusy}
                         />
-                        {showFieldError('regUsuario', regUsuarioErr) && (
-                          <p className="text-[11px] text-red-600 font-semibold">{regUsuarioErr}</p>
+                        {usuarioTakenMsg ? (
+                          <div
+                            role="alert"
+                            className="p-2 rounded-xl bg-red-50 border border-red-300 flex items-start gap-1.5 text-red-700 text-[11px] font-bold"
+                          >
+                            <AlertCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                            <span>{usuarioTakenMsg}</span>
+                          </div>
+                        ) : (
+                          showFieldError('regUsuario', regUsuarioFormatErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">
+                              {regUsuarioFormatErr}
+                            </p>
+                          )
                         )}
                       </div>
 
@@ -1834,12 +2303,14 @@ export const LoginPage: React.FC = () => {
                                 Boolean(regContrasena && !regContrasenaErr),
                                 'pl-3 pr-9'
                               )}
-                              disabled={isLoading}
+                              disabled={isBusy}
                             />
                             <button
                               type="button"
                               onClick={() => setShowRegPassword(!showRegPassword)}
-                              aria-label={showRegPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                              aria-label={
+                                showRegPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                              }
                               className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600"
                               tabIndex={-1}
                             >
@@ -1851,7 +2322,9 @@ export const LoginPage: React.FC = () => {
                             </button>
                           </div>
                           {showFieldError('regContrasena', regContrasenaErr) && (
-                            <p className="text-[10.5px] text-red-600 font-semibold">{regContrasenaErr}</p>
+                            <p className="text-[10.5px] text-red-600 font-semibold">
+                              {regContrasenaErr}
+                            </p>
                           )}
                         </div>
                         <div className="space-y-1">
@@ -1872,7 +2345,7 @@ export const LoginPage: React.FC = () => {
                               showFieldError('confirmarContrasena', confirmarContrasenaErr),
                               Boolean(confirmarContrasena && !confirmarContrasenaErr)
                             )}
-                            disabled={isLoading}
+                            disabled={isBusy}
                           />
                           {showFieldError('confirmarContrasena', confirmarContrasenaErr) && (
                             <p className="text-[10.5px] text-red-600 font-semibold">
@@ -1923,10 +2396,10 @@ export const LoginPage: React.FC = () => {
                       <div className="flex items-center justify-between gap-3 pt-1">
                         <button
                           type="button"
-                          disabled={isLoading}
+                          disabled={isBusy}
                           onClick={() => {
                             setError(null);
-                            setRegStep(2);
+                            setRegStep(4);
                           }}
                           className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
                         >
@@ -1935,18 +2408,22 @@ export const LoginPage: React.FC = () => {
                         </button>
                         <button
                           type="submit"
-                          disabled={isLoading}
+                          disabled={
+                            isBusy ||
+                            Boolean(correoTakenMsg) ||
+                            Boolean(usuarioTakenMsg)
+                          }
                           className="flex-1 py-3 px-4 bg-gradient-to-r from-emerald-700 to-teal-600 hover:from-emerald-600 hover:to-teal-500 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 transition-all disabled:opacity-60"
                         >
-                          {isLoading ? (
+                          {totpSetupLoading ? (
                             <>
                               <Loader2 className="w-4 h-4 animate-spin" />
-                              <span>Enviando código 2FA...</span>
+                              <span>Configurando Google Authenticator...</span>
                             </>
                           ) : (
                             <>
-                              <Mail className="w-4 h-4" />
-                              <span>Enviar Código 2FA al Correo</span>
+                              <Smartphone className="w-4 h-4" />
+                              <span>Continuar a Google Authenticator</span>
                             </>
                           )}
                         </button>
@@ -1954,11 +2431,11 @@ export const LoginPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* STEP 4: 2FA EMAIL OTP VERIFICATION + DOSSIER SUMMARY */}
-                  {regStep === 4 && (
+                  {/* PASO 6: AUTENTICADOR DE GOOGLE (TOTP 30s) */}
+                  {regStep === 6 && totpSetup && (
                     <div className="space-y-4 animate-in fade-in">
                       {/* Executive KYC Dossier Summary */}
-                      <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
+                      <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
                         <div>
                           <span className="text-slate-400 font-bold block">Titular</span>
                           <span className="font-extrabold text-slate-900 truncate block">
@@ -1969,75 +2446,42 @@ export const LoginPage: React.FC = () => {
                         </div>
                         <div>
                           <span className="text-slate-400 font-bold block">CURP</span>
-                          <span className="font-mono font-bold text-blue-900">{curp}</span>
+                          <span className="font-mono font-bold text-blue-900 truncate block">
+                            {curp}
+                          </span>
                         </div>
                         <div>
                           <span className="text-slate-400 font-bold block">RFC</span>
-                          <span className="font-mono font-bold text-blue-900">{rfc}</span>
-                        </div>
-                      </div>
-
-                      <div className="p-3.5 rounded-2xl bg-blue-50 border border-blue-200 space-y-2">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-start gap-2.5">
-                            <Mail className="w-4 h-4 text-blue-700 shrink-0 mt-0.5" />
-                            <div className="text-xs text-blue-950">
-                              <p className="font-bold">Código 2FA enviado a:</p>
-                              <p className="font-mono font-semibold text-blue-700 break-all">
-                                {otpSentTo || correo.trim()}
-                              </p>
-                            </div>
-                          </div>
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold shrink-0 ${
-                              otpCountdown > 0
-                                ? 'bg-white text-blue-800 border border-blue-200'
-                                : 'bg-amber-100 text-amber-800 border border-amber-300'
-                            }`}
-                          >
-                            <Clock className="w-3 h-3" />
-                            {otpCountdown > 0 ? formatCountdown(otpCountdown) : 'Expirado'}
+                          <span className="font-mono font-bold text-blue-900 truncate block">
+                            {rfc}
                           </span>
                         </div>
-                        <p className="text-[11px] text-blue-800/80">
-                          Revisa tu bandeja de entrada o carpeta de spam. Nunca compartas este código.
-                        </p>
+                        <div>
+                          <span className="text-slate-400 font-bold block">Ocupación</span>
+                          <span className="font-bold text-slate-800 truncate block">
+                            {ocupacion}
+                          </span>
+                        </div>
                       </div>
 
-                      {otpFeedback && (
+                      {totpFeedback && (
                         <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center gap-2 text-emerald-800 text-xs font-medium">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>{otpFeedback}</span>
+                          <span>{totpFeedback}</span>
                         </div>
                       )}
 
-                      <div className="space-y-1.5">
-                        <label
-                          htmlFor="reg-codigo-2fa"
-                          className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5"
-                        >
-                          <KeyRound className="w-3.5 h-3.5 text-blue-700" />
-                          <span>Código de verificación (6 dígitos) *</span>
-                        </label>
-                        <input
-                          id="reg-codigo-2fa"
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          value={codigoVerificacion}
-                          onChange={(e) =>
-                            setCodigoVerificacion(e.target.value.replace(/\D/g, '').slice(0, 6))
-                          }
-                          placeholder="000000"
-                          autoComplete="one-time-code"
-                          className="w-full px-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-center text-xl font-mono font-extrabold tracking-[0.45em] text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white transition-all"
-                          disabled={isLoading}
-                        />
-                      </div>
+                      <TotpSetupCard
+                        totpSetup={totpSetup}
+                        codigo={codigoTotp}
+                        onCodigoChange={setCodigoTotp}
+                        inputId="reg-codigo-totp"
+                        disabled={isBusy}
+                      />
 
                       <button
                         type="submit"
-                        disabled={isLoading || codigoVerificacion.length < 6}
+                        disabled={isBusy || codigoTotp.length < 6}
                         className="w-full py-3 bg-gradient-to-r from-emerald-700 to-teal-600 hover:from-emerald-600 hover:to-teal-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-emerald-900/20 flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-60"
                       >
                         {isLoading ? (
@@ -2056,12 +2500,12 @@ export const LoginPage: React.FC = () => {
                       <div className="flex items-center justify-between gap-2 pt-1">
                         <button
                           type="button"
-                          disabled={isLoading}
+                          disabled={isBusy}
                           onClick={() => {
-                            setRegStep(3);
-                            setCodigoVerificacion('');
+                            setRegStep(5);
+                            setCodigoTotp('');
                             setError(null);
-                            setOtpFeedback(null);
+                            setTotpFeedback(null);
                           }}
                           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors disabled:opacity-50"
                         >
@@ -2070,12 +2514,12 @@ export const LoginPage: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          disabled={isLoading}
-                          onClick={() => void handleSendRegCode(true)}
+                          disabled={isBusy}
+                          onClick={() => void handleProceedToTotp(true)}
                           className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-blue-700 hover:text-blue-900 hover:bg-blue-50 rounded-xl transition-colors disabled:opacity-50"
                         >
                           <RefreshCw className="w-3.5 h-3.5" />
-                          <span>Reenviar código</span>
+                          <span>Regenerar QR</span>
                         </button>
                       </div>
                     </div>
@@ -2091,8 +2535,8 @@ export const LoginPage: React.FC = () => {
                 <p className="text-[10px] text-slate-500">CURP &amp; RFC</p>
               </div>
               <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                <p className="text-[10px] font-extrabold text-slate-700">2FA por Correo</p>
-                <p className="text-[10px] text-slate-500">Token OTP 5 min</p>
+                <p className="text-[10px] font-extrabold text-slate-700">Google Auth</p>
+                <p className="text-[10px] text-slate-500">TOTP cada 30s</p>
               </div>
               <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
                 <p className="text-[10px] font-extrabold text-slate-700">GestoPago</p>
@@ -2104,7 +2548,7 @@ export const LoginPage: React.FC = () => {
       </div>
 
       <p className="text-center text-[11px] text-blue-200/55 pt-4 z-10">
-        Protegido con cifrado BCrypt de grado bancario, expediente KYC RENAPO/SAT, validación IFT y verificación en dos pasos (2FA)
+        Protegido con cifrado BCrypt de grado bancario, expediente KYC RENAPO/SAT, validación IFT y autenticador dinámico TOTP (2FA)
       </p>
     </div>
   );

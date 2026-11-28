@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -10,6 +11,7 @@ import '../utils/validation_utils.dart';
 import '../widgets/brand_avatar.dart';
 import '../widgets/profile_sheet.dart';
 import '../widgets/receipt_dialog.dart';
+import '../widgets/totp_widgets.dart';
 
 class PaymentFlowDialog extends StatefulWidget {
   final ProductItem product;
@@ -48,6 +50,8 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
   final _otpController = TextEditingController();
   bool _confirmed = false;
   bool _phoneValidateAttempted = false;
+  Timer? _totpTickTimer;
+  int _totpWindowSeconds = TotpUtils.secondsRemainingInWindow();
 
   bool get _isFixedPrice => widget.product.frontType == '1' && widget.product.price > 0;
 
@@ -60,10 +64,22 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
     if (_isFixedPrice) {
       _montoController.text = widget.product.price.toStringAsFixed(2);
     }
+
+    _totpTickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      final p = Provider.of<PaymentProvider>(context, listen: false);
+      if (_currentStep == 2 && p.twoFAResponse?.isTotp == true) {
+        final period = p.twoFAResponse?.periodoTotpSegundos ?? 30;
+        setState(() {
+          _totpWindowSeconds = TotpUtils.secondsRemainingInWindow(periodSeconds: period);
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _totpTickTimer?.cancel();
     _referenceController.dispose();
     _phoneController.dispose();
     _montoController.dispose();
@@ -696,14 +712,16 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Row(
+                        Row(
                           children: [
-                            Icon(Icons.account_balance_wallet_outlined, color: AppTheme.errorRed, size: 18),
-                            SizedBox(width: 8),
+                            const Icon(Icons.account_balance_wallet_outlined, color: AppTheme.errorRed, size: 18),
+                            const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                'Saldo insuficiente para completar este pago.',
-                                style: TextStyle(
+                                (session?.esAdmin == true || session?.usuario.toLowerCase() == 'admin')
+                                    ? 'Saldo insuficiente para completar este pago.'
+                                    : 'Saldo insuficiente. Solicita a un Administrador (@admin) ingresar dinero a tu cuenta.',
+                                style: const TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.bold,
                                   color: AppTheme.errorRed,
@@ -712,20 +730,22 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: OutlinedButton.icon(
-                            onPressed: _openAbonarSheet,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.errorRed,
-                              side: const BorderSide(color: AppTheme.errorRed),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        if (session?.esAdmin == true || session?.usuario.toLowerCase() == 'admin') ...[
+                          const SizedBox(height: 8),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: OutlinedButton.icon(
+                              onPressed: _openAbonarSheet,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppTheme.errorRed,
+                                side: const BorderSide(color: AppTheme.errorRed),
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              ),
+                              icon: const Icon(Icons.add_card_rounded, size: 16),
+                              label: const Text('Abonar Saldo', style: TextStyle(fontSize: 12)),
                             ),
-                            icon: const Icon(Icons.add_card_rounded, size: 16),
-                            label: const Text('Abonar Saldo', style: TextStyle(fontSize: 12)),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -733,167 +753,267 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
 
                 const SizedBox(height: 16),
 
-                // 2FA OTP Card
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.secondaryBlue.withValues(alpha: 0.06),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.secondaryBlue.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Row(
-                              children: [
-                                Icon(Icons.security_rounded, color: AppTheme.brandAccent(context), size: 18),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    'Autorización 2FA Requerida',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: AppTheme.brandAccent(context),
+                // 2FA OTP / Google Authenticator Card
+                Builder(
+                  builder: (context) {
+                    final isTotp = payment.twoFAResponse?.isTotp == true;
+                    final totpPeriod = payment.twoFAResponse?.periodoTotpSegundos ?? 30;
+                    final safeTotpPeriod = totpPeriod > 0 ? totpPeriod : 30;
+                    final totpLeft = _totpWindowSeconds.clamp(1, safeTotpPeriod);
+                    final isTotpEndingSoon = totpLeft <= 6;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: (isTotp ? AppTheme.accentEmerald : AppTheme.secondaryBlue)
+                                .withValues(alpha: 0.07),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: (isTotp ? AppTheme.accentEmerald : AppTheme.secondaryBlue)
+                                  .withValues(alpha: 0.28),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          isTotp
+                                              ? Icons.phonelink_lock_rounded
+                                              : Icons.security_rounded,
+                                          color: isTotp
+                                              ? AppTheme.accentEmerald
+                                              : AppTheme.brandAccent(context),
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            isTotp
+                                                ? 'Google Authenticator (${safeTotpPeriod}s)'
+                                                : 'Autorización 2FA Requerida',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 13,
+                                              color: isTotp
+                                                  ? AppTheme.accentEmerald
+                                                  : AppTheme.brandAccent(context),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (isTotp)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: (isTotpEndingSoon
+                                                ? AppTheme.warningAmber
+                                                : AppTheme.accentEmerald)
+                                            .withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.autorenew_rounded,
+                                            size: 13,
+                                            color: isTotpEndingSoon
+                                                ? AppTheme.warningAmber
+                                                : AppTheme.accentEmerald,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${totpLeft}s / ${safeTotpPeriod}s',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontFamily: 'monospace',
+                                              fontWeight: FontWeight.bold,
+                                              color: isTotpEndingSoon
+                                                  ? AppTheme.warningAmber
+                                                  : AppTheme.accentEmerald,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  else
+                                    ValueListenableBuilder<int>(
+                                      valueListenable: payment.twoFASecondsNotifier,
+                                      builder: (context, secsLeft, _) {
+                                        final isUrgent = secsLeft <= 60;
+                                        return Container(
+                                          padding:
+                                              const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: isUrgent
+                                                ? AppTheme.errorRed.withValues(alpha: 0.15)
+                                                : AppTheme.secondaryBlue.withValues(alpha: 0.15),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.timer_outlined,
+                                                size: 13,
+                                                color: isUrgent
+                                                    ? AppTheme.errorRed
+                                                    : AppTheme.secondaryBlue,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _format2FA(secsLeft),
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: isUrgent
+                                                      ? AppTheme.errorRed
+                                                      : AppTheme.secondaryBlue,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                ],
+                              ),
+                              if (payment.isGenerating2FA) ...[
+                                const SizedBox(height: 10),
+                                const LinearProgressIndicator(minHeight: 2),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Verificando método de seguridad 2FA...',
+                                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                ),
+                              ],
+                              if (isTotp && !payment.isGenerating2FA) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Abre tu app Google Authenticator e ingresa el código dinámico actual de 6 dígitos para Banco Digital (se renueva cada ${safeTotpPeriod}s).',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.35,
+                                    color: AppTheme.textPrimary(context),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: LinearProgressIndicator(
+                                    value: totpLeft / safeTotpPeriod,
+                                    minHeight: 4,
+                                    backgroundColor: AppTheme.borderCol(context),
+                                    color: isTotpEndingSoon
+                                        ? AppTheme.warningAmber
+                                        : AppTheme.accentEmerald,
+                                  ),
+                                ),
+                              ],
+                              if (!isTotp &&
+                                  payment.twoFAResponse != null &&
+                                  !payment.isGenerating2FA) ...[
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: (payment.twoFAResponse!.correoEnviado == true)
+                                        ? AppTheme.accentEmerald.withValues(alpha: 0.1)
+                                        : Colors.amber.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: (payment.twoFAResponse!.correoEnviado == true)
+                                          ? AppTheme.accentEmerald.withValues(alpha: 0.4)
+                                          : Colors.amber.shade700.withValues(alpha: 0.45),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        payment.twoFAResponse!.correoEnviado == true
+                                            ? Icons.mark_email_read_outlined
+                                            : Icons.mark_email_unread_outlined,
+                                        size: 17,
+                                        color: payment.twoFAResponse!.correoEnviado == true
+                                            ? AppTheme.accentEmerald
+                                            : Colors.amber.shade800,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          payment.twoFAResponse!.correoEnviado == true
+                                              ? 'Código enviado a ${payment.twoFAResponse!.correoDestino ?? session?.email ?? 'tu correo'}. Revisa tu bandeja o spam.'
+                                              : (payment.twoFAResponse!.mensajeCorreo ??
+                                                  'No se pudo enviar el código a tu correo registrado. Verifica tu email en Mi Perfil.'),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            color: payment.twoFAResponse!.correoEnviado == true
+                                                ? AppTheme.accentEmerald
+                                                : Colors.amber.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: (payment.isGenerating2FA || payment.isPaying)
+                                        ? null
+                                        : _resend2FA,
+                                    icon: const Icon(Icons.refresh_rounded, size: 16),
+                                    label: const Text(
+                                      'Reenviar código 2FA',
+                                      style: TextStyle(fontSize: 12),
                                     ),
                                   ),
                                 ),
                               ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ValueListenableBuilder<int>(
-                            valueListenable: payment.twoFASecondsNotifier,
-                            builder: (context, secsLeft, _) {
-                              final isUrgent = secsLeft <= 60;
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: isUrgent
-                                      ? AppTheme.errorRed.withValues(alpha: 0.15)
-                                      : AppTheme.secondaryBlue.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.timer_outlined,
-                                      size: 13,
-                                      color: isUrgent ? AppTheme.errorRed : AppTheme.secondaryBlue,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      _format2FA(secsLeft),
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: isUrgent ? AppTheme.errorRed : AppTheme.secondaryBlue,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-
-                      if (payment.isGenerating2FA) ...[
-                        const SizedBox(height: 10),
-                        const LinearProgressIndicator(minHeight: 2),
-                        const SizedBox(height: 6),
-                        const Text(
-                          'Generando y enviando código 2FA...',
-                          style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                        ),
-                      ],
-
-                      if (payment.twoFAResponse != null && !payment.isGenerating2FA) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: (payment.twoFAResponse!.correoEnviado == true)
-                                ? AppTheme.accentEmerald.withValues(alpha: 0.1)
-                                : Colors.amber.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: (payment.twoFAResponse!.correoEnviado == true)
-                                  ? AppTheme.accentEmerald.withValues(alpha: 0.4)
-                                  : Colors.amber.shade700.withValues(alpha: 0.45),
-                            ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                payment.twoFAResponse!.correoEnviado == true
-                                    ? Icons.mark_email_read_outlined
-                                    : Icons.mark_email_unread_outlined,
-                                size: 17,
-                                color: payment.twoFAResponse!.correoEnviado == true
-                                    ? AppTheme.accentEmerald
-                                    : Colors.amber.shade800,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  payment.twoFAResponse!.correoEnviado == true
-                                      ? 'Código enviado a ${payment.twoFAResponse!.correoDestino ?? session?.email ?? 'tu correo'}. Revisa tu bandeja o spam.'
-                                      : (payment.twoFAResponse!.mensajeCorreo ??
-                                          'No se pudo enviar el código a tu correo registrado. Verifica tu email en Mi Perfil.'),
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: payment.twoFAResponse!.correoEnviado == true
-                                        ? AppTheme.accentEmerald
-                                        : Colors.amber.shade900,
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
                         ),
-                      ],
-
-                      const SizedBox(height: 8),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          onPressed: (payment.isGenerating2FA || payment.isPaying)
-                              ? null
-                              : _resend2FA,
-                          icon: const Icon(Icons.refresh_rounded, size: 16),
-                          label: const Text('Reenviar código 2FA', style: TextStyle(fontSize: 12)),
+                        const SizedBox(height: 16),
+                        TextField(
+                          controller: _otpController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
+                          onChanged: (val) {
+                            Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
+                            payment.setEnteredOtp(val);
+                          },
+                          decoration: InputDecoration(
+                            labelText: isTotp
+                                ? 'Código de Google Authenticator (6 dígitos)'
+                                : 'Ingresa el código 2FA (6 dígitos)',
+                            hintText: '123456',
+                            prefixIcon: Icon(
+                              isTotp ? Icons.phonelink_lock_rounded : Icons.pin_rounded,
+                              color: AppTheme.textSecondary(context),
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 16),
-
-                TextField(
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(6),
-                  ],
-                  onChanged: (val) {
-                    Provider.of<AuthProvider>(context, listen: false).recordUserActivity();
-                    payment.setEnteredOtp(val);
+                      ],
+                    );
                   },
-                  decoration: InputDecoration(
-                    labelText: 'Ingresa el código 2FA (6 dígitos)',
-                    hintText: '123456',
-                    prefixIcon: Icon(Icons.pin_rounded, color: AppTheme.textSecondary(context)),
-                  ),
                 ),
 
                 const SizedBox(height: 10),
@@ -953,10 +1073,11 @@ class _PaymentFlowDialogState extends State<PaymentFlowDialog> {
                       child: ValueListenableBuilder<int>(
                         valueListenable: payment.twoFASecondsNotifier,
                         builder: (context, secsLeft, _) {
+                          final isTotp = payment.twoFAResponse?.isTotp == true;
                           final disabled = payment.isPaying ||
                               payment.isGenerating2FA ||
                               insufficientBalance ||
-                              secsLeft <= 0 ||
+                              (!isTotp && secsLeft <= 0) ||
                               payment.enteredOtp.length != 6 ||
                               !_confirmed;
                           return ElevatedButton(

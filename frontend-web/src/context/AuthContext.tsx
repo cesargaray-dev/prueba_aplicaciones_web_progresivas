@@ -15,7 +15,7 @@ import { getAuthToken, setAuthToken, setOnUnauthorizedHandler } from '../api/cli
 import { AuthContext } from './authContextInstance';
 
 const INACTIVITY_TIMEOUT_SECONDS = 300; // 5 minutes
-const SESSION_POLL_INTERVAL_MS = 10_000; // 10 seconds (does not extend inactivity TTL)
+const SESSION_POLL_INTERVAL_MS = 3_500; // 3.5 seconds strict multi-device session watchdog (does not extend inactivity TTL)
 const KEEP_ALIVE_THROTTLE_MS = 60_000; // Refresca TTL en backend máx. 1 vez por minuto si hay actividad real
 
 const profileToLoginResponse = (profile: UserProfile, token: string): LoginResponse => ({
@@ -37,6 +37,7 @@ const profileToLoginResponse = (profile: UserProfile, token: string): LoginRespo
   nacionalidad: profile.nacionalidad,
   estadoCivil: profile.estadoCivil,
   ocupacion: profile.ocupacion,
+  profesion: profile.profesion,
   empresa: profile.empresa,
   ingresoMensual: profile.ingresoMensual,
   calle: profile.calle,
@@ -52,6 +53,7 @@ const profileToLoginResponse = (profile: UserProfile, token: string): LoginRespo
   ultimoAcceso: profile.ultimoAcceso,
   esAdmin: profile.esAdmin ?? profile.usuario?.toLowerCase() === 'admin',
   rol: profile.rol ?? (profile.usuario?.toLowerCase() === 'admin' ? 'ADMIN' : 'CLIENTE'),
+  totpHabilitado: profile.totpHabilitado,
 });
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -101,6 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         nacionalidad: profile.nacionalidad ?? prev.nacionalidad,
         estadoCivil: profile.estadoCivil ?? prev.estadoCivil,
         ocupacion: profile.ocupacion ?? prev.ocupacion,
+        profesion: profile.profesion ?? prev.profesion,
         empresa: profile.empresa ?? prev.empresa,
         ingresoMensual: profile.ingresoMensual ?? prev.ingresoMensual,
         calle: profile.calle ?? prev.calle,
@@ -119,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         ultimoAcceso: profile.ultimoAcceso ?? prev.ultimoAcceso,
         esAdmin: profile.esAdmin ?? prev.esAdmin ?? profile.usuario?.toLowerCase() === 'admin',
         rol: profile.rol ?? prev.rol,
+        totpHabilitado: profile.totpHabilitado ?? prev.totpHabilitado,
       };
     });
   }, []);
@@ -363,12 +367,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
     };
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        verifySession();
+      }
+    };
+
     const pollInterval = setInterval(verifySession, SESSION_POLL_INTERVAL_MS);
     window.addEventListener('focus', verifySession);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('focus', verifySession);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isAuthenticated]);
 

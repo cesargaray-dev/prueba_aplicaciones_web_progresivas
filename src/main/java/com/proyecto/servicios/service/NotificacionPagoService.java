@@ -43,6 +43,14 @@ public interface NotificacionPagoService {
     }
 
     /**
+     * Obtiene el número de cuenta propietario de un folio (tanto de pagos exitosos como de tickets de intento).
+     */
+    default String obtenerCuentaPropietariaPorFolio(String folioTicket) {
+        PagoServicio p = obtenerPagoPorFolio(folioTicket);
+        return p != null ? p.getNumeroCuenta() : null;
+    }
+
+    /**
      * Genera los bytes de un documento PDF oficial (%PDF-1.4) para el folio indicado.
      */
     default byte[] generarComprobantePdf(String folioTicket) {

@@ -22,6 +22,7 @@ export interface LoginResponse {
   nacionalidad?: string;
   estadoCivil?: string;
   ocupacion?: string;
+  profesion?: string;
   empresa?: string;
   ingresoMensual?: number;
   calle?: string;
@@ -37,6 +38,7 @@ export interface LoginResponse {
   ultimoAcceso?: string;
   esAdmin?: boolean;
   rol?: string;
+  totpHabilitado?: boolean;
   sesionPreviaCerrada?: boolean;
   avisoSesion?: string;
 }
@@ -56,6 +58,7 @@ export interface RegisterRequest {
   telefonoMovil: string;
   telefonoAlternativo?: string;
   ocupacion?: string;
+  profesion?: string;
   empresa?: string;
   ingresoMensual?: number;
   calle?: string;
@@ -69,6 +72,49 @@ export interface RegisterRequest {
   usuario: string;
   contrasena: string;
   codigoVerificacion?: string;
+  totpSecret?: string;
+  codigoTotp?: string;
+}
+
+export interface DisponibilidadRegistroParams {
+  correo?: string;
+  usuario?: string;
+  curp?: string;
+  rfc?: string;
+}
+
+export interface DisponibilidadRegistroResponse {
+  correoDisponible?: boolean;
+  usuarioDisponible?: boolean;
+  curpDisponible?: boolean;
+  rfcDisponible?: boolean;
+  mensajes?: {
+    correo?: string;
+    usuario?: string;
+    curp?: string;
+    rfc?: string;
+  };
+}
+
+export interface RegisterTotpRequest {
+  correo: string;
+  usuario: string;
+}
+
+export interface TotpSetupResponse {
+  secret: string;
+  secretFormateado: string;
+  otpauthUri: string;
+  qrPngBase64: string;
+  emisor: string;
+  cuenta: string;
+  digitos: number;
+  periodoSegundos: number;
+}
+
+export interface TotpEstadoResponse {
+  totpHabilitado: boolean;
+  mensaje: string;
 }
 
 export interface EnviarCodigoRegistroRequest {
@@ -137,6 +183,7 @@ export interface UserProfile {
   nacionalidad?: string;
   estadoCivil?: string;
   ocupacion?: string;
+  profesion?: string;
   empresa?: string;
   ingresoMensual?: number;
   calle?: string;
@@ -154,6 +201,7 @@ export interface UserProfile {
   activo?: boolean;
   esAdmin?: boolean;
   rol?: string;
+  totpHabilitado?: boolean;
   sesionPreviaCerrada?: boolean;
   avisoSesion?: string;
 }

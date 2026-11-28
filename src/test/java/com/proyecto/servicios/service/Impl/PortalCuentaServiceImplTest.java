@@ -118,7 +118,7 @@ class PortalCuentaServiceImplTest {
         assertEquals("tok-123", resp.getToken());
         assertEquals("5512345678", resp.getTelefonoMovil());
         verify(clienteRepository).save(any(Cliente.class));
-        verify(comprobanteEmailService).enviarCorreoBienvenida(any(), any(), eq("nuevo_user"), eq(new BigDecimal("200.00")));
+        verify(comprobanteEmailService).enviarCorreoBienvenida(any(), any(), eq("nuevo_user"), eq(new BigDecimal("0.00")));
     }
 
     @Test
@@ -213,9 +213,20 @@ class PortalCuentaServiceImplTest {
     }
 
     @Test
-    void abonarSaldo_incrementaSaldoConBloqueoPesimista() {
+    void abonarSaldo_incrementaSaldoConBloqueoPesimistaSoloAdmin() {
+        UserProfileDTO perfilCliente = UserProfileDTO.builder()
+                .clienteId(11L)
+                .usuario("cliente_regular")
+                .numeroCuenta("5225253189113705")
+                .saldo(BigDecimal.ZERO)
+                .build();
+        when(authService.obtenerPerfilAutenticado("Bearer cli", null)).thenReturn(perfilCliente);
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () ->
+                service.abonarSaldo("Bearer cli", null, new AbonoSaldoRequestDTO(new BigDecimal("100.00"), "Auto")));
+
         UserProfileDTO perfil = UserProfileDTO.builder()
                 .clienteId(10L)
+                .usuario("admin")
                 .numeroCuenta("5225253189113705")
                 .saldo(new BigDecimal("100.00"))
                 .build();
@@ -258,7 +269,7 @@ class PortalCuentaServiceImplTest {
         assertThrows(ValidacionException.class, () ->
                 service.abonarSaldo("Bearer t", null, new AbonoSaldoRequestDTO(BigDecimal.ZERO, "Invalid")));
 
-        UserProfileDTO perfil = UserProfileDTO.builder().numeroCuenta("9999999999999999").build();
+        UserProfileDTO perfil = UserProfileDTO.builder().usuario("admin").numeroCuenta("9999999999999999").build();
         when(authService.obtenerPerfilAutenticado("Bearer t", null)).thenReturn(perfil);
         when(cuentaRepository.findByNumeroCuentaForUpdate("9999999999999999")).thenReturn(Optional.empty());
         assertThrows(CuentaNoEncontradaException.class, () ->
@@ -542,6 +553,59 @@ class PortalCuentaServiceImplTest {
             public LoginResponseDTO enriquecerLoginConTelefono(LoginResponseDTO r) { return null; }
         };
         assertThrows(UnsupportedOperationException.class, () -> stub.cambiarContrasena("Bearer t", null, null));
+    }
+
+    @Test
+    void verificarDisponibilidadYRegistroConGoogleAuthenticatorTotp() {
+        when(clienteRepository.existsByCorreo("usado@gmail.com")).thenReturn(true);
+        when(clienteRepository.existsByCorreo("libre@gmail.com")).thenReturn(false);
+        when(clienteRepository.existsByCorreoIgnoreCase("libre@gmail.com")).thenReturn(false);
+
+        var dispUsado = service.verificarDisponibilidadRegistro("usado@gmail.com", null, null, null);
+        assertEquals(Boolean.FALSE, dispUsado.getCorreoDisponible());
+        assertTrue(dispUsado.getMensajes().get("correo").contains("ya está en uso"));
+
+        var dispLibre = service.verificarDisponibilidadRegistro("libre@gmail.com", "usuario_libre", null, null);
+        assertEquals(Boolean.TRUE, dispLibre.getCorreoDisponible());
+        assertEquals(Boolean.TRUE, dispLibre.getUsuarioDisponible());
+
+        assertThrows(CorreoDuplicadoException.class, () ->
+                service.generarConfiguracionTotpRegistro(
+                        new com.proyecto.servicios.model.auth.TotpSetupRequestDTO("usado@gmail.com", "usr")));
+
+        var totpSetup = service.generarConfiguracionTotpRegistro(
+                new com.proyecto.servicios.model.auth.TotpSetupRequestDTO("libre@gmail.com", "usuario_libre"));
+        assertNotNull(totpSetup.getSecret());
+        assertNotNull(totpSetup.getQrPngBase64());
+        assertEquals(30, totpSetup.getPeriodoSegundos());
+
+        RegisterRequestDTO req = crearRegistroValido();
+        req.setCorreo("libre@gmail.com");
+        req.setUsuario("usuario_libre");
+        req.setOcupacion("Empleado(a) del sector privado");
+        req.setProfesion("Ingeniería en Sistemas / Software / TI");
+        req.setTotpSecret(totpSetup.getSecret());
+
+        String validTotp = com.proyecto.servicios.util.TotpAuthenticatorUtil.generarCodigoTotpActual(totpSetup.getSecret());
+        req.setCodigoTotp("000000".equals(validTotp) ? "999999" : "000000");
+        assertThrows(Autenticacion2FAException.class, () -> service.registrarClientePortalConVerificacion(req));
+
+        req.setCodigoTotp(validTotp);
+        when(cuentaRepository.existsByNumeroCuenta(anyString())).thenReturn(false);
+        when(clienteRepository.save(any(Cliente.class))).thenAnswer(inv -> {
+            Cliente c = inv.getArgument(0);
+            c.setId(305L);
+            assertTrue(Boolean.TRUE.equals(c.getLoginCliente().getTotpHabilitado()));
+            assertEquals(totpSetup.getSecret(), c.getLoginCliente().getTotpSecret());
+            assertNotNull(c.getProfesion());
+            return c;
+        });
+        when(authService.login(any())).thenReturn(
+                LoginResponseDTO.builder().clienteId(305L).usuario("usuario_libre").totpHabilitado(true).token("jwt-totp").build());
+
+        LoginResponseDTO resp = service.registrarClientePortalConVerificacion(req);
+        assertNotNull(resp);
+        assertEquals(Boolean.TRUE, resp.getTotpHabilitado());
     }
 
     private RegisterRequestDTO crearRegistroValido() {

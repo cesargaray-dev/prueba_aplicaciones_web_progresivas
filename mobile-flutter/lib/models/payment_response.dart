@@ -1,4 +1,5 @@
 import '../services/api_client.dart';
+import '../widgets/official_legend_card.dart';
 
 class Generar2FAResponse {
   final String numeroCuenta;
@@ -9,6 +10,8 @@ class Generar2FAResponse {
   final String? correoDestino;
   final String? mensajeCorreo;
   final String? messageId;
+  final String metodo2FA;
+  final int periodoTotpSegundos;
 
   Generar2FAResponse({
     required this.numeroCuenta,
@@ -19,13 +22,24 @@ class Generar2FAResponse {
     this.correoDestino,
     this.mensajeCorreo,
     this.messageId,
+    this.metodo2FA = 'EMAIL',
+    this.periodoTotpSegundos = 30,
   });
 
+  bool get isTotp => metodo2FA.trim().toUpperCase() == 'TOTP';
+
   factory Generar2FAResponse.fromJson(Map<String, dynamic> json) {
+    final rawMetodo = (json['metodo2FA'] ?? 'EMAIL').toString().trim().toUpperCase();
+    final metodo = rawMetodo.isEmpty ? 'EMAIL' : rawMetodo;
+    final rawPeriodo = json['periodoTotpSegundos'];
+    final periodo = rawPeriodo is int
+        ? rawPeriodo
+        : int.tryParse(rawPeriodo?.toString() ?? '30') ?? 30;
     final rawVigencia = json['vigenciaSegundos'] ?? json['expiraEnSegundos'];
-    final vigencia = rawVigencia is int
+    final parsedVigencia = rawVigencia is int
         ? rawVigencia
         : int.tryParse(rawVigencia?.toString() ?? '300') ?? 300;
+    final vigencia = (metodo == 'TOTP' && parsedVigencia <= 0) ? 300 : parsedVigencia;
 
     return Generar2FAResponse(
       numeroCuenta: (json['numeroCuenta'] ?? '').toString(),
@@ -36,6 +50,8 @@ class Generar2FAResponse {
       correoDestino: json['correoDestino']?.toString(),
       mensajeCorreo: json['mensajeCorreo']?.toString(),
       messageId: (json['messageId'] ?? json['brevoMessageId'])?.toString(),
+      metodo2FA: metodo,
+      periodoTotpSegundos: periodo > 0 ? periodo : 30,
     );
   }
 }
@@ -64,10 +80,14 @@ class PaymentResponse {
   final String estadoOperacion;
   final String? codigoProveedor;
   final String? mensajeOperacion;
+  final String? motivoProveedor;
+  final String? firmaDigital;
+  final String? referenciaDestino;
   final String? upc;
   final String? servicio;
   final String? producto;
   final String? logoUrl;
+  final String? leyenda;
   final int? httpStatusCode;
 
   PaymentResponse({
@@ -88,10 +108,14 @@ class PaymentResponse {
     String? estadoOperacion,
     this.codigoProveedor,
     this.mensajeOperacion,
+    this.motivoProveedor,
+    this.firmaDigital,
+    this.referenciaDestino,
     this.upc,
     this.servicio,
     this.producto,
     this.logoUrl,
+    this.leyenda,
     this.httpStatusCode,
   }) : estadoOperacion = estadoOperacion ?? (codigo == 0 ? 'EXITOSA' : 'RECHAZADA');
 
@@ -109,6 +133,18 @@ class PaymentResponse {
   bool get isSuccess => status == PaymentResultStatus.exitosa;
   bool get isRejected => status == PaymentResultStatus.rechazada;
   bool get isPending => status == PaymentResultStatus.pendiente;
+
+  String get leyendaEfectiva {
+    final authRef = numeroAutorizacion.trim().isNotEmpty
+        ? numeroAutorizacion
+        : (codigoProveedor ?? '');
+    return OfficialLegendUtils.resolve(
+      leyenda: leyenda,
+      isRejected: isRejected,
+      numeroAutorizacion: authRef,
+      folioTicket: folioTicket,
+    );
+  }
 
   factory PaymentResponse.fromJson(Map<String, dynamic> json, {int? httpStatusCode}) {
     final rawCodigo = json['codigo'] is int
@@ -164,10 +200,14 @@ class PaymentResponse {
       estadoOperacion: resolvedEstado,
       codigoProveedor: json['codigoProveedor']?.toString(),
       mensajeOperacion: (mensajeOp != null && mensajeOp.isNotEmpty) ? mensajeOp : mensaje,
+      motivoProveedor: json['motivoProveedor']?.toString(),
+      firmaDigital: json['firmaDigital']?.toString(),
+      referenciaDestino: json['referenciaDestino']?.toString(),
       upc: json['upc']?.toString(),
       servicio: json['servicio']?.toString(),
       producto: json['producto']?.toString(),
       logoUrl: json['logoUrl']?.toString(),
+      leyenda: json['leyenda']?.toString(),
       httpStatusCode: httpStatusCode,
     );
   }
@@ -202,10 +242,14 @@ class PaymentResponse {
         estadoOperacion: parsed.estadoOperacion,
         codigoProveedor: parsed.codigoProveedor,
         mensajeOperacion: parsed.mensajeOperacion ?? e.message,
+        motivoProveedor: parsed.motivoProveedor,
+        firmaDigital: parsed.firmaDigital,
+        referenciaDestino: parsed.referenciaDestino,
         upc: (parsed.upc != null && parsed.upc!.isNotEmpty) ? parsed.upc : extractedUpc,
         servicio: parsed.servicio,
         producto: parsed.producto,
         logoUrl: parsed.logoUrl,
+        leyenda: parsed.leyenda,
         httpStatusCode: e.statusCode,
       );
     }

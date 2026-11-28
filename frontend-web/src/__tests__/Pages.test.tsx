@@ -8,7 +8,7 @@ import { HistoryPage } from '../pages/HistoryPage';
 import { AdminUsersPage } from '../pages/AdminUsersPage';
 import { authApi } from '../api/authApi';
 import { adminApi } from '../api/adminApi';
-import { setAuthToken } from '../api/client';
+import { ApiError, setAuthToken } from '../api/client';
 import { catalogApi } from '../api/catalogApi';
 import { historyApi } from '../api/historyApi';
 import {
@@ -18,6 +18,7 @@ import {
   mockTelcelProduct,
   mockCfeProduct,
   mockHistoryItem,
+  mockTotpSetup,
 } from './testUtils';
 import type { ProductDTO } from '../types/catalog';
 
@@ -71,26 +72,70 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(loginMock).toHaveBeenCalledTimes(2);
     });
 
-    it('validates all 4 KYC registration steps (Identity, CURP/RFC/Address, Access, 2FA OTP) and submits registration', async () => {
+    it('validates all 6 registration steps (Personal, Fiscal availability, Occupation catalog, SEPOMEX, duplicate email block, and Google Authenticator TOTP)', async () => {
       const user = userEvent.setup();
-      const enviarCodigoMock = vi
-        .fn()
-        .mockRejectedValueOnce(new Error('La CURP ingresada ya se encuentra registrada'))
-        .mockResolvedValue({
-          codigo: 0,
-          mensaje: 'Código enviado',
-          correoEnviado: true,
-          correoDestino: 'cesar@gmail.com',
-          expiraEnSegundos: 300,
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        value: { writeText },
+        configurable: true,
+        writable: true,
+      });
+
+      const dispSpy = vi
+        .spyOn(authApi, 'verificarDisponibilidadRegistro')
+        .mockImplementation(async (params) => {
+          if (params.correo === 'usado@gmail.com') {
+            return {
+              correoDisponible: false,
+              mensajes: {
+                correo:
+                  'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.',
+              },
+            };
+          }
+          if (params.usuario === 'usuario_ocupado') {
+            return {
+              usuarioDisponible: false,
+              mensajes: { usuario: 'Este usuario ya se encuentra en uso.' },
+            };
+          }
+          if (params.curp === 'GAGC990515HDFRRL99') {
+            return {
+              curpDisponible: false,
+              mensajes: { curp: 'Esta CURP ya está asociada a otra cuenta.' },
+            };
+          }
+          if (params.rfc === 'GAGC990515ZZ9') {
+            return {
+              rfcDisponible: false,
+              mensajes: { rfc: 'Este RFC ya está asociado a otra cuenta.' },
+            };
+          }
+          return {
+            correoDisponible: true,
+            usuarioDisponible: true,
+            curpDisponible: true,
+            rfcDisponible: true,
+          };
         });
+
+      const iniciarTotpSpy = vi
+        .spyOn(authApi, 'iniciarTotpRegistro')
+        .mockRejectedValueOnce(
+          new ApiError(
+            'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.',
+            409
+          )
+        )
+        .mockResolvedValue(mockTotpSetup);
+
       const registerMock = vi
         .fn()
-        .mockRejectedValueOnce(new Error('Código 2FA inválido'))
+        .mockRejectedValueOnce(new Error('Código TOTP incorrecto'))
         .mockResolvedValueOnce(undefined);
       const ctx = createMockAuthContext({
         user: null,
         isAuthenticated: false,
-        enviarCodigoRegistro: enviarCodigoMock,
         register: registerMock,
       });
 
@@ -107,13 +152,15 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.click(screen.getByRole('button', { name: /Iniciar Sesión/i }));
       await user.click(screen.getByRole('button', { name: /Abrir cuenta digital/i }));
 
-      // --- STEP 1: Identity (Immediate onBlur per-field validation + 2-40 name / 3-40 surname) ---
+      // --- PASO 1 de 6: Datos Personales (immediate error on 1 letter) ---
+      expect(screen.getByText('Paso 1 de 6')).toBeInTheDocument();
+      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '1');
       const step1Next = () =>
-        screen.getByRole('button', { name: /Continuar a Datos Fiscales y Domicilio/i });
+        screen.getByRole('button', { name: /Continuar a Datos Fiscales/i });
 
       const nombreInput = screen.getByLabelText(/Nombre \(2–40 letras\)/i);
       await user.type(nombreInput, 'A');
-      await user.tab(); // Passing to next field immediately triggers inline error without clicking submit!
+      // Immediate inline error upon typing 1 letter even before blurring!
       expect(screen.getByText(/El nombre debe tener al menos 2 letras/i)).toBeInTheDocument();
 
       await user.clear(nombreInput);
@@ -122,7 +169,6 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
 
       const patInput = screen.getByLabelText(/Apellido paterno \(3–40 letras\)/i);
       await user.type(patInput, 'Ga');
-      await user.tab(); // 2 chars in surname immediately triggers 3-letter minimum error on blur!
       expect(
         screen.getByText(/El apellido paterno debe tener al menos 3 letras/i)
       ).toBeInTheDocument();
@@ -139,36 +185,89 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(screen.getAllByText(/mayor de 18 años/i).length).toBeGreaterThan(0);
       fireEvent.change(birthInput, { target: { value: '1999-05-15' } });
 
+      await user.selectOptions(screen.getByLabelText(/Entidad de nacimiento/i), 'DF');
       await user.click(step1Next());
 
-      // --- STEP 2: Fiscal (CURP & RFC), Tabuladores & SEPOMEX Address ---
+      // --- PASO 2 de 6: Datos Fiscales (CURP & RFC + live availability check) ---
+      expect(screen.getByText('Paso 2 de 6')).toBeInTheDocument();
       const step2Next = () =>
-        screen.getByRole('button', { name: /Continuar a Contacto y Acceso/i });
+        screen.getByRole('button', { name: /Continuar a Ocupación e Ingresos/i });
 
-      await user.click(screen.getByRole('button', { name: /Calcular CURP \/ RFC/i }));
       const curpInput = screen.getByLabelText(/CURP \(18 caracteres\)/i) as HTMLInputElement;
       const rfcInput = screen.getByLabelText(/RFC con Homoclave/i) as HTMLInputElement;
+      fireEvent.change(curpInput, { target: { value: 'GAGC990515HDFRRL99' } });
+      await waitFor(() =>
+        expect(screen.getByText(/Esta CURP ya está asociada a otra cuenta/i)).toBeInTheDocument()
+      );
+      fireEvent.change(rfcInput, { target: { value: 'GAGC990515ZZ9' } });
+      await waitFor(() =>
+        expect(screen.getByText(/Este RFC ya está asociado a otra cuenta/i)).toBeInTheDocument()
+      );
+      await user.click(step2Next());
+      expect(screen.getByText('Paso 2 de 6')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /Calcular CURP \/ RFC/i }));
       expect(curpInput.value).toHaveLength(18);
       expect(rfcInput.value).toHaveLength(13);
 
-      // Select from Tabulador de Profesiones & Tabulador de Sueldo
+      await user.click(step2Next());
+
+      // --- PASO 3 de 6: Ocupación e Ingresos ---
+      await waitFor(() => expect(screen.getByText('Paso 3 de 6')).toBeInTheDocument());
+      const step3Next = () =>
+        screen.getByRole('button', { name: /Continuar a Domicilio/i });
+
+      await user.selectOptions(screen.getByLabelText(/Catálogo de Ocupación \*/i), '');
+      await user.click(step3Next());
+      expect(
+        screen.getAllByText(/Selecciona tu ocupación del catálogo oficial/i).length
+      ).toBeGreaterThan(0);
+
       await user.selectOptions(
-        screen.getByLabelText(/Tabulador de Profesión/i),
+        screen.getByLabelText(/Catálogo de Ocupación \*/i),
+        'Profesionista independiente'
+      );
+      await user.selectOptions(
+        screen.getByLabelText(/Tabulador de Profesión \*/i),
         'Estudiante Universitario / Posgrado / Becario'
       );
-      await user.selectOptions(screen.getByLabelText(/Tabulador de Sueldo/i), '35000');
+      const empresaInput = screen.getByLabelText(/Empresa \/ Institución/i);
+      await user.clear(empresaInput);
+      await user.type(empresaInput, 'Consultoría Digital MX');
+      await user.selectOptions(screen.getByLabelText(/Tabulador de Sueldo Mensual/i), '35000');
 
-      // Test SEPOMEX postal code validation (invalid 18500 then valid 06600)
+      await user.click(step3Next());
+
+      // --- PASO 4 de 6: Domicilio SEPOMEX ---
+      expect(screen.getByText('Paso 4 de 6')).toBeInTheDocument();
+      const step4Next = () =>
+        screen.getByRole('button', { name: /Continuar a Contacto y Acceso/i });
+
       const cpInput = screen.getByLabelText(/Código Postal/i);
       await user.type(cpInput, '18500');
       expect(screen.getByText(/no existe en el catálogo oficial SEPOMEX/i)).toBeInTheDocument();
       await user.clear(cpInput);
+      vi.spyOn(catalogApi, 'consultarCodigoPostal').mockResolvedValueOnce({
+        codigoPostal: '06600',
+        valido: true,
+        pais: 'México',
+        codigoEstado: 'DF',
+        estado: 'Ciudad de México',
+        municipio: 'Cuauhtémoc',
+        colonias: ['Juárez'],
+      });
       await user.type(cpInput, '06600');
-      expect(screen.getByText(/✓ C\.P\. 06600 · Ciudad de México/i)).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.getByText(/✓ C\.P\. 06600 · Ciudad de México/i)).toBeInTheDocument()
+      );
+      expect(screen.getByLabelText(/Estado \(Automático\)/i)).toHaveValue('Ciudad de México');
+      expect(screen.getByLabelText(/Municipio \/ Alcaldía \(Auto\)/i)).toHaveValue('Cuauhtémoc');
+      const coloniaSelect = screen.getByLabelText(/Colonia \(Catálogo del C\.P\.\)/i);
+      expect(coloniaSelect).toHaveValue('');
 
-      // Test street & exterior number validations
-      await user.click(step2Next());
-      expect(screen.getAllByText(/nombre de la calle/i).length).toBeGreaterThan(0);
+      await user.click(step4Next());
+      expect(screen.getAllByText(/colonia/i).length).toBeGreaterThan(0);
+      await user.selectOptions(coloniaSelect, 'Juárez');
       await user.selectOptions(screen.getByLabelText(/Vialidad \*/i), 'Av.');
       await user.type(screen.getByLabelText(/Nombre de Calle/i), 'Paseo de la Reforma');
 
@@ -178,19 +277,21 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.type(numExtInput, '250');
       await user.type(screen.getByLabelText(/Núm\. Interior/i), '4B');
 
-      // Test manual colonia option and catalog colonia option
-      await user.selectOptions(screen.getByLabelText(/Colonia \/ Asentamiento/i), '__OTRA__');
-      await user.type(screen.getByPlaceholderText(/Escribe tu colonia/i), 'Juárez Centro');
-
-      // Test stepper pill navigation back to Step 1 and forward again
+      // Test navigation back and forth with Anterior AND stepper pill click
       await user.click(screen.getByRole('button', { name: /Anterior/i }));
+      expect(screen.getByText('Paso 3 de 6')).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: /Paso 1 Personales/i }));
+      expect(screen.getByText('Paso 1 de 6')).toBeInTheDocument();
       await user.click(step1Next());
-
       await user.click(step2Next());
+      await waitFor(() => expect(screen.getByText('Paso 3 de 6')).toBeInTheDocument());
+      await user.click(step3Next());
+      await user.click(step4Next());
 
-      // --- STEP 3: Contact & Access ---
-      const sendCodeBtn = () =>
-        screen.getByRole('button', { name: /Enviar Código 2FA al Correo/i });
+      // --- PASO 5 de 6: Contacto y Acceso (format + immediate duplicate email & user check) ---
+      expect(screen.getByText('Paso 5 de 6')).toBeInTheDocument();
+      const continueTotpBtn = () =>
+        screen.getByRole('button', { name: /Continuar a Google Authenticator/i });
 
       const emailInput = screen.getByLabelText(/Correo electrónico real/i);
       await user.type(emailInput, 'correo-invalido');
@@ -198,21 +299,44 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       expect(screen.getByText(/formato válido/i)).toBeInTheDocument();
       await user.clear(emailInput);
       await user.type(emailInput, 'user@ejemplo.com');
-      await user.click(sendCodeBtn());
+      await user.click(continueTotpBtn());
       expect(screen.getAllByText(/correo electrónico real/i).length).toBeGreaterThan(0);
+
+      await user.clear(emailInput);
+      await user.type(emailInput, 'usado@gmail.com');
+      await user.tab();
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.'
+          )
+        ).toBeInTheDocument()
+      );
+      expect(continueTotpBtn()).toBeDisabled();
+
       await user.clear(emailInput);
       await user.type(emailInput, 'cesar@gmail.com');
 
       const telInput = screen.getByLabelText(/Teléfono móvil México/i);
       await user.type(telInput, '0000000000');
-      await user.click(sendCodeBtn());
+      await user.tab();
+      expect(screen.getByText(/entre 2 y 9/i)).toBeInTheDocument();
       await user.clear(telInput);
       await user.type(telInput, '1111111111');
+
+      const telAltInput = screen.getByLabelText(/Teléfono alternativo/i);
+      await user.type(telAltInput, '5523456789');
 
       const usrInput = screen.getByLabelText(/Usuario \(4–50 caracteres\)/i);
       await user.type(usrInput, 'ab');
       await user.tab();
       expect(screen.getByText(/El usuario debe tener entre 4 y 50/i)).toBeInTheDocument();
+      await user.clear(usrInput);
+      await user.type(usrInput, 'usuario_ocupado');
+      await user.tab();
+      await waitFor(() =>
+        expect(screen.getByText(/Este usuario ya se encuentra en uso/i)).toBeInTheDocument()
+      );
       await user.clear(usrInput);
       await user.type(usrInput, 'cesar_nuevo');
 
@@ -222,61 +346,74 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.type(passInput, 'debil');
       await user.tab();
       expect(screen.getByText(/Mínimo 8 caracteres/i)).toBeInTheDocument();
-
       await user.clear(passInput);
       await user.type(passInput, 'Venta2026#');
       await user.type(confInput, 'Otra2026#');
-      await user.click(sendCodeBtn());
+      await user.click(continueTotpBtn());
       expect(screen.getAllByText(/Las contraseñas no coinciden/i).length).toBeGreaterThan(0);
-
       await user.clear(confInput);
       await user.type(confInput, 'Venta2026#');
 
-      // Step 3 -> Step 4: First OTP send rejects, second transitions to Step 4
-      await user.click(sendCodeBtn());
+      // First attempt: /register/totp returns 409 -> displays duplicate email message and stays on Step 5
+      await user.click(continueTotpBtn());
       await waitFor(() =>
         expect(
-          screen.getByText('La CURP ingresada ya se encuentra registrada')
+          screen.getByText(
+            'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.'
+          )
         ).toBeInTheDocument()
       );
+      expect(screen.getByText('Paso 5 de 6')).toBeInTheDocument();
 
-      await user.click(sendCodeBtn());
-      await waitFor(() =>
-        expect(screen.getByText(/Verifica tu Correo Electrónico \(2FA\)/i)).toBeInTheDocument()
-      );
+      // Fix email to fresh address and advance to Step 6
+      await user.clear(emailInput);
+      await user.type(emailInput, 'cesar.nuevo@gmail.com');
+      await user.click(continueTotpBtn());
 
-      // Step 4: Resend code, edit back & return, then verify OTP
-      await user.click(screen.getByRole('button', { name: /Reenviar código/i }));
+      // --- PASO 6 de 6: Autenticador de Google (TOTP 30s) ---
+      await waitFor(() => expect(screen.getByText('Paso 6 de 6')).toBeInTheDocument());
+      expect(screen.getByAltText('QR Google Authenticator')).toBeInTheDocument();
+      expect(screen.getByText('JBSW Y3DP EHPK 3PXP')).toBeInTheDocument();
+      expect(screen.getByText(/Cambio en \d+s/i)).toBeInTheDocument();
+
+      await user.click(screen.getByLabelText('Copiar clave secreta'));
+      expect(writeText).toHaveBeenCalledWith('JBSWY3DPEHPK3PXP');
+
+      await user.click(screen.getByRole('button', { name: /Regenerar QR/i }));
       await waitFor(() =>
-        expect(screen.getByText(/Se envió un nuevo código 2FA/i)).toBeInTheDocument()
+        expect(screen.getByText(/Se generó una nueva llave QR/i)).toBeInTheDocument()
       );
 
       await user.click(screen.getByRole('button', { name: /Editar datos/i }));
-      expect(sendCodeBtn()).toBeInTheDocument();
-      await user.click(sendCodeBtn());
-      await waitFor(() =>
-        expect(screen.getByLabelText(/Código de verificación/i)).toBeInTheDocument()
-      );
+      expect(screen.getByText('Paso 5 de 6')).toBeInTheDocument();
+      await user.click(continueTotpBtn());
+      await waitFor(() => expect(screen.getByText('Paso 6 de 6')).toBeInTheDocument());
 
-      const otpInput = screen.getByLabelText(/Código de verificación/i);
-      await user.type(otpInput, '123456');
+      const totpInput = screen.getByLabelText(/Código de Google Authenticator \(6 dígitos\)/i);
+      await user.type(totpInput, '123456');
 
       const verifyBtn = screen.getByRole('button', { name: /Verificar y Crear Cuenta/i });
       await user.click(verifyBtn);
-      await waitFor(() => expect(screen.getByText('Código 2FA inválido')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('Código TOTP incorrecto')).toBeInTheDocument());
 
       await user.click(verifyBtn);
+      expect(dispSpy).toHaveBeenCalled();
+      expect(iniciarTotpSpy).toHaveBeenCalled();
       expect(registerMock).toHaveBeenCalledTimes(2);
       expect(registerMock).toHaveBeenLastCalledWith(
         expect.objectContaining({
           curp: expect.stringMatching(/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$/),
           rfc: expect.stringMatching(/^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$/),
+          ocupacion: 'Profesionista independiente',
+          profesion: 'Estudiante Universitario / Posgrado / Becario',
           telefonoMovil: '1111111111',
           codigoPostal: '06600',
-          codigoVerificacion: '123456',
+          correo: 'cesar.nuevo@gmail.com',
+          totpSecret: 'JBSWY3DPEHPK3PXP',
+          codigoTotp: '123456',
         })
       );
-    }, 25000);
+    }, 30000);
   });
 
   describe('CatalogPage Component', () => {

@@ -26,4 +26,12 @@ class CatalogService {
   }
 
   Future<List<ProductItem>> obtenerProductos() => getProducts();
+
+  Future<Map<String, dynamic>?> consultarCodigoPostal(String cp) async {
+    final response = await _client.get('/api/v1/catalogos/cp/${Uri.encodeComponent(cp.trim())}');
+    if (response is Map<String, dynamic>) {
+      return response;
+    }
+    return null;
+  }
 }

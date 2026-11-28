@@ -314,6 +314,52 @@ public class AdminUsuarioServiceImpl implements AdminUsuarioService {
         return toDto(clienteRepo.save(c));
     }
 
+    @Override
+    @Transactional
+    public AdminUsuarioDTO abonarSaldoComoAdmin(
+            String adminAutenticado,
+            Long clienteId,
+            AbonoSaldoRequestDTO request) {
+        ownershipValidator.validarPrivilegiosAdmin(adminAutenticado);
+        if (request == null || request.getMonto() == null || request.getMonto().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new ValidacionException("El monto a ingresar debe ser mayor a $0.00 MXN.");
+        }
+        if (request.getMonto().compareTo(new BigDecimal("1000000.00")) > 0) {
+            throw new ValidacionException("El monto máximo por ingreso administrativo es de $1,000,000.00 MXN.");
+        }
+
+        Cliente c = clienteRepo.findById(clienteId)
+                .orElseThrow(() -> new ClienteNoEncontradoException("Usuario no encontrado con ID: " + clienteId));
+        Cuenta cta = resolveCuenta(c);
+        if (cta == null || cta.getId() == null) {
+            throw new CuentaNoEncontradaException("El usuario seleccionado no tiene una cuenta bancaria activa.");
+        }
+
+        Cuenta ctaLock = cuentaRepo.findByNumeroCuentaForUpdate(cta.getNumeroCuenta()).orElse(cta);
+        Saldo s = saldoRepo.findByCuentaId(ctaLock.getId()).orElseGet(() -> {
+            Saldo ns = new Saldo();
+            ns.setCuenta(ctaLock);
+            ns.setSaldo(BigDecimal.ZERO);
+            return ns;
+        });
+
+        BigDecimal montoIngreso = request.getMonto().setScale(2, RoundingMode.HALF_UP);
+        BigDecimal saldoActual = s.getSaldo() != null ? s.getSaldo() : BigDecimal.ZERO;
+        BigDecimal nuevoSaldo = saldoActual.add(montoIngreso).setScale(2, RoundingMode.HALF_UP);
+        String conceptoExtra = (request.getConcepto() != null && !request.getConcepto().isBlank())
+                ? request.getConcepto().trim()
+                : "Depósito en ventanilla / panel administrativo";
+
+        s.setSaldo(nuevoSaldo);
+        s.setFechaMovimiento(LocalDateTime.now());
+        s.setConcepto("Ingreso por @" + adminAutenticado + ": " + conceptoExtra);
+        saldoRepo.save(s);
+
+        log.info("Ingreso administrativo aplicado por @{} a clienteId={} cuenta={} monto=+{} nuevoSaldo={}",
+                adminAutenticado, clienteId, TelefonoUtil.enmascararCuenta(ctaLock.getNumeroCuenta()), montoIngreso, nuevoSaldo);
+        return toDto(c);
+    }
+
     private void aplicarCambiosPersonalesYContacto(Cliente c, AdminActualizarUsuarioRequestDTO req) {
         if (req.getNombre() != null && !req.getNombre().isBlank()) {
             String v = req.getNombre().trim().toUpperCase(Locale.ROOT);

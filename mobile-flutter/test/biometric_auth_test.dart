@@ -16,9 +16,16 @@ import 'package:mobile_flutter/services/auth_service.dart';
 import 'package:mobile_flutter/services/biometric_service.dart';
 import 'package:mobile_flutter/services/payment_service.dart';
 import 'package:mobile_flutter/theme/app_theme.dart';
+import 'package:mobile_flutter/utils/mexico_catalogs.dart';
 import 'package:mobile_flutter/widgets/profile_sheet.dart';
 import 'package:mobile_flutter/widgets/receipt_dialog.dart';
 import 'package:provider/provider.dart';
+
+http.Response _jsonUtf8(Object data, int status) => http.Response.bytes(
+      utf8.encode(jsonEncode(data)),
+      status,
+      headers: {'content-type': 'application/json; charset=utf-8'},
+    );
 
 class _FakeBiometricService extends BiometricService {
   BiometricAvailability availability;
@@ -85,13 +92,108 @@ class _FakeBiometricService extends BiometricService {
 }
 
 class _FakeAuthService extends AuthService {
+  static const String valid1x1PngBase64 =
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+
   bool biometricRegisteredOnServer = false;
   String? lastRegisteredToken;
   String? lastRegistrationCode;
+  String? lastTotpSecret;
+  String? lastCodigoTotp;
+  String? lastOcupacion;
+  String? lastProfesion;
   String? lastCurp;
   String? lastRfc;
+  String? lastColonia;
+  double currentBalance = 500.0;
   int sendCodeCalls = 0;
+  int iniciarTotpCalls = 0;
+  int disponibilidadCalls = 0;
   int keepAliveCalls = 0;
+  bool totpPerfilEnabled = false;
+
+  @override
+  Future<Map<String, dynamic>> verificarDisponibilidad({
+    String? correo,
+    String? usuario,
+    String? curp,
+    String? rfc,
+  }) async {
+    disponibilidadCalls++;
+    final isDupEmail = correo?.trim().toLowerCase() == 'yaexiste@gmail.com';
+    final isDupUser = usuario?.trim().toLowerCase() == 'usuario_ocupado';
+    return {
+      if (correo != null) 'correoDisponible': !isDupEmail,
+      if (usuario != null) 'usuarioDisponible': !isDupUser,
+      if (curp != null) 'curpDisponible': true,
+      if (rfc != null) 'rfcDisponible': true,
+      'mensajes': {
+        if (isDupEmail)
+          'correo':
+              'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.',
+        if (isDupUser) 'usuario': 'Este nombre de usuario ya está ocupado.',
+      },
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> iniciarTotpRegistro({
+    required String correo,
+    required String usuario,
+  }) async {
+    iniciarTotpCalls++;
+    if (correo.trim().toLowerCase() == 'yaexiste@gmail.com') {
+      throw ApiException(
+        statusCode: 409,
+        message:
+            'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.',
+      );
+    }
+    return {
+      'secret': 'JBSWY3DPEHPK3PXP',
+      'secretFormateado': 'JBSW Y3DP EHPK 3PXP',
+      'otpauthUri':
+          'otpauth://totp/Banco%20Digital:${Uri.encodeComponent(correo)}?secret=JBSWY3DPEHPK3PXP&issuer=Banco%20Digital',
+      'qrPngBase64': valid1x1PngBase64,
+      'emisor': 'Banco Digital',
+      'cuenta': correo.trim(),
+      'digitos': 6,
+      'periodoSegundos': 30,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> consultarEstadoTotpPerfil() async => {
+        'totpHabilitado': totpPerfilEnabled,
+        'mensaje': totpPerfilEnabled ? 'Activo' : 'Inactivo',
+      };
+
+  @override
+  Future<Map<String, dynamic>> iniciarTotpPerfil() async => {
+        'secret': 'JBSWY3DPEHPK3PXP',
+        'secretFormateado': 'JBSW Y3DP EHPK 3PXP',
+        'otpauthUri': 'otpauth://totp/Banco%20Digital:cesar@gmail.com?secret=JBSWY3DPEHPK3PXP',
+        'qrPngBase64': valid1x1PngBase64,
+        'emisor': 'Banco Digital',
+        'cuenta': 'cesar@gmail.com',
+        'digitos': 6,
+        'periodoSegundos': 30,
+      };
+
+  @override
+  Future<Map<String, dynamic>> activarTotpPerfil({
+    required String secret,
+    required String codigo,
+  }) async {
+    totpPerfilEnabled = true;
+    return {'totpHabilitado': true, 'mensaje': 'Google Authenticator activado'};
+  }
+
+  @override
+  Future<Map<String, dynamic>> desactivarTotpPerfil({required String codigo}) async {
+    totpPerfilEnabled = false;
+    return {'totpHabilitado': false, 'mensaje': 'Google Authenticator desactivado'};
+  }
 
   @override
   Future<Map<String, dynamic>> enviarCodigoRegistro({
@@ -118,6 +220,8 @@ class _FakeAuthService extends AuthService {
 
   @override
   Future<UserSession> login(String usuario, String contrasena) async {
+    currentBalance = 500.0;
+    totpPerfilEnabled = false;
     return UserSession(
       token: 'jwt-pass-1',
       usuario: usuario,
@@ -128,7 +232,9 @@ class _FakeAuthService extends AuthService {
       curp: 'GAGC990515HDFRRL01',
       rfc: 'GAGC990515AB1',
       numeroCuenta: '5915019417993769',
-      saldo: 500.0,
+      saldo: currentBalance,
+      esAdmin: usuario == 'admin',
+      totpHabilitado: totpPerfilEnabled,
     );
   }
 
@@ -145,6 +251,7 @@ class _FakeAuthService extends AuthService {
     String? curp,
     String? rfc,
     String? ocupacion,
+    String? profesion,
     String? empresa,
     double? ingresoMensual,
     String? calle,
@@ -160,11 +267,20 @@ class _FakeAuthService extends AuthService {
     String? telefonoAlternativo,
     required String usuario,
     required String contrasena,
+    String? totpSecret,
+    String? codigoTotp,
     String? codigoVerificacion,
   }) async {
-    lastRegistrationCode = codigoVerificacion;
+    lastTotpSecret = totpSecret;
+    lastCodigoTotp = codigoTotp;
+    lastRegistrationCode = codigoTotp ?? codigoVerificacion;
+    lastOcupacion = ocupacion;
+    lastProfesion = profesion;
     lastCurp = curp;
     lastRfc = rfc;
+    lastColonia = colonia;
+    currentBalance = 0.0;
+    totpPerfilEnabled = totpSecret != null && totpSecret.isNotEmpty;
     return UserSession(
       token: 'jwt-reg-1',
       usuario: usuario,
@@ -178,8 +294,11 @@ class _FakeAuthService extends AuthService {
       telefonoMovil: telefonoMovil,
       curp: curp,
       rfc: rfc,
+      ocupacion: ocupacion,
+      profesion: profesion,
       numeroCuenta: '5111222233334444',
-      saldo: 200.0,
+      saldo: 0.0,
+      totpHabilitado: totpPerfilEnabled,
     );
   }
 
@@ -240,7 +359,9 @@ class _FakeAuthService extends AuthService {
       email: 'cesar@gmail.com',
       telefonoMovil: '5512345678',
       numeroCuenta: '5915019417993769',
-      saldo: 500.0,
+      saldo: currentBalance,
+      esAdmin: usuario == 'admin',
+      totpHabilitado: totpPerfilEnabled,
     );
   }
 
@@ -634,27 +755,28 @@ void main() {
 
       final mockHttp = MockClient((req) async {
         if (req.method == 'GET' && req.url.path == '/api/v1/admin/usuarios') {
-          return http.Response(jsonEncode(users), 200);
+          return _jsonUtf8(users, 200);
         }
         if (req.method == 'PUT' && req.url.path == '/api/v1/admin/usuarios/2') {
           putCalls++;
           await Future<void>.delayed(const Duration(milliseconds: 80));
           users[1]['nombreCompleto'] = 'CARLOS EDITADO';
           users[1]['saldo'] = 900.0;
-          return http.Response(jsonEncode(users[1]), 200);
+          return _jsonUtf8(users[1], 200);
         }
         if (req.method == 'DELETE' && req.url.path == '/api/v1/admin/usuarios') {
           deleteAllCalled = true;
           users.removeWhere((u) => u['esAdmin'] != true);
-          return http.Response(
-            jsonEncode({
+          return _jsonUtf8(
+            {
               'codigo': 0,
-              'mensaje': 'Se eliminaron permanentemente 1 usuarios clientes (se conserva la cuenta @admin).',
-            }),
+              'mensaje':
+                  'Se eliminaron permanentemente 1 usuarios clientes (se conserva la cuenta @admin).',
+            },
             200,
           );
         }
-        return http.Response('{}', 404);
+        return _jsonUtf8(<String, dynamic>{}, 404);
       });
 
       final client = ApiClient.withClient(mockHttp, baseUrl: 'http://localhost:10000');
@@ -714,7 +836,7 @@ void main() {
       await auth.initBiometrics();
       await auth.login('cesar_app', 'Venta2026#');
 
-      // 1. ProfileSheet Abonar en modo oscuro: los montos ($100, $250, $500, $1000) tienen texto claro sin tocarlos
+      // 1a. Cliente normal no puede auto-abonar: ve aviso de Fondeo Autorizado por Administrador ($0.00 inicial)
       await tester.pumpWidget(
         ChangeNotifierProvider<AuthProvider>.value(
           value: auth,
@@ -726,6 +848,11 @@ void main() {
           ),
         ),
       );
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Fondeo Autorizado por Administrador'), findsOneWidget);
+
+      // 1b. Admin en modo oscuro: los montos ($100, $250, $500, $1000) tienen texto claro sin tocarlos
+      await auth.login('admin', 'Admin12345!');
       await tester.pumpAndSettle();
 
       final chipText = tester.widget<Text>(find.text('\$100'));
@@ -797,7 +924,7 @@ void main() {
     });
 
     testWidgets(
-        'LoginScreen ejecuta registro KYC en 4 pasos con validación inmediata, tabuladores, SEPOMEX y acepta 1111111111',
+        'LoginScreen ejecuta registro KYC en 6 pasos con Catálogo de Ocupación, SEPOMEX, Google Authenticator TOTP y acepta 1111111111',
         (WidgetTester tester) async {
       final fakeBio = _FakeBiometricService(
         availability: const BiometricAvailability(
@@ -826,7 +953,9 @@ void main() {
       await tester.tap(find.text('Crear Cuenta'));
       await tester.pumpAndSettle();
 
-      // Paso 1: Validación inmediata al escribir 1 letra en nombre o 2 en apellido antes de llenar lo demás
+      expect(find.text('Paso 1 de 6'), findsOneWidget);
+
+      // Paso 1: Datos Personales — validación inmediata al escribir 1 letra en nombre o 2 en apellido
       await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'A');
       await tester.pump();
       expect(find.textContaining('al menos 2 letras'), findsOneWidget);
@@ -835,7 +964,6 @@ void main() {
       await tester.pump();
       expect(find.textContaining('al menos 3 letras'), findsOneWidget);
 
-      // Corregir a nombres y apellidos mexicanos válidos
       await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'Cesar');
       await tester.enterText(find.widgetWithText(TextFormField, 'Apellido paterno *'), 'Garay');
       await tester.enterText(find.widgetWithText(TextFormField, 'Apellido materno *'), 'Garcia');
@@ -848,28 +976,63 @@ void main() {
       await tester.tap(next1);
       await tester.pumpAndSettle();
 
-      // Paso 2: Fiscal (CURP y RFC autocalculados), Tabuladores de Profesión/Sueldo y SEPOMEX
+      // Paso 2: Datos Fiscales (CURP y RFC autocalculados + disponibilidad)
+      expect(find.text('Paso 2 de 6'), findsOneWidget);
       expect(find.text('CURP (18 caracteres) *'), findsOneWidget);
       expect(find.text('RFC con Homoclave (13) *'), findsOneWidget);
-      expect(find.text('Profesión / Ocupación (Tabulador) *'), findsOneWidget);
+
+      final next2 = find.text('Continuar a Ocupación e Ingresos');
+      await tester.ensureVisible(next2);
+      await tester.tap(next2);
+      await tester.pumpAndSettle();
+
+      // Paso 3: Ocupación e Ingresos (Catálogo de Ocupación + Tabulador Profesión + Empresa + Sueldo)
+      expect(find.text('Paso 3 de 6'), findsOneWidget);
+      final ocupDropdown = find.widgetWithText(
+        DropdownButtonFormField<String>,
+        'Ocupación (Catálogo) *',
+      );
+      expect(ocupDropdown, findsOneWidget);
+      expect(find.text('Profesión (Tabulador) *'), findsOneWidget);
       expect(find.text('Tabulador de Sueldo Mensual *'), findsOneWidget);
+
+      await tester.ensureVisible(ocupDropdown);
+      await tester.tap(ocupDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Docente / Académico(a)').last);
+      await tester.pumpAndSettle();
 
       await tester.enterText(
         find.widgetWithText(TextFormField, 'Empresa / Institución *'),
         'Universidad Nacional',
       );
 
-      // C.P. inexistente muestra error inmediato sin esperar al botón de avanzar
+      final next3 = find.text('Continuar a Domicilio');
+      await tester.ensureVisible(next3);
+      await tester.tap(next3);
+      await tester.pumpAndSettle();
+
+      // Paso 4: Domicilio SEPOMEX
+      expect(find.text('Paso 4 de 6'), findsOneWidget);
       final cpField = find.widgetWithText(TextFormField, 'Código Postal (5 díg) *');
       await tester.ensureVisible(cpField);
       await tester.enterText(cpField, '18500');
       await tester.pump();
       expect(find.textContaining('no existe en el catálogo oficial SEPOMEX'), findsOneWidget);
 
-      // C.P. válido SEPOMEX resuelve Estado (CDMX), Alcaldía (Cuauhtémoc) y Colonia
       await tester.enterText(cpField, '06600');
       await tester.pumpAndSettle();
       expect(find.textContaining('SEPOMEX verificado: Ciudad de México'), findsOneWidget);
+
+      final coloniaDropdown = find.widgetWithText(
+        DropdownButtonFormField<String>,
+        'Colonia (Catálogo del C.P.) *',
+      );
+      await tester.ensureVisible(coloniaDropdown);
+      await tester.tap(coloniaDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Juárez').last);
+      await tester.pumpAndSettle();
 
       final calleField = find.widgetWithText(TextFormField, 'Calle y Avenida *');
       await tester.ensureVisible(calleField);
@@ -879,14 +1042,15 @@ void main() {
       await tester.ensureVisible(numExtField);
       await tester.enterText(numExtField, '250');
 
-      final next2 = find.text('Continuar a Contacto y Acceso');
-      await tester.ensureVisible(next2);
-      await tester.tap(next2);
+      final next4 = find.text('Continuar a Contacto y Acceso');
+      await tester.ensureVisible(next4);
+      await tester.tap(next4);
       await tester.pumpAndSettle();
 
-      // Paso 3: Contacto y Credenciales
+      // Paso 5: Contacto y Acceso
+      expect(find.text('Paso 5 de 6'), findsOneWidget);
       await tester.enterText(
-        find.widgetWithText(TextFormField, 'Correo electrónico real (para 2FA y recibos) *'),
+        find.widgetWithText(TextFormField, 'Correo electrónico real *'),
         'cesar@gmail.com',
       );
       await tester.enterText(
@@ -906,17 +1070,22 @@ void main() {
         'Venta2026#',
       );
 
-      final sendBtn = find.text('Enviar Código 2FA al Correo');
-      await tester.ensureVisible(sendBtn);
-      await tester.tap(sendBtn);
+      final totpStepBtn = find.text('Continuar a Google Authenticator');
+      await tester.ensureVisible(totpStepBtn);
+      await tester.tap(totpStepBtn);
       await tester.pumpAndSettle();
 
-      // Paso 4: OTP 2FA
-      expect(fakeAuthSvc.sendCodeCalls, 1);
-      expect(find.text('Verifica tu correo (2FA)'), findsOneWidget);
-      expect(find.text('cesar@gmail.com'), findsOneWidget);
+      // Paso 6: Google Authenticator (TOTP 30s)
+      expect(find.text('Paso 6 de 6'), findsOneWidget);
+      expect(fakeAuthSvc.iniciarTotpCalls, 1);
+      expect(find.text('Google Authenticator (TOTP 30s)'), findsOneWidget);
+      expect(find.text('JBSW Y3DP EHPK 3PXP'), findsOneWidget);
+      expect(find.text('Copiar clave'), findsOneWidget);
 
-      await tester.enterText(find.widgetWithText(TextField, 'Código 2FA (6 dígitos)'), '654321');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Código Google Authenticator (6 dígitos)'),
+        '654321',
+      );
       await tester.pump();
 
       final verifyBtn = find.text('Verificar y Crear Cuenta');
@@ -924,9 +1093,15 @@ void main() {
       await tester.tap(verifyBtn);
       await tester.pumpAndSettle();
 
-      expect(fakeAuthSvc.lastRegistrationCode, '654321');
+      expect(fakeAuthSvc.lastTotpSecret, 'JBSWY3DPEHPK3PXP');
+      expect(fakeAuthSvc.lastCodigoTotp, '654321');
+      expect(fakeAuthSvc.lastOcupacion, 'Docente / Académico(a)');
+      expect(fakeAuthSvc.lastProfesion, MexicoCatalogs.tabuladorProfesiones.first.label);
       expect(fakeAuthSvc.lastCurp?.length, 18);
       expect(fakeAuthSvc.lastRfc?.length, 13);
+      expect(fakeAuthSvc.lastColonia, 'Juárez');
+      expect(auth.session?.totpHabilitado, isTrue);
+      expect(auth.session?.saldo, 0.0);
       expect(auth.isAuthenticated, isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -934,7 +1109,136 @@ void main() {
     });
 
     testWidgets(
-        'PaymentFlowDialog intenta el pago real a GestoPago y muestra en el ticket que no se pudo validar',
+        'LoginScreen avisa inmediatamente si el correo ya está registrado (yaexiste@gmail.com) y bloquea avance al Paso 6',
+        (WidgetTester tester) async {
+      final fakeBio = _FakeBiometricService(
+        availability: const BiometricAvailability(
+          isSupported: false,
+          hasEnrolledBiometrics: false,
+          hasFingerprint: false,
+          label: 'Huella Digital',
+        ),
+      );
+      final fakeAuthSvc = _FakeAuthService();
+      final auth = AuthProvider(authService: fakeAuthSvc, biometricService: fakeBio);
+      await auth.initBiometrics();
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<AuthProvider>.value(
+          value: auth,
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: const LoginScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Crear Cuenta'));
+      await tester.pumpAndSettle();
+
+      // Avanzar hasta Paso 5
+      await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'Laura');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido paterno *'), 'Mendez');
+      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido materno *'), 'Soto');
+      final next1 = find.text('Continuar a Datos Fiscales');
+      await tester.ensureVisible(next1);
+      await tester.tap(next1);
+      await tester.pumpAndSettle();
+
+      final next2 = find.text('Continuar a Ocupación e Ingresos');
+      await tester.ensureVisible(next2);
+      await tester.tap(next2);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Empresa / Institución *'),
+        'Grupo Financiero',
+      );
+      final next3 = find.text('Continuar a Domicilio');
+      await tester.ensureVisible(next3);
+      await tester.tap(next3);
+      await tester.pumpAndSettle();
+
+      final cpField = find.widgetWithText(TextFormField, 'Código Postal (5 díg) *');
+      await tester.ensureVisible(cpField);
+      await tester.enterText(cpField, '06600');
+      await tester.pumpAndSettle();
+
+      final coloniaDropdown = find.widgetWithText(
+        DropdownButtonFormField<String>,
+        'Colonia (Catálogo del C.P.) *',
+      );
+      await tester.ensureVisible(coloniaDropdown);
+      await tester.tap(coloniaDropdown);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Juárez').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Calle y Avenida *'),
+        'Insurgentes Sur',
+      );
+      await tester.enterText(find.widgetWithText(TextFormField, 'Núm. Ext. *'), '100');
+      final next4 = find.text('Continuar a Contacto y Acceso');
+      await tester.ensureVisible(next4);
+      await tester.tap(next4);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paso 5 de 6'), findsOneWidget);
+
+      // Escribir un correo duplicado y pasar al campo teléfono (pierde foco -> verificación inmediata)
+      final correoField = find.widgetWithText(TextFormField, 'Correo electrónico real *');
+      final telField = find.widgetWithText(
+        TextFormField,
+        'Teléfono móvil México (10 dígitos) *',
+      );
+      await tester.enterText(correoField, 'yaexiste@gmail.com');
+      await tester.tap(telField);
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.',
+        ),
+        findsWidgets,
+      );
+
+      // Aunque llene el resto de los campos, no permite avanzar al Paso 6
+      await tester.enterText(telField, '5512345678');
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Usuario (mín. 4 caracteres) *'),
+        'laura_mendez',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Contraseña (8+ car., Mayús, Minús, Núm) *'),
+        'Venta2026#',
+      );
+      await tester.enterText(
+        find.widgetWithText(TextFormField, 'Confirmar contraseña *'),
+        'Venta2026#',
+      );
+
+      final totpBtn = find.text('Continuar a Google Authenticator');
+      await tester.ensureVisible(totpBtn);
+      await tester.tap(totpBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Paso 5 de 6'), findsOneWidget);
+      expect(fakeAuthSvc.iniciarTotpCalls, 0);
+      expect(
+        find.text(
+          'Este correo electrónico ya está en uso en otra cuenta. Inicia sesión o utiliza otro correo.',
+        ),
+        findsWidgets,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    });
+
+    testWidgets(
+        'PaymentFlowDialog envía payload firmado a GestoPago e imprime ticket Recarga Telcel Operación rechazada Origen no valido (-1) con Leyenda Oficial',
         (WidgetTester tester) async {
       final fakeBio = _FakeBiometricService(
         availability: const BiometricAvailability(
@@ -950,51 +1254,54 @@ void main() {
 
       final mockHttp = MockClient((req) async {
         if (req.url.path == '/api/v1/pagos/validar-referencia') {
-          return http.Response(
-            jsonEncode({
+          return _jsonUtf8(
+            {
               'esValida': true,
               'mensaje': 'Número válido',
               'referenciaNormalizada': '1111111111',
-            }),
+            },
             200,
           );
         }
         if (req.url.path == '/api/v1/pagos/2fa/generar') {
-          return http.Response(
-            jsonEncode({
+          return _jsonUtf8(
+            {
               'numeroCuenta': '5915019417993769',
               'vigenciaSegundos': 300,
               'correoEnviado': true,
               'correoDestino': 'cesar@gmail.com',
-            }),
+              'metodo2FA': 'EMAIL',
+            },
             200,
           );
         }
         if (req.url.path == '/api/v1/pagos/servicios') {
-          return http.Response(
-            jsonEncode({
-              'codigo': 1,
+          return _jsonUtf8(
+            {
+              'codigo': -1,
               'estadoOperacion': 'RECHAZADA',
-              'mensaje':
-                  'Se intentó realizar el pago en GestoPago, pero no se pudo validar la operación (código 55): Origen Valido.',
+              'mensaje': 'Recarga Telcel \$20 - Operación rechazada: Origen no valido (-1)',
               'mensajeOperacion':
-                  'Se intentó realizar el pago en GestoPago, pero no se pudo validar la operación (código 55): Origen Valido.',
+                  'Recarga Telcel \$20 - Operación rechazada: Origen no valido (-1)',
+              'motivoProveedor': 'Origen no valido',
               'folioTicket': 'GP-INTENTO-5501',
-              'numeroAutorizacion': 'SIN-VALIDAR',
-              'codigoProveedor': '55',
+              'numeroAutorizacion': '-1',
+              'codigoProveedor': '-1',
+              'firmaDigital': 'AES256CBC_SIGNED_PAYLOAD_PREVIEW_9988',
+              'referenciaDestino': '1111111111',
               'upc': 'UPC-998877',
-              'montoPagado': 100.0,
+              'montoPagado': 20.0,
               'comision': 0.0,
               'saldoRestanteCuenta': 500.0,
               'fechaHoraOperacion': '2026-11-27T18:00:00',
-              'concepto': 'AT-T - Recarga \$100',
-              'servicio': 'AT-T',
-              'producto': 'Recarga \$100',
-            }),
+              'concepto': 'Recarga Telcel \$20',
+              'servicio': 'Telcel',
+              'producto': 'Recarga Telcel \$20',
+            },
             400,
           );
         }
-        return http.Response('{}', 404);
+        return _jsonUtf8(<String, dynamic>{}, 404);
       });
 
       final client = ApiClient.withClient(mockHttp, baseUrl: 'http://localhost:10000');
@@ -1002,15 +1309,15 @@ void main() {
       final paymentProvider = PaymentProvider(paymentService: PaymentService(client: client));
 
       final product = ProductItem(
-        id: '374',
-        name: 'Recarga \$100',
-        service: 'AT-T',
-        serviceId: '115',
-        price: 100,
+        id: '403',
+        name: 'Recarga \$20',
+        service: 'Telcel',
+        serviceId: '133',
+        price: 20,
         referenceType: 'a',
         frontType: '1',
         hasVerificationDigit: false,
-        categoryId: '3',
+        categoryId: '1',
       );
       paymentProvider.initForProduct(product);
 
@@ -1048,30 +1355,43 @@ void main() {
         find.widgetWithText(TextField, 'Número Celular (10 dígitos)'),
         '1111111111',
       );
-      await tester.tap(find.text('Validar Referencia'));
+      final validateBtn = find.text('Validar Referencia');
+      await tester.ensureVisible(validateBtn);
+      await tester.tap(validateBtn);
       await tester.pumpAndSettle();
 
-      final step2Btn = find.text('Continuar a Confirmación');
+      final step2Btn = find.text('Continuar al Pago');
       await tester.ensureVisible(step2Btn);
       await tester.tap(step2Btn);
       await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).last, '123456');
+      final otpField = find.widgetWithText(TextField, 'Ingresa el código 2FA (6 dígitos)');
+      await tester.ensureVisible(otpField);
+      await tester.enterText(otpField, '123456');
       await tester.pump();
       final checkbox = find.byType(Checkbox);
       await tester.ensureVisible(checkbox);
       await tester.tap(checkbox);
       await tester.pump();
 
-      final payBtn = find.textContaining('Confirmar y Pagar');
+      final payBtn = find.text('Confirmar y Pagar');
       await tester.ensureVisible(payBtn);
       await tester.tap(payBtn);
       await tester.pumpAndSettle();
 
       expect(find.byType(ReceiptDialog), findsOneWidget);
-      expect(find.text('NO SE PUDO VALIDAR EN GESTOPAGO'), findsOneWidget);
-      expect(find.text('No se pudo validar en GestoPago'), findsOneWidget);
+      expect(find.text('OPERACIÓN RECHAZADA'), findsOneWidget);
+      expect(find.text('Operación rechazada'), findsWidgets);
+      expect(find.textContaining('Recarga Telcel'), findsWidgets);
+      expect(find.text('Origen no valido'), findsWidgets);
+      expect(find.text('-1'), findsWidgets);
       expect(find.text('GP-INTENTO-5501'), findsOneWidget);
+      expect(find.text('LEYENDA OFICIAL Y ACLARACIONES'), findsOneWidget);
+      expect(
+        find.textContaining('Operación no aplicada: no se realizó ningún cargo a su cuenta'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('800-226-2600'), findsOneWidget);
       expect(auth.session?.saldo, 500.0);
 
       await tester.pumpWidget(const SizedBox.shrink());
@@ -1162,6 +1482,164 @@ void main() {
       expect(auth.secondsRemaining, 300);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    });
+
+    testWidgets(
+        'PaymentFlowDialog muestra tarjeta Google Authenticator (30s) cuando metodo2FA es TOTP y oculta reenviar correo',
+        (WidgetTester tester) async {
+      final fakeBio = _FakeBiometricService(
+        availability: const BiometricAvailability(
+          isSupported: false,
+          hasEnrolledBiometrics: false,
+          hasFingerprint: false,
+          label: 'Huella Digital',
+        ),
+      );
+      final auth = AuthProvider(authService: _FakeAuthService(), biometricService: fakeBio);
+      await auth.initBiometrics();
+      await auth.login('cesar_app', 'Venta2026#');
+
+      final mockHttp = MockClient((req) async {
+        if (req.url.path == '/api/v1/pagos/validar-referencia') {
+          return _jsonUtf8(
+            {
+              'esValida': true,
+              'mensaje': 'Número válido',
+              'referenciaNormalizada': '5512345678',
+            },
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/pagos/2fa/generar') {
+          return _jsonUtf8(
+            {
+              'numeroCuenta': '5915019417993769',
+              'metodo2FA': 'TOTP',
+              'periodoTotpSegundos': 30,
+              'vigenciaSegundos': 300,
+              'correoEnviado': false,
+            },
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/pagos/servicios') {
+          return _jsonUtf8(
+            {
+              'codigo': 0,
+              'estadoOperacion': 'EXITOSA',
+              'mensaje': 'Pago exitoso',
+              'idTransaccion': 7788,
+              'numeroAutorizacion': 'AUTH-TOTP-7788',
+              'folioTicket': 'GP-TOTP-7788',
+              'montoPagado': 20.0,
+              'comision': 0.0,
+              'saldoRestanteCuenta': 480.0,
+              'fechaHoraOperacion': '2026-11-28T10:00:00',
+              'concepto': 'Recarga Telcel \$20',
+              'servicio': 'Telcel',
+              'producto': 'Recarga \$20',
+              'correoEnviado': true,
+            },
+            200,
+          );
+        }
+        return _jsonUtf8(<String, dynamic>{}, 404);
+      });
+
+      final client = ApiClient.withClient(mockHttp, baseUrl: 'http://localhost:10000');
+      client.setAuthToken('jwt-pass-1');
+      final paymentProvider = PaymentProvider(paymentService: PaymentService(client: client));
+
+      final product = ProductItem(
+        id: '403',
+        name: 'Recarga \$20',
+        service: 'Telcel',
+        serviceId: '133',
+        price: 20,
+        referenceType: 'a',
+        frontType: '1',
+        hasVerificationDigit: false,
+        categoryId: '1',
+      );
+      paymentProvider.initForProduct(product);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<PaymentProvider>.value(value: paymentProvider),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () {
+                    PaymentFlowDialog.show(
+                      ctx,
+                      product: product,
+                      onViewHistory: () {},
+                    );
+                  },
+                  child: const Text('Pagar con TOTP'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Pagar con TOTP'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Número Celular (10 dígitos)'),
+        '5512345678',
+      );
+      final validateBtn = find.text('Validar Referencia');
+      await tester.ensureVisible(validateBtn);
+      await tester.tap(validateBtn);
+      await tester.pumpAndSettle();
+
+      final step2Btn = find.text('Continuar al Pago');
+      await tester.ensureVisible(step2Btn);
+      await tester.tap(step2Btn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Google Authenticator (30s)'), findsOneWidget);
+      expect(find.text('Reenviar código 2FA'), findsNothing);
+      expect(find.textContaining('Código enviado a'), findsNothing);
+
+      final totpField = find.widgetWithText(
+        TextField,
+        'Código de Google Authenticator (6 dígitos)',
+      );
+      await tester.ensureVisible(totpField);
+      await tester.enterText(totpField, '998877');
+      await tester.pump();
+
+      final checkbox = find.byType(Checkbox);
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      await tester.pump();
+
+      final payBtn = find.text('Confirmar y Pagar');
+      await tester.ensureVisible(payBtn);
+      await tester.tap(payBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReceiptDialog), findsOneWidget);
+      expect(find.text('¡Operación Exitosa!'), findsOneWidget);
+      expect(find.text('LEYENDA OFICIAL Y ACLARACIONES'), findsOneWidget);
+      expect(
+        find.textContaining('Conserve este comprobante digital como constancia oficial de pago'),
+        findsOneWidget,
+      );
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      paymentProvider.dispose();
       auth.dispose();
     });
   });

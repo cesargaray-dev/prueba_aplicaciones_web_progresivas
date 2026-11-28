@@ -114,6 +114,118 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     }
   }
 
+  Future<void> _openDepositDialog(Map<String, dynamic> user) async {
+    final id = user['clienteId'];
+    final usr = (user['usuario'] ?? '').toString();
+    final montoCtrl = TextEditingController(text: '200');
+    final conceptoCtrl = TextEditingController(text: 'Ingreso de saldo por administrador');
+    String? errText;
+    bool saving = false;
+
+    final updated = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              const Icon(Icons.account_balance_wallet_rounded, color: AppTheme.accentEmerald),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Ingresar Saldo a @$usr',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: ['100', '200', '500', '1000'].map((amt) {
+                  return ActionChip(
+                    visualDensity: VisualDensity.compact,
+                    label: Text('+\$$amt', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    onPressed: () => setDialogState(() {
+                      montoCtrl.text = amt;
+                      errText = null;
+                    }),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: montoCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: InputDecoration(
+                  labelText: 'Monto a ingresar (MXN) *',
+                  prefixText: '\$ ',
+                  errorText: errText,
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: conceptoCtrl,
+                decoration: const InputDecoration(labelText: 'Concepto'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.of(ctx).pop(false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentEmerald),
+              onPressed: saving
+                  ? null
+                  : () async {
+                      final m = double.tryParse(montoCtrl.text.trim()) ?? 0;
+                      if (m <= 0 || m > 1000000) {
+                        setDialogState(() => errText = 'Ingresa un monto mayor a \$0.00');
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        await _api.post('/api/v1/admin/usuarios/$id/abonar', body: {
+                          'monto': m,
+                          'concepto': conceptoCtrl.text.trim(),
+                        });
+                        if (ctx.mounted) Navigator.of(ctx).pop(true);
+                      } catch (e) {
+                        setDialogState(() {
+                          saving = false;
+                          errText = e is ApiException ? e.message : 'Error al ingresar saldo';
+                        });
+                      }
+                    },
+              child: Text(saving ? 'Ingresando...' : 'Confirmar Ingreso'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    montoCtrl.dispose();
+    conceptoCtrl.dispose();
+
+    if (updated == true) {
+      await _loadUsers();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppTheme.accentEmerald,
+            content: Text('Saldo ingresado correctamente a @$usr.'),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _confirmDelete(Map<String, dynamic> user) async {
     final id = user['clienteId'];
     final usr = (user['usuario'] ?? '').toString();
@@ -552,6 +664,14 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                                     alignment: WrapAlignment.end,
                                     spacing: 4,
                                     children: [
+                                      TextButton.icon(
+                                        style: TextButton.styleFrom(
+                                          foregroundColor: AppTheme.accentEmerald,
+                                        ),
+                                        onPressed: () => _openDepositDialog(u),
+                                        icon: const Icon(Icons.add_card_rounded, size: 16),
+                                        label: const Text('Ingresar Saldo'),
+                                      ),
                                       TextButton.icon(
                                         onPressed: () => _openEditDialog(u),
                                         icon: const Icon(Icons.edit_rounded, size: 16),

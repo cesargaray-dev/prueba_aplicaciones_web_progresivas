@@ -241,7 +241,7 @@ class PaymentProvider with ChangeNotifier {
       return null;
     }
 
-    if (twoFASecondsNotifier.value <= 0) {
+    if (twoFASecondsNotifier.value <= 0 && _twoFAResponse?.isTotp != true) {
       _paymentError = 'El código 2FA expiró. Solicita uno nuevo.';
       notifyListeners();
       return null;
