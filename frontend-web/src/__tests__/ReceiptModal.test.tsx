@@ -111,9 +111,9 @@ describe('ReceiptModal 3-State Result View (F12)', () => {
       </MockAuthProvider>
     );
 
-    expect(screen.getByText('Operación Rechazada')).toBeInTheDocument();
-    expect(screen.getByText('Tu saldo no fue descontado')).toBeInTheDocument();
-    expect(screen.getByText(/Código del proveedor: 06/i)).toBeInTheDocument();
+    expect(screen.getByText('No se pudo validar en GestoPago')).toBeInTheDocument();
+    expect(screen.getByText(/Intento enviado a GestoPago · No se pudo validar/i)).toBeInTheDocument();
+    expect(screen.getByText(/Código 06/i)).toBeInTheDocument();
     expect(screen.queryByText(/Comprobante enviado vía Brevo/i)).not.toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'Escape' });

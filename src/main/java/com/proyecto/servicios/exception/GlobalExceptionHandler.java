@@ -131,6 +131,15 @@ public class GlobalExceptionHandler {
         if (status == null) {
             status = HttpStatus.BAD_REQUEST;
         }
+        if (ex.getDetalleTicket() != null) {
+            var ticket = ex.getDetalleTicket();
+            ticket.setCodigo(ticket.getCodigo() != null ? ticket.getCodigo() : 1);
+            ticket.setMensaje(sanitizarMensaje(ex.getMessage()));
+            if (ticket.getMensajeOperacion() != null) {
+                ticket.setMensajeOperacion(sanitizarMensaje(ticket.getMensajeOperacion()));
+            }
+            return ResponseEntity.status(status).body(ticket);
+        }
         return ResponseEntity.status(status)
                 .body(new GenericResponse(1, sanitizarMensaje(ex.getMessage())));
     }

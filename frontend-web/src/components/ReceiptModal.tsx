@@ -215,11 +215,13 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
         gradient: 'from-red-600 to-rose-700',
         subtextClass: 'text-red-100',
         icon: <XCircle className="w-10 h-10 text-white" />,
-        title: 'Operación Rechazada',
+        title: receipt.upc || receipt.codigoProveedor
+          ? 'No se pudo validar en GestoPago'
+          : 'Operación Rechazada',
         subtitle:
           receipt.mensajeOperacion ||
           receipt.mensaje ||
-          'El proveedor rechazó la operación. No se aplicó ningún cargo.',
+          'Se intentó realizar el pago con GestoPago, pero no se pudo validar la operación. No se aplicó ningún cargo.',
       };
 
   return (
@@ -310,29 +312,51 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
             <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 flex items-start gap-2.5 text-red-900 text-xs">
               <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
               <div className="space-y-1">
-                <p className="font-bold">Tu saldo no fue descontado</p>
+                <p className="font-bold">Intento enviado a GestoPago · No se pudo validar (Sin cargo)</p>
                 <p className="text-[11px] leading-relaxed">
                   {receipt.codigoProveedor
-                    ? `Código del proveedor: ${receipt.codigoProveedor}. `
+                    ? `Respuesta real de GestoPago — Código ${receipt.codigoProveedor}. `
                     : ''}
-                  Verifica tu referencia o intenta más tarde.
+                  La solicitud se transmitió al proveedor, pero no pudo ser validada/autorizada. Tu saldo permanece 100% intacto.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Official GestoPago Proof of Purchase Banner */}
-          {isSuccess && (receipt.idTransaccion || receipt.numeroAutorizacion || receipt.upc) && (
-            <div className="p-3.5 rounded-2xl bg-gradient-to-br from-blue-950 via-slate-900 to-indigo-950 text-white border border-blue-400/30 shadow-md space-y-2">
+          {/* Official GestoPago Proof of Purchase OR Unvalidated Attempt Banner */}
+          {(receipt.idTransaccion || receipt.numeroAutorizacion || receipt.upc || receipt.codigoProveedor) && (
+            <div
+              className={`p-3.5 rounded-2xl bg-gradient-to-br ${
+                isSuccess
+                  ? 'from-blue-950 via-slate-900 to-indigo-950 border-blue-400/30'
+                  : 'from-slate-950 via-rose-950/90 to-slate-900 border-rose-400/35'
+              } text-white border shadow-md space-y-2`}
+            >
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[10px] font-black uppercase tracking-[0.14em] text-amber-300">
-                  ✓ Compra Confirmada por GestoPago
+                <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-300">
+                  {isSuccess
+                    ? '✓ Compra Confirmada por GestoPago'
+                    : '⚡ Intento Real GestoPago · No se pudo validar'}
                 </span>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 font-mono text-[10px] font-bold">
-                  COD {receipt.codigoProveedor || '01'}
+                <span
+                  className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${
+                    isSuccess
+                      ? 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
+                      : 'bg-rose-500/25 border-rose-300/40 text-rose-200'
+                  }`}
+                >
+                  COD {receipt.codigoProveedor || (isSuccess ? '01' : 'ERR')}
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-1.5 text-xs">
+                {!isSuccess && (
+                  <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
+                    <span className="text-rose-200 font-semibold">Validación GestoPago:</span>
+                    <span className="font-mono font-black text-amber-200 text-xs">
+                      NO SE PUDO VALIDAR
+                    </span>
+                  </div>
+                )}
                 {receipt.idTransaccion !== undefined && receipt.idTransaccion !== null && (
                   <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
                     <span className="text-blue-200 font-semibold">ID Transacción GestoPago:</span>
@@ -345,7 +369,9 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                   <div className="flex items-center justify-between gap-2 bg-white/10 rounded-xl px-3 py-1.5">
                     <span className="text-blue-200 font-semibold">No. Autorización GestoPago:</span>
                     <span className="font-mono font-black text-white text-sm tracking-wider break-all">
-                      {receipt.numeroAutorizacion}
+                      {receipt.numeroAutorizacion === '-1'
+                        ? '-1 (No validado)'
+                        : receipt.numeroAutorizacion}
                     </span>
                   </div>
                 )}
@@ -486,8 +512,8 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
 
           {/* Actions */}
           <div className="no-print pt-2 flex flex-col gap-2">
-            {isSuccess && (
-              <div className="grid grid-cols-3 gap-2">
+            <div className={`grid ${isSuccess ? 'grid-cols-3' : 'grid-cols-2'} gap-2`}>
+              {isSuccess && (
                 <button
                   type="button"
                   onClick={handleDownloadPdf}
@@ -501,39 +527,39 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                   )}
                   <span>Descargar PDF</span>
                 </button>
+              )}
 
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="py-2.5 px-2 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <Printer className="w-4 h-4 text-slate-500" />
-                  <span>Imprimir</span>
-                </button>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="py-2.5 px-2 rounded-2xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors"
+              >
+                <Printer className="w-4 h-4 text-slate-500" />
+                <span>Imprimir Ticket</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleCopy}
-                  className={`py-2.5 px-2 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
-                    copied
-                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                  }`}
-                >
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-600" />
-                      <span>¡Copiado!</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4 text-slate-500" />
-                      <span>Copiar</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={handleCopy}
+                className={`py-2.5 px-2 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-colors ${
+                  copied
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                }`}
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-4 h-4 text-emerald-600" />
+                    <span>¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 text-slate-500" />
+                    <span>Copiar</span>
+                  </>
+                )}
+              </button>
+            </div>
 
             {isPending && onGoToHistory && (
               <button

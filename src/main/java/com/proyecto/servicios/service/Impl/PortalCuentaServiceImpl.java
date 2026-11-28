@@ -242,6 +242,19 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         String usuario = request.getUsuario().trim();
         String correo = request.getCorreo().trim().toLowerCase(Locale.ROOT);
         String telefono = request.getTelefonoMovil().trim();
+        String nombreTrim = request.getNombre() != null ? request.getNombre().trim() : "";
+        String paternoTrim = request.getApellidoPaterno() != null ? request.getApellidoPaterno().trim() : "";
+        String maternoTrim = request.getApellidoMaterno() != null ? request.getApellidoMaterno().trim() : "";
+
+        if (nombreTrim.length() < 2 || nombreTrim.length() > 40) {
+            throw new ValidacionException("El nombre debe tener entre 2 y 40 letras.");
+        }
+        if (paternoTrim.length() < 3 || paternoTrim.length() > 40) {
+            throw new ValidacionException("El apellido paterno debe tener entre 3 y 40 letras.");
+        }
+        if (!maternoTrim.isEmpty() && (maternoTrim.length() < 3 || maternoTrim.length() > 40)) {
+            throw new ValidacionException("El apellido materno debe tener entre 3 y 40 letras.");
+        }
 
         if (!TelefonoUtil.esTelefonoMexicanoValido(telefono)) {
             throw new ValidacionException(TelefonoUtil.diagnosticarTelefonoInvalido(telefono));
@@ -323,26 +336,29 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
 
         if (request.getNombre() != null) {
             String nombreClean = request.getNombre().trim();
-            if (nombreClean.length() < 2) {
-                throw new ValidacionException("El nombre debe tener al menos 2 caracteres.");
+            if (nombreClean.length() < 2 || nombreClean.length() > 40) {
+                throw new ValidacionException("El nombre debe tener entre 2 y 40 letras.");
             }
             cliente.setNombre(nombreClean);
         }
         if (request.getSegundoNombre() != null) {
             String segClean = request.getSegundoNombre().trim();
+            if (!segClean.isEmpty() && (segClean.length() < 2 || segClean.length() > 40)) {
+                throw new ValidacionException("El segundo nombre debe tener entre 2 y 40 letras.");
+            }
             cliente.setSegundoNombre(segClean.isEmpty() ? null : segClean);
         }
         if (request.getApellidoPaterno() != null) {
             String apPatClean = request.getApellidoPaterno().trim();
-            if (apPatClean.length() < 2) {
-                throw new ValidacionException("El apellido paterno debe tener al menos 2 caracteres.");
+            if (apPatClean.length() < 3 || apPatClean.length() > 40) {
+                throw new ValidacionException("El apellido paterno debe tener entre 3 y 40 letras.");
             }
             cliente.setApellidoPaterno(apPatClean);
         }
         if (request.getApellidoMaterno() != null) {
             String apMatClean = request.getApellidoMaterno().trim();
-            if (!apMatClean.isEmpty() && apMatClean.length() < 2) {
-                throw new ValidacionException("El apellido materno debe tener al menos 2 caracteres.");
+            if (!apMatClean.isEmpty() && (apMatClean.length() < 3 || apMatClean.length() > 40)) {
+                throw new ValidacionException("El apellido materno debe tener entre 3 y 40 letras.");
             }
             cliente.setApellidoMaterno(apMatClean);
         }

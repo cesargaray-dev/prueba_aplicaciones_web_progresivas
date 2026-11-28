@@ -428,14 +428,19 @@ class PortalCuentaServiceImplTest {
         req.setFechaNacimiento("2018-01-01");
         assertThrows(ValidacionException.class, () -> service.registrarClientePortal(req));
 
-        // Registro con CURP/RFC explícitos, nombres cortos y falla controlada en correo de bienvenida
+        // Apellido paterno de menos de 3 letras debe fallar inmediatamente
+        RegisterRequestDTO reqApCorto = crearRegistroValido();
+        reqApCorto.setApellidoPaterno("Aa");
+        assertThrows(ValidacionException.class, () -> service.registrarClientePortal(reqApCorto));
+
+        // Registro con CURP/RFC explícitos, nombres cortos válidos (2 nombre, 3 apellidos) y falla controlada en correo de bienvenida
         RegisterRequestDTO reqExplicito = crearRegistroValido();
         reqExplicito.setCurp("GAGC990515HDFRRL01");
         reqExplicito.setRfc("GAGC990515HDF");
         reqExplicito.setNombre("Bo");
         reqExplicito.setSegundoNombre("Luis");
-        reqExplicito.setApellidoPaterno("Aa");
-        reqExplicito.setApellidoMaterno("Eo");
+        reqExplicito.setApellidoPaterno("Ara");
+        reqExplicito.setApellidoMaterno("Elo");
         when(loginClienteRepository.findByUsuario("nuevo_user")).thenReturn(Optional.empty());
         when(clienteRepository.existsByCorreo("nuevo.cliente@gmail.com")).thenReturn(false);
         when(clienteRepository.existsByCurp("GAGC990515HDFRRL01")).thenReturn(false);

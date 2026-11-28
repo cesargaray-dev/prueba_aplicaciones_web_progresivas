@@ -3,6 +3,8 @@
  * Reglas sincronizadas con el backend (TelefonoUtil.java).
  */
 
+import { resolverCodigoPostalMexicano } from '../data/mexicoCatalogs';
+
 export const CATEGORIAS_TELEFONIA = new Set(['1', '2', '3', '4', '12', '13', '19']);
 
 export const CATEGORIAS_FRONT1_NO_TELEFONIA = new Set(['8', '10', '11', '16', '18']);
@@ -126,13 +128,125 @@ export function esContrasenaSegura(password: string): boolean {
 }
 
 export function esNombreValido(value: string, required = true): boolean {
+  return diagnosticarNombre(value, 'El nombre', required) === null;
+}
+
+export function diagnosticarNombre(
+  value: string,
+  etiqueta = 'El nombre',
+  required = true
+): string | null {
+  const raw = value || '';
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return required ? `${etiqueta} es obligatorio (entre 2 y 40 letras).` : null;
+  }
+  if (/[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ\s]/.test(trimmed)) {
+    return `${etiqueta} solo debe contener letras y espacios (sin números ni símbolos).`;
+  }
+  if (/\s{2,}/.test(trimmed)) {
+    return `${etiqueta} no debe contener espacios dobles consecutivos.`;
+  }
+  if (trimmed.length < 2) {
+    return `${etiqueta} debe tener al menos 2 letras (máximo 40 caracteres).`;
+  }
+  if (trimmed.length > 40) {
+    return `${etiqueta} no debe exceder 40 caracteres.`;
+  }
+  return null;
+}
+
+export function esApellidoValido(value: string, required = true): boolean {
+  return diagnosticarApellido(value, 'El apellido', required) === null;
+}
+
+export function diagnosticarApellido(
+  value: string,
+  etiqueta = 'El apellido',
+  required = true
+): string | null {
+  const raw = value || '';
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return required ? `${etiqueta} es obligatorio (mínimo 3 letras, máximo 40).` : null;
+  }
+  if (/[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ\s]/.test(trimmed)) {
+    return `${etiqueta} solo debe contener letras y espacios (sin números ni símbolos).`;
+  }
+  if (/\s{2,}/.test(trimmed)) {
+    return `${etiqueta} no debe contener espacios dobles consecutivos.`;
+  }
+  if (trimmed.length < 3) {
+    return `${etiqueta} debe tener al menos 3 letras (máximo 40 caracteres).`;
+  }
+  if (trimmed.length > 40) {
+    return `${etiqueta} no debe exceder 40 caracteres.`;
+  }
+  return null;
+}
+
+export function diagnosticarCalle(value: string): string | null {
   const trimmed = (value || '').trim();
   if (!trimmed) {
-    return !required;
+    return 'El nombre de la calle o vialidad es obligatorio.';
   }
-  if (required && trimmed.length < 2) return false;
-  if (trimmed.length > 50) return false;
-  return /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/.test(trimmed);
+  if (/[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9\s.,\-°/]/.test(trimmed)) {
+    return 'La calle contiene caracteres no permitidos (usa solo letras, números, puntos o guiones).';
+  }
+  if (trimmed.length < 3) {
+    return 'El nombre de la calle debe tener al menos 3 caracteres.';
+  }
+  if (trimmed.length > 80) {
+    return 'El nombre de la calle no debe exceder 80 caracteres.';
+  }
+  const letters = trimmed.match(/[A-Za-zÁÉÍÓÚÜáéíóúüÑñ]/g) || [];
+  if (letters.length < 2) {
+    return 'Ingresa un nombre de calle descriptivo (ej. Reforma, 5 de Mayo, Insurgentes Sur).';
+  }
+  return null;
+}
+
+export function diagnosticarNumeroDomicilio(
+  value: string,
+  required = true,
+  etiqueta = 'El número exterior'
+): string | null {
+  const trimmed = (value || '').trim();
+  if (!trimmed) {
+    return required ? `${etiqueta} es obligatorio (usa S/N si no tiene número).` : null;
+  }
+  if (!/^[A-Za-z0-9\s/\-.]{1,10}$/.test(trimmed)) {
+    return `${etiqueta} debe tener entre 1 y 10 caracteres alfanuméricos válidos (ej. 222, 14-B o S/N).`;
+  }
+  return null;
+}
+
+export function diagnosticarColonia(value: string): string | null {
+  const trimmed = (value || '').trim();
+  if (!trimmed) {
+    return 'Selecciona o escribe la colonia de tu domicilio.';
+  }
+  if (/[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9\s.,\-/]/.test(trimmed)) {
+    return 'La colonia contiene caracteres inválidos.';
+  }
+  if (trimmed.length < 3 || trimmed.length > 60) {
+    return 'La colonia debe tener entre 3 y 60 caracteres.';
+  }
+  return null;
+}
+
+export function diagnosticarEmpresa(value: string): string | null {
+  const trimmed = (value || '').trim();
+  if (!trimmed) {
+    return 'Ingresa tu lugar de trabajo, institución educativa o actividad.';
+  }
+  if (trimmed.length < 2 || trimmed.length > 80) {
+    return 'El nombre de la empresa o institución debe tener entre 2 y 80 caracteres.';
+  }
+  if (/[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9\s.,&\-()/]/.test(trimmed)) {
+    return 'La empresa o institución contiene caracteres inválidos.';
+  }
+  return null;
 }
 
 export function esUsuarioValido(value: string): boolean {
@@ -258,7 +372,12 @@ export function diagnosticarRfc(raw: string): string | null {
 
 export function esCodigoPostalValido(raw: string): boolean {
   if (!raw) return false;
-  return /^(0[1-9]|[1-9][0-9])\d{3}$/.test(raw.trim());
+  return resolverCodigoPostalMexicano(raw).valido;
+}
+
+export function diagnosticarCodigoPostal(raw: string): string | null {
+  const res = resolverCodigoPostalMexicano(raw);
+  return res.valido ? null : res.error || 'Código postal inválido.';
 }
 
 const limpiarTextoRenapo = (txt: string): string =>

@@ -253,27 +253,47 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
                     ? txResponse.getMensaje().getTexto().trim()
                     : "Sin mensaje del proveedor";
 
-            // Soporte de confirmación en entorno Sandbox de GestoPago cuando el servicio asignado y firma AES son válidos ("55" / "Origen Valido")
-            if ("55".equals(codigoProveedor) && textoProveedor.toLowerCase().contains("origen valido")) {
-                log.info("GestoPago Sandbox validó servicio y firma con CODIGO=55 (Origen Valido) para cuenta {}. Completando confirmación sandbox.", cuentaMask);
-                codigoProveedor = CODIGO_EXITO_GESTOPAGO;
-                textoProveedor = "Operacion realizada con exito";
-                if (txResponse.getIdTx() == null || txResponse.getIdTx() <= 0) {
-                    txResponse.setIdTx(946000000L + Math.abs(System.nanoTime() % 900000L));
-                }
-                if (txResponse.getNumAutorizacion() == null || "-1".equals(txResponse.getNumAutorizacion().trim())) {
-                    txResponse.setNumAutorizacion(String.valueOf(100000000L + Math.abs(System.nanoTime() % 900000L)));
-                }
-            }
-
             if (!CODIGO_EXITO_GESTOPAGO.equals(codigoProveedor)) {
-                // Falla en proveedor (ej. 02 Saldo insuficiente en GestoPago, 06 Duplicada, 82 Timeout)
-                // NO SE MODIFICA NI DESCUENTA NADA DE LA CUENTA DEL CLIENTE
-                log.warn("Pago rechazado por GestoPago (CODIGO={}): {}. No se descontó saldo de la cuenta {}",
+                // Falla o validación no aprobada en GestoPago (ej. 05/55 Origen Valido, 02 Saldo insuficiente distribuidor, 03 Referencia inválida, 06 Duplicada, 82 Timeout)
+                // Se intentó el pago real contra GestoPago, NO SE DESCUENTA NADA DE LA CUENTA DEL CLIENTE y se devuelve el ticket del intento.
+                LocalDateTime fechaIntento = LocalDateTime.now();
+                String folioIntento = "FT-" + fechaIntento.format(HORA_LOCAL_FORMATTER) + "-"
+                        + AesGestoPagoUtil.generarCadenaAlfanumerica(4).toUpperCase();
+                String estadoIntento = CODIGO_TIMEOUT_PROVEEDOR.equals(codigoProveedor) ? "PENDIENTE" : "RECHAZADA";
+                String mensajeTicket = String.format(
+                        "Se intentó realizar el pago en GestoPago, pero no se pudo validar la operación (Código %s: %s). No se realizó ningún cargo a tu cuenta.",
+                        codigoProveedor.isEmpty() ? "ERR" : codigoProveedor,
+                        textoProveedor
+                );
+
+                PagoServicioResponseDTO ticketRechazo = PagoServicioResponseDTO.builder()
+                        .idTransaccion(txResponse.getIdTx())
+                        .numeroAutorizacion(txResponse.getNumAutorizacion())
+                        .folioTicket(folioIntento)
+                        .upc(upc)
+                        .codigoProveedor(codigoProveedor.isEmpty() ? "ERR" : codigoProveedor)
+                        .estadoOperacion(estadoIntento)
+                        .mensajeOperacion(mensajeTicket)
+                        .servicio(nombreServicio)
+                        .producto(nombreProducto)
+                        .montoPagado(request.getMonto())
+                        .comision(BigDecimal.ZERO)
+                        .saldoRestanteCuenta(saldo.getSaldo())
+                        .fechaHoraOperacion(fechaIntento)
+                        .concepto(String.format("INTENTO GESTOPAGO NO VALIDADO - %s - COD %s: %s",
+                                nombreServicio, codigoProveedor, textoProveedor))
+                        .build();
+                ticketRechazo.setCodigo(1);
+                ticketRechazo.setMensaje(mensajeTicket);
+
+                log.warn("Intento real en GestoPago no validado (CODIGO={}): {}. No se descontó saldo de la cuenta {}",
                         codigoProveedor, textoProveedor, cuentaMask);
+                int httpCode = "06".equals(codigoProveedor) ? 409 : (CODIGO_TIMEOUT_PROVEEDOR.equals(codigoProveedor) ? 504 : 400);
                 throw new PagoServicioProveedorException(
                         codigoProveedor,
-                        String.format("Error en el proveedor de servicios (Código %s): %s", codigoProveedor, textoProveedor)
+                        mensajeTicket,
+                        httpCode,
+                        ticketRechazo
                 );
             }
 

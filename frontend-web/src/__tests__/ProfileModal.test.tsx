@@ -24,7 +24,7 @@ describe('ProfileModal Component', () => {
     await user.clear(nombreInput);
     await user.type(nombreInput, 'Cesar123');
     await user.click(screen.getByRole('button', { name: /Guardar Cambios de Perfil/i }));
-    expect(screen.getByText(/contener solo letras y espacios/i)).toBeInTheDocument();
+    expect(screen.getByText(/solo debe contener letras y espacios/i)).toBeInTheDocument();
 
     await user.clear(nombreInput);
     await user.type(nombreInput, 'Cesar');
@@ -37,15 +37,15 @@ describe('ProfileModal Component', () => {
     fireEvent.change(segInput, { target: { value: 'Enrique' } });
 
     const patInput = screen.getByLabelText('Apellido paterno *');
-    fireEvent.change(patInput, { target: { value: '1' } });
+    fireEvent.change(patInput, { target: { value: 'Ga' } });
     await user.click(screen.getByRole('button', { name: /Guardar Cambios de Perfil/i }));
-    expect(screen.getByText(/El apellido paterno debe tener entre 2 y 50/i)).toBeInTheDocument();
+    expect(screen.getByText(/El apellido paterno debe tener al menos 3 letras/i)).toBeInTheDocument();
     fireEvent.change(patInput, { target: { value: 'Garay' } });
 
     const matInput = screen.getByLabelText('Apellido materno *');
-    fireEvent.change(matInput, { target: { value: '2' } });
+    fireEvent.change(matInput, { target: { value: 'Lo' } });
     await user.click(screen.getByRole('button', { name: /Guardar Cambios de Perfil/i }));
-    expect(screen.getByText(/El apellido materno debe tener entre 2 y 50/i)).toBeInTheDocument();
+    expect(screen.getByText(/El apellido materno debe tener al menos 3 letras/i)).toBeInTheDocument();
     fireEvent.change(matInput, { target: { value: 'Garcia' } });
 
     const correoInput = screen.getByLabelText(/Correo electrónico real/i);

@@ -275,6 +275,24 @@ class PaymentProvider with ChangeNotifier {
       notifyListeners();
       return resp;
     } on ApiException catch (e) {
+      // Si GestoPago respondió un rechazo o fallo de validación estructurado (no 401 de 2FA),
+      // devolvemos el ticket del intento para que se abra ReceiptDialog indicando que no se pudo validar.
+      if (e.statusCode != 401 && e.details is Map<String, dynamic>) {
+        final raw = Map<String, dynamic>.from(e.details as Map);
+        final hasAttemptData = raw['estadoOperacion'] != null ||
+            raw['codigoProveedor'] != null ||
+            raw['upc'] != null;
+        if (hasAttemptData) {
+          raw['estadoOperacion'] ??= (e.statusCode == 504 ? 'PENDIENTE' : 'RECHAZADA');
+          raw['montoPagado'] ??= _monto;
+          final attemptTicket = PaymentResponse.fromJson(raw, httpStatusCode: e.statusCode);
+          _twoFATimer?.cancel();
+          _twoFATimer = null;
+          _isPaying = false;
+          notifyListeners();
+          return attemptTicket;
+        }
+      }
       _paymentError = e.message;
       _isPaying = false;
       notifyListeners();

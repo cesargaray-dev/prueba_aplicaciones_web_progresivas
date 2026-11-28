@@ -31,17 +31,30 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/useAuth';
 import {
+  CATALOGO_ESTADOS_SEPOMEX,
+  TABULADOR_PROFESIONES,
+  TABULADOR_SUELDOS,
+  TIPOS_VIALIDAD,
+  obtenerMunicipiosPorEstado,
+  resolverCodigoPostalMexicano,
+} from '../data/mexicoCatalogs';
+import {
   ESTADOS_MEXICO,
+  diagnosticarApellido,
+  diagnosticarCalle,
+  diagnosticarCodigoPostal,
+  diagnosticarColonia,
   diagnosticarCurp,
+  diagnosticarEmpresa,
+  diagnosticarNombre,
+  diagnosticarNumeroDomicilio,
   diagnosticarRfc,
   diagnosticarTelefono,
-  esCodigoPostalValido,
   esContrasenaSegura,
   esCorreoPlaceholder,
   esCorreoValido,
   esCurpValida,
   esMayorDeEdad,
-  esNombreValido,
   esRfcValido,
   esTelefonoMexicanoValido,
   esUsuarioValido,
@@ -120,15 +133,18 @@ export const LoginPage: React.FC = () => {
   const [entidadCodigo, setEntidadCodigo] = useState('DF');
   const [curp, setCurp] = useState('');
   const [rfc, setRfc] = useState('');
-  const [ocupacion, setOcupacion] = useState('Profesionista');
-  const [empresa, setEmpresa] = useState('Independiente');
-  const [ingresoMensual, setIngresoMensual] = useState('18000');
+  const [ocupacion, setOcupacion] = useState(TABULADOR_PROFESIONES[0].label);
+  const [empresa, setEmpresa] = useState('');
+  const [ingresoMensual, setIngresoMensual] = useState(String(TABULADOR_SUELDOS[2].montoRepresentativo));
+  const [tipoVialidad, setTipoVialidad] = useState('Calle');
   const [calle, setCalle] = useState('');
   const [numeroExterior, setNumeroExterior] = useState('');
   const [numeroInterior, setNumeroInterior] = useState('');
-  const [colonia, setColonia] = useState('');
   const [codigoPostal, setCodigoPostal] = useState('');
-  const [municipio, setMunicipio] = useState('');
+  const [estadoDomicilioCodigo, setEstadoDomicilioCodigo] = useState('DF');
+  const [municipio, setMunicipio] = useState('Cuauhtémoc');
+  const [coloniaModoManual, setColoniaModoManual] = useState(false);
+  const [colonia, setColonia] = useState('Juárez');
 
   // Register Step 3: Contact & Credentials
   const [correo, setCorreo] = useState('');
@@ -145,6 +161,17 @@ export const LoginPage: React.FC = () => {
   const [otpSentTo, setOtpSentTo] = useState('');
   const [otpFeedback, setOtpFeedback] = useState<string | null>(null);
 
+  // Per-field touched state for immediate onBlur & live validation
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const markTouched = (field: string) =>
+    setTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+  const markManyTouched = (fields: string[]) =>
+    setTouched((prev) => {
+      const next = { ...prev };
+      for (const f of fields) next[f] = true;
+      return next;
+    });
+
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -155,15 +182,82 @@ export const LoginPage: React.FC = () => {
     return () => clearInterval(timer);
   }, [regStep, otpCountdown]);
 
-  const selectedStateName =
-    ESTADOS_MEXICO.find((s) => s.code === entidadCodigo)?.name || 'Ciudad de México';
+  const cpResolution = codigoPostal ? resolverCodigoPostalMexicano(codigoPostal) : null;
+  const domicilioEstadoObj =
+    CATALOGO_ESTADOS_SEPOMEX.find((e) => e.codigoRenapo === estadoDomicilioCodigo) ||
+    CATALOGO_ESTADOS_SEPOMEX[0];
+  const selectedStateName = domicilioEstadoObj.nombre;
+  const municipiosDisponibles = obtenerMunicipiosPorEstado(estadoDomicilioCodigo);
+  const coloniasDisponibles = cpResolution?.valido
+    ? cpResolution.coloniasSugeridas
+    : domicilioEstadoObj.coloniasBase.map((c) => c.trim());
 
-  const phoneDiag = telefonoMovil ? diagnosticarTelefono(telefonoMovil) : null;
-  const phoneOk = esTelefonoMexicanoValido(telefonoMovil);
-  const curpDiag = curp ? diagnosticarCurp(curp) : null;
+  // Live per-field diagnostics
+  const nombreErr = diagnosticarNombre(nombre, 'El nombre', true);
+  const segundoNombreErr = diagnosticarNombre(segundoNombre, 'El segundo nombre', false);
+  const apPaternoErr = diagnosticarApellido(apellidoPaterno, 'El apellido paterno', true);
+  const apMaternoErr = diagnosticarApellido(apellidoMaterno, 'El apellido materno', true);
+  const fechaNacErr = esMayorDeEdad(fechaNacimiento)
+    ? null
+    : 'Debes ingresar una fecha válida y ser mayor de 18 años.';
+
+  const curpDiag = diagnosticarCurp(curp);
   const curpOk = esCurpValida(curp);
-  const rfcDiag = rfc ? diagnosticarRfc(rfc) : null;
+  const rfcDiag = diagnosticarRfc(rfc);
   const rfcOk = esRfcValido(rfc);
+  const empresaErr = diagnosticarEmpresa(empresa);
+  const cpDiag = diagnosticarCodigoPostal(codigoPostal);
+  const cpMismatchErr =
+    !cpDiag && cpResolution?.codigoRenapo && cpResolution.codigoRenapo !== estadoDomicilioCodigo
+      ? `El C.P. ${codigoPostal} pertenece a ${cpResolution.estadoNombre}, no a ${selectedStateName}.`
+      : null;
+  const calleErr = diagnosticarCalle(calle);
+  const numExtErr = diagnosticarNumeroDomicilio(numeroExterior, true, 'El número exterior');
+  const numIntErr = diagnosticarNumeroDomicilio(numeroInterior, false, 'El número interior');
+  const coloniaErr = diagnosticarColonia(colonia);
+  const municipioErr = municipio.trim().length < 2 ? 'Selecciona tu municipio o alcaldía.' : null;
+
+  const correoTrim = correo.trim();
+  const correoErr = !correoTrim
+    ? 'El correo electrónico es obligatorio.'
+    : !esCorreoValido(correoTrim)
+    ? 'Ingresa un correo electrónico con formato válido (ej. nombre@gmail.com).'
+    : esCorreoPlaceholder(correoTrim)
+    ? 'Usa un correo electrónico real (no dominios de ejemplo).'
+    : null;
+  const phoneDiag = diagnosticarTelefono(telefonoMovil);
+  const phoneOk = esTelefonoMexicanoValido(telefonoMovil);
+  const telAltErr = telefonoAlternativo.trim()
+    ? diagnosticarTelefono(telefonoAlternativo)
+    : null;
+  const regUsuarioErr = !regUsuario.trim()
+    ? 'El nombre de usuario es obligatorio (4 a 50 caracteres).'
+    : !esUsuarioValido(regUsuario)
+    ? 'El usuario debe tener entre 4 y 50 caracteres (letras, números, . _ -).'
+    : null;
+  const regContrasenaErr = !regContrasena
+    ? 'Ingresa una contraseña segura.'
+    : !esContrasenaSegura(regContrasena)
+    ? 'Mínimo 8 caracteres con al menos 1 mayúscula, 1 minúscula y 1 número.'
+    : null;
+  const confirmarContrasenaErr = !confirmarContrasena
+    ? 'Confirma tu contraseña.'
+    : regContrasena !== confirmarContrasena
+    ? 'Las contraseñas no coinciden.'
+    : null;
+
+  const hasInvalidNameChars = (v: string) => /[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ\s]/.test(v);
+  const showFieldError = (field: string, errMsg: string | null, immediateTrigger = false) =>
+    Boolean(errMsg && (touched[field] || immediateTrigger));
+
+  const fieldInputClass = (hasErr: boolean, isValid = false, extra = '') =>
+    `w-full px-3 py-2.5 bg-slate-50 border rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 transition-colors ${
+      hasErr
+        ? 'border-red-400 focus:ring-red-400 bg-red-50/30'
+        : isValid
+        ? 'border-emerald-400 focus:ring-emerald-500'
+        : 'border-slate-200 focus:ring-blue-600'
+    } ${extra}`;
 
   const pwdRules = [
     { ok: regContrasena.length >= 8, label: '8+ caracteres' },
@@ -184,10 +278,49 @@ export const LoginPage: React.FC = () => {
   const handleModeChange = (nextMode: AuthMode) => {
     setMode(nextMode);
     setError(null);
+    setTouched({});
     setRegStep(1);
     setCodigoVerificacion('');
     setOtpCountdown(0);
     setOtpFeedback(null);
+  };
+
+  const handleCodigoPostalChange = (rawVal: string) => {
+    const clean = rawVal.replace(/\D/g, '').slice(0, 5);
+    setCodigoPostal(clean);
+    if (clean.length === 5) {
+      markTouched('codigoPostal');
+      const res = resolverCodigoPostalMexicano(clean);
+      if (res.valido && res.codigoRenapo) {
+        setEstadoDomicilioCodigo(res.codigoRenapo);
+        if (res.municipioSugerido) {
+          setMunicipio(res.municipioSugerido);
+        }
+        if (!coloniaModoManual && res.coloniasSugeridas.length > 0) {
+          setColonia(res.coloniasSugeridas[0]);
+        }
+      }
+    }
+  };
+
+  const handleEstadoDomicilioChange = (nuevoCodigo: string) => {
+    setEstadoDomicilioCodigo(nuevoCodigo);
+    const munis = obtenerMunicipiosPorEstado(nuevoCodigo);
+    if (munis.length > 0) {
+      setMunicipio(munis[0]);
+    }
+    const estObj = CATALOGO_ESTADOS_SEPOMEX.find((e) => e.codigoRenapo === nuevoCodigo);
+    if (estObj && !coloniaModoManual && estObj.coloniasBase.length > 0) {
+      setColonia(estObj.coloniasBase[0].trim());
+    }
+  };
+
+  const handleOcupacionChange = (nuevaOcupacionLabel: string) => {
+    setOcupacion(nuevaOcupacionLabel);
+    const item = TABULADOR_PROFESIONES.find((p) => p.label === nuevaOcupacionLabel);
+    if (item?.empresaSugerida && !empresa.trim()) {
+      setEmpresa(item.empresaSugerida);
+    }
   };
 
   const handleAutoGenerateFiscal = () => {
@@ -210,80 +343,40 @@ export const LoginPage: React.FC = () => {
   };
 
   const validateStep1 = (): string | null => {
-    if (!esNombreValido(nombre, true)) {
-      return 'El nombre debe tener entre 2 y 50 caracteres y contener solo letras y espacios.';
-    }
-    if (!esNombreValido(segundoNombre, false)) {
-      return 'El segundo nombre solo debe contener letras y espacios (máx. 50 caracteres).';
-    }
-    if (!esNombreValido(apellidoPaterno, true)) {
-      return 'El apellido paterno debe tener entre 2 y 50 caracteres y contener solo letras y espacios.';
-    }
-    if (!esNombreValido(apellidoMaterno, true)) {
-      return 'El apellido materno debe tener entre 2 y 50 caracteres y contener solo letras y espacios.';
-    }
-    if (!esMayorDeEdad(fechaNacimiento)) {
-      return 'Debes ingresar una fecha de nacimiento válida y ser mayor de 18 años.';
-    }
+    if (nombreErr) return nombreErr;
+    if (segundoNombreErr) return segundoNombreErr;
+    if (apPaternoErr) return apPaternoErr;
+    if (apMaternoErr) return apMaternoErr;
+    if (fechaNacErr) return fechaNacErr;
     return null;
   };
 
   const validateStep2 = (): string | null => {
-    const curpErr = diagnosticarCurp(curp);
-    if (curpErr) return curpErr;
-    const rfcErr = diagnosticarRfc(rfc);
-    if (rfcErr) return rfcErr;
-    if (ocupacion.trim().length < 2) {
-      return 'Ingresa tu ocupación o actividad económica.';
-    }
-    if (empresa.trim().length < 2) {
-      return 'Ingresa tu empresa, institución o actividad independiente.';
-    }
+    if (curpDiag) return curpDiag;
+    if (rfcDiag) return rfcDiag;
+    if (!ocupacion.trim()) return 'Selecciona tu profesión u ocupación del tabulador.';
+    if (empresaErr) return empresaErr;
     const ingresoNum = parseFloat(ingresoMensual);
     if (Number.isNaN(ingresoNum) || ingresoNum <= 0) {
-      return 'Ingresa un ingreso mensual estimado válido mayor a $0.00 MXN.';
+      return 'Selecciona tu rango de ingreso mensual del tabulador.';
     }
-    if (calle.trim().length < 3) {
-      return 'Ingresa la calle de tu domicilio (mínimo 3 caracteres).';
-    }
-    if (!numeroExterior.trim()) {
-      return 'Ingresa el número exterior de tu domicilio (usa S/N si no aplica).';
-    }
-    if (colonia.trim().length < 2) {
-      return 'Ingresa la colonia o fraccionamiento de tu domicilio.';
-    }
-    if (!esCodigoPostalValido(codigoPostal)) {
-      return 'El código postal debe contener 5 dígitos válidos (rango 01000 a 99999).';
-    }
-    if (municipio.trim().length < 2) {
-      return 'Ingresa tu municipio o alcaldía.';
-    }
+    if (cpDiag) return cpDiag;
+    if (cpMismatchErr) return cpMismatchErr;
+    if (municipioErr) return municipioErr;
+    if (coloniaErr) return coloniaErr;
+    if (calleErr) return calleErr;
+    if (numExtErr) return numExtErr;
+    if (numIntErr) return numIntErr;
     return null;
   };
 
   const validateStep3 = (): string | null => {
-    const emailTrim = correo.trim();
-    if (!esCorreoValido(emailTrim)) {
-      return 'Ingresa un correo electrónico con formato válido.';
-    }
-    if (esCorreoPlaceholder(emailTrim)) {
-      return 'Ingresa un correo electrónico real (Gmail, Outlook, iCloud, etc.) para recibir tus códigos 2FA y comprobantes.';
-    }
-    const phoneErr = diagnosticarTelefono(telefonoMovil);
-    if (phoneErr) return phoneErr;
-    if (telefonoAlternativo.trim()) {
-      const altErr = diagnosticarTelefono(telefonoAlternativo);
-      if (altErr) return `Teléfono alternativo: ${altErr}`;
-    }
-    if (!esUsuarioValido(regUsuario)) {
-      return 'El usuario debe tener entre 4 y 50 caracteres (solo letras, números, puntos, guiones y guion bajo).';
-    }
-    if (!esContrasenaSegura(regContrasena)) {
-      return 'La contraseña debe tener al menos 8 caracteres, una mayúscula, una minúscula y un número.';
-    }
-    if (regContrasena !== confirmarContrasena) {
-      return 'Las contraseñas no coinciden. Verifica la confirmación.';
-    }
+    if (correoErr) return correoErr;
+    if (phoneDiag) return phoneDiag;
+    if (telAltErr) return `Teléfono alternativo: ${telAltErr}`;
+    if (regUsuarioErr) return regUsuarioErr;
+    if (regContrasenaErr) return regContrasenaErr;
+    if (confirmarContrasenaErr) return confirmarContrasenaErr;
     return null;
   };
 
@@ -310,6 +403,7 @@ export const LoginPage: React.FC = () => {
     setError(null);
     clearSessionExpired();
     if (regStep === 1) {
+      markManyTouched(['nombre', 'segundoNombre', 'apellidoPaterno', 'apellidoMaterno', 'fechaNacimiento']);
       const err1 = validateStep1();
       if (err1) {
         setError(err1);
@@ -335,6 +429,19 @@ export const LoginPage: React.FC = () => {
       return;
     }
     if (regStep === 2) {
+      markManyTouched([
+        'curp',
+        'rfc',
+        'ocupacion',
+        'empresa',
+        'ingresoMensual',
+        'codigoPostal',
+        'municipio',
+        'colonia',
+        'calle',
+        'numeroExterior',
+        'numeroInterior',
+      ]);
       const err2 = validateStep2();
       if (err2) {
         setError(err2);
@@ -351,16 +458,38 @@ export const LoginPage: React.FC = () => {
 
     const err1 = validateStep1();
     if (err1) {
+      markManyTouched(['nombre', 'segundoNombre', 'apellidoPaterno', 'apellidoMaterno', 'fechaNacimiento']);
       setRegStep(1);
       setError(err1);
       return;
     }
     const err2 = validateStep2();
     if (err2) {
+      markManyTouched([
+        'curp',
+        'rfc',
+        'ocupacion',
+        'empresa',
+        'ingresoMensual',
+        'codigoPostal',
+        'municipio',
+        'colonia',
+        'calle',
+        'numeroExterior',
+        'numeroInterior',
+      ]);
       setRegStep(2);
       setError(err2);
       return;
     }
+    markManyTouched([
+      'correo',
+      'telefonoMovil',
+      'telefonoAlternativo',
+      'regUsuario',
+      'regContrasena',
+      'confirmarContrasena',
+    ]);
     const err3 = validateStep3();
     if (err3) {
       setRegStep(3);
@@ -391,6 +520,14 @@ export const LoginPage: React.FC = () => {
           : 'No fue posible enviar el código de verificación a tu correo.';
       setError(errorMsg);
     }
+  };
+
+  const buildCalleCompleta = (): string => {
+    const cleanCalle = calle.trim();
+    const startsWithPrefix = /^(calle|av\.?|avenida|blvd\.?|boulevard|calz\.?|calzada|priv\.?|privada|cerr\.?|cerrada|prol\.?|prolongaci[oó]n|cto\.?|circuito|andador|carr\.?|carretera|viaducto|retorno)\b/i.test(
+      cleanCalle
+    );
+    return startsWithPrefix ? cleanCalle : `${tipoVialidad} ${cleanCalle}`.trim();
   };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
@@ -428,8 +565,8 @@ export const LoginPage: React.FC = () => {
         rfc: rfc.trim().toUpperCase(),
         ocupacion: ocupacion.trim(),
         empresa: empresa.trim(),
-        ingresoMensual: parseFloat(ingresoMensual) || 15000,
-        calle: calle.trim(),
+        ingresoMensual: parseFloat(ingresoMensual) || 20000,
+        calle: buildCalleCompleta(),
         numeroExterior: numeroExterior.trim(),
         numeroInterior: numeroInterior.trim() || undefined,
         colonia: colonia.trim(),
@@ -800,69 +937,162 @@ export const LoginPage: React.FC = () => {
                     <div className="space-y-3.5 animate-in fade-in">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="space-y-1">
-                          <label htmlFor="reg-nombre" className="text-[11px] font-bold text-slate-700">
-                            Nombre *
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label htmlFor="reg-nombre" className="text-[11px] font-bold text-slate-700">
+                              Nombre (2–40 letras) *
+                            </label>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {nombre.trim().length}/40
+                            </span>
+                          </div>
                           <input
                             id="reg-nombre"
                             type="text"
-                            maxLength={50}
+                            maxLength={40}
                             value={nombre}
                             onChange={(e) => setNombre(e.target.value)}
+                            onBlur={() => markTouched('nombre')}
+                            aria-invalid={showFieldError('nombre', nombreErr, hasInvalidNameChars(nombre))}
                             placeholder="Ej. César"
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError('nombre', nombreErr, hasInvalidNameChars(nombre)),
+                              Boolean(nombre.trim() && !nombreErr)
+                            )}
                           />
+                          {showFieldError('nombre', nombreErr, hasInvalidNameChars(nombre)) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{nombreErr}</p>
+                          )}
                         </div>
+
                         <div className="space-y-1">
-                          <label
-                            htmlFor="reg-segundo-nombre"
-                            className="text-[11px] font-bold text-slate-700"
-                          >
-                            Segundo nombre (opcional)
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label
+                              htmlFor="reg-segundo-nombre"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Segundo nombre (opcional)
+                            </label>
+                            {segundoNombre && (
+                              <span className="text-[10px] font-mono text-slate-400">
+                                {segundoNombre.trim().length}/40
+                              </span>
+                            )}
+                          </div>
                           <input
                             id="reg-segundo-nombre"
                             type="text"
-                            maxLength={50}
+                            maxLength={40}
                             value={segundoNombre}
                             onChange={(e) => setSegundoNombre(e.target.value)}
+                            onBlur={() => markTouched('segundoNombre')}
+                            aria-invalid={showFieldError(
+                              'segundoNombre',
+                              segundoNombreErr,
+                              hasInvalidNameChars(segundoNombre)
+                            )}
                             placeholder="Ej. Enrique"
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError(
+                                'segundoNombre',
+                                segundoNombreErr,
+                                hasInvalidNameChars(segundoNombre)
+                              ),
+                              Boolean(segundoNombre.trim() && !segundoNombreErr)
+                            )}
                           />
+                          {showFieldError(
+                            'segundoNombre',
+                            segundoNombreErr,
+                            hasInvalidNameChars(segundoNombre)
+                          ) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{segundoNombreErr}</p>
+                          )}
                         </div>
+
                         <div className="space-y-1">
-                          <label
-                            htmlFor="reg-ap-paterno"
-                            className="text-[11px] font-bold text-slate-700"
-                          >
-                            Apellido paterno *
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label
+                              htmlFor="reg-ap-paterno"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Apellido paterno (3–40 letras) *
+                            </label>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {apellidoPaterno.trim().length}/40
+                            </span>
+                          </div>
                           <input
                             id="reg-ap-paterno"
                             type="text"
-                            maxLength={50}
+                            maxLength={40}
                             value={apellidoPaterno}
                             onChange={(e) => setApellidoPaterno(e.target.value)}
+                            onBlur={() => markTouched('apellidoPaterno')}
+                            aria-invalid={showFieldError(
+                              'apellidoPaterno',
+                              apPaternoErr,
+                              hasInvalidNameChars(apellidoPaterno)
+                            )}
                             placeholder="Ej. Garay"
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError(
+                                'apellidoPaterno',
+                                apPaternoErr,
+                                hasInvalidNameChars(apellidoPaterno)
+                              ),
+                              Boolean(apellidoPaterno.trim() && !apPaternoErr)
+                            )}
                           />
+                          {showFieldError(
+                            'apellidoPaterno',
+                            apPaternoErr,
+                            hasInvalidNameChars(apellidoPaterno)
+                          ) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{apPaternoErr}</p>
+                          )}
                         </div>
+
                         <div className="space-y-1">
-                          <label
-                            htmlFor="reg-ap-materno"
-                            className="text-[11px] font-bold text-slate-700"
-                          >
-                            Apellido materno *
-                          </label>
+                          <div className="flex items-center justify-between">
+                            <label
+                              htmlFor="reg-ap-materno"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Apellido materno (3–40 letras) *
+                            </label>
+                            <span className="text-[10px] font-mono text-slate-400">
+                              {apellidoMaterno.trim().length}/40
+                            </span>
+                          </div>
                           <input
                             id="reg-ap-materno"
                             type="text"
-                            maxLength={50}
+                            maxLength={40}
                             value={apellidoMaterno}
                             onChange={(e) => setApellidoMaterno(e.target.value)}
+                            onBlur={() => markTouched('apellidoMaterno')}
+                            aria-invalid={showFieldError(
+                              'apellidoMaterno',
+                              apMaternoErr,
+                              hasInvalidNameChars(apellidoMaterno)
+                            )}
                             placeholder="Ej. García"
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError(
+                                'apellidoMaterno',
+                                apMaternoErr,
+                                hasInvalidNameChars(apellidoMaterno)
+                              ),
+                              Boolean(apellidoMaterno.trim() && !apMaternoErr)
+                            )}
                           />
+                          {showFieldError(
+                            'apellidoMaterno',
+                            apMaternoErr,
+                            hasInvalidNameChars(apellidoMaterno)
+                          ) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{apMaternoErr}</p>
+                          )}
                         </div>
                       </div>
 
@@ -881,8 +1111,15 @@ export const LoginPage: React.FC = () => {
                             max={getMaxBirthDateIso()}
                             value={fechaNacimiento}
                             onChange={(e) => setFechaNacimiento(e.target.value)}
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            onBlur={() => markTouched('fechaNacimiento')}
+                            className={fieldInputClass(
+                              showFieldError('fechaNacimiento', fechaNacErr),
+                              Boolean(fechaNacimiento && !fechaNacErr)
+                            )}
                           />
+                          {showFieldError('fechaNacimiento', fechaNacErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{fechaNacErr}</p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <label htmlFor="reg-sexo" className="text-[11px] font-bold text-slate-700">
@@ -950,7 +1187,7 @@ export const LoginPage: React.FC = () => {
                     </div>
                   )}
 
-                  {/* STEP 2: FISCAL (CURP & RFC), ECONOMIC & ADDRESS */}
+                  {/* STEP 2: FISCAL (CURP & RFC), ECONOMIC TABULATORS & SEPOMEX ADDRESS */}
                   {regStep === 2 && (
                     <div className="space-y-3.5 animate-in fade-in">
                       <div className="p-3 rounded-2xl bg-indigo-50/80 border border-indigo-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -979,7 +1216,7 @@ export const LoginPage: React.FC = () => {
                             htmlFor="reg-entidad"
                             className="text-[11px] font-bold text-slate-700"
                           >
-                            Entidad Federativa *
+                            Entidad de Nacimiento *
                           </label>
                           <select
                             id="reg-entidad"
@@ -1005,6 +1242,7 @@ export const LoginPage: React.FC = () => {
                               type="text"
                               maxLength={18}
                               value={curp}
+                              onBlur={() => markTouched('curp')}
                               onChange={(e) =>
                                 setCurp(
                                   e.target.value
@@ -1017,6 +1255,8 @@ export const LoginPage: React.FC = () => {
                               className={`w-full pl-3 pr-7 py-2 bg-slate-50 border rounded-xl text-[11px] font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
                                 curpOk
                                   ? 'border-emerald-400 focus:ring-emerald-500'
+                                  : showFieldError('curp', curpDiag)
+                                  ? 'border-red-400 focus:ring-red-400'
                                   : curp
                                   ? 'border-amber-300 focus:ring-amber-400'
                                   : 'border-slate-200 focus:ring-blue-600'
@@ -1026,6 +1266,9 @@ export const LoginPage: React.FC = () => {
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 absolute right-2 top-2.5" />
                             )}
                           </div>
+                          {showFieldError('curp', curpDiag, Boolean(curp && curp.length === 18)) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{curpDiag}</p>
+                          )}
                         </div>
 
                         <div className="space-y-1">
@@ -1038,6 +1281,7 @@ export const LoginPage: React.FC = () => {
                               type="text"
                               maxLength={13}
                               value={rfc}
+                              onBlur={() => markTouched('rfc')}
                               onChange={(e) =>
                                 setRfc(
                                   e.target.value
@@ -1050,6 +1294,8 @@ export const LoginPage: React.FC = () => {
                               className={`w-full pl-3 pr-7 py-2 bg-slate-50 border rounded-xl text-[11px] font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 ${
                                 rfcOk
                                   ? 'border-emerald-400 focus:ring-emerald-500'
+                                  : showFieldError('rfc', rfcDiag)
+                                  ? 'border-red-400 focus:ring-red-400'
                                   : rfc
                                   ? 'border-amber-300 focus:ring-amber-400'
                                   : 'border-slate-200 focus:ring-blue-600'
@@ -1059,149 +1305,114 @@ export const LoginPage: React.FC = () => {
                               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 absolute right-2 top-2.5" />
                             )}
                           </div>
+                          {showFieldError('rfc', rfcDiag, Boolean(rfc && rfc.length === 13)) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{rfcDiag}</p>
+                          )}
                         </div>
                       </div>
-                      {(curp && curpDiag) || (rfc && rfcDiag) ? (
-                        <p className="text-[11px] text-amber-700 font-medium">
-                          {curpDiag || rfcDiag}
-                        </p>
-                      ) : null}
 
-                      {/* Economic Profile */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1 border-t border-slate-100">
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="reg-ocupacion"
-                            className="text-[11px] font-bold text-slate-700 flex items-center gap-1"
-                          >
-                            <Briefcase className="w-3 h-3 text-slate-400" />
-                            <span>Ocupación *</span>
-                          </label>
-                          <input
-                            id="reg-ocupacion"
-                            type="text"
-                            maxLength={80}
-                            value={ocupacion}
-                            onChange={(e) => setOcupacion(e.target.value)}
-                            placeholder="Ingeniero, Estudiante..."
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                          />
+                      {/* Economic Profile: Tabulador de Profesiones y Tabulador de Sueldo */}
+                      <div className="space-y-2.5 pt-1 border-t border-slate-100">
+                        <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                          <Briefcase className="w-3.5 h-3.5 text-blue-700" />
+                          <span>Perfil Económico (Tabulador Oficial CNBV)</span>
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div className="space-y-1">
+                            <label
+                              htmlFor="reg-ocupacion"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Tabulador de Profesión / Ocupación *
+                            </label>
+                            <select
+                              id="reg-ocupacion"
+                              value={ocupacion}
+                              onChange={(e) => handleOcupacionChange(e.target.value)}
+                              onBlur={() => markTouched('ocupacion')}
+                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                              {Array.from(new Set(TABULADOR_PROFESIONES.map((p) => p.sector))).map(
+                                (sector) => (
+                                  <optgroup key={sector} label={sector}>
+                                    {TABULADOR_PROFESIONES.filter((p) => p.sector === sector).map(
+                                      (prof) => (
+                                        <option key={prof.clave} value={prof.label}>
+                                          {prof.label}
+                                        </option>
+                                      )
+                                    )}
+                                  </optgroup>
+                                )
+                              )}
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label
+                              htmlFor="reg-ingreso"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Tabulador de Sueldo / Ingreso Mensual *
+                            </label>
+                            <select
+                              id="reg-ingreso"
+                              value={ingresoMensual}
+                              onChange={(e) => setIngresoMensual(e.target.value)}
+                              onBlur={() => markTouched('ingresoMensual')}
+                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                              {TABULADOR_SUELDOS.map((s) => (
+                                <option key={s.clave} value={String(s.montoRepresentativo)}>
+                                  {s.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
+
                         <div className="space-y-1">
                           <label
                             htmlFor="reg-empresa"
                             className="text-[11px] font-bold text-slate-700"
                           >
-                            Empresa / Institución *
+                            Empresa / Institución / Actividad *
                           </label>
                           <input
                             id="reg-empresa"
                             type="text"
-                            maxLength={100}
+                            maxLength={80}
                             value={empresa}
                             onChange={(e) => setEmpresa(e.target.value)}
-                            placeholder="Nombre de empresa"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            onBlur={() => markTouched('empresa')}
+                            placeholder="Ej. Grupo Bimbo, UNAM, Independiente..."
+                            className={fieldInputClass(
+                              showFieldError('empresa', empresaErr),
+                              Boolean(empresa.trim() && !empresaErr),
+                              'py-2'
+                            )}
                           />
-                        </div>
-                        <div className="space-y-1">
-                          <label
-                            htmlFor="reg-ingreso"
-                            className="text-[11px] font-bold text-slate-700"
-                          >
-                            Ingreso mensual MXN *
-                          </label>
-                          <input
-                            id="reg-ingreso"
-                            type="number"
-                            min={1000}
-                            step="500"
-                            value={ingresoMensual}
-                            onChange={(e) => setIngresoMensual(e.target.value)}
-                            placeholder="18000"
-                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                          />
+                          {showFieldError('empresa', empresaErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{empresaErr}</p>
+                          )}
                         </div>
                       </div>
 
-                      {/* Address */}
+                      {/* Address: SEPOMEX Postal Code -> State -> Municipality Catalog -> Colonia Catalog -> Street */}
                       <div className="space-y-2.5 pt-1 border-t border-slate-100">
-                        <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                          <MapPin className="w-3.5 h-3.5 text-blue-700" />
-                          <span>Domicilio del Titular</span>
-                        </p>
-                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
-                          <div className="sm:col-span-6 space-y-1">
-                            <label
-                              htmlFor="reg-calle"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Calle y Avenida *
-                            </label>
-                            <input
-                              id="reg-calle"
-                              type="text"
-                              maxLength={150}
-                              value={calle}
-                              onChange={(e) => setCalle(e.target.value)}
-                              placeholder="Av. Paseo de la Reforma"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            />
-                          </div>
-                          <div className="sm:col-span-3 space-y-1">
-                            <label
-                              htmlFor="reg-num-ext"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Núm. Ext. *
-                            </label>
-                            <input
-                              id="reg-num-ext"
-                              type="text"
-                              maxLength={15}
-                              value={numeroExterior}
-                              onChange={(e) => setNumeroExterior(e.target.value)}
-                              placeholder="250"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            />
-                          </div>
-                          <div className="sm:col-span-3 space-y-1">
-                            <label
-                              htmlFor="reg-num-int"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Núm. Int.
-                            </label>
-                            <input
-                              id="reg-num-int"
-                              type="text"
-                              maxLength={15}
-                              value={numeroInterior}
-                              onChange={(e) => setNumeroInterior(e.target.value)}
-                              placeholder="Opcional"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            />
-                          </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-blue-700" />
+                            <span>Domicilio en México (Catálogo SEPOMEX)</span>
+                          </p>
+                          {cpResolution?.valido && !cpMismatchErr && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              ✓ C.P. {codigoPostal} · {cpResolution.estadoNombre}
+                            </span>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                          <div className="space-y-1">
-                            <label
-                              htmlFor="reg-colonia"
-                              className="text-[11px] font-bold text-slate-700"
-                            >
-                              Colonia *
-                            </label>
-                            <input
-                              id="reg-colonia"
-                              type="text"
-                              maxLength={80}
-                              value={colonia}
-                              onChange={(e) => setColonia(e.target.value)}
-                              placeholder="Juárez"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
-                            />
-                          </div>
                           <div className="space-y-1">
                             <label
                               htmlFor="reg-cp"
@@ -1215,13 +1426,51 @@ export const LoginPage: React.FC = () => {
                               inputMode="numeric"
                               maxLength={5}
                               value={codigoPostal}
-                              onChange={(e) =>
-                                setCodigoPostal(e.target.value.replace(/\D/g, '').slice(0, 5))
-                              }
+                              onChange={(e) => handleCodigoPostalChange(e.target.value)}
+                              onBlur={() => markTouched('codigoPostal')}
                               placeholder="06600"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              className={fieldInputClass(
+                                showFieldError(
+                                  'codigoPostal',
+                                  cpDiag || cpMismatchErr,
+                                  codigoPostal.length === 5
+                                ),
+                                Boolean(cpResolution?.valido && !cpMismatchErr),
+                                'py-2 font-mono font-bold'
+                              )}
                             />
+                            {showFieldError(
+                              'codigoPostal',
+                              cpDiag || cpMismatchErr,
+                              codigoPostal.length === 5
+                            ) && (
+                              <p className="text-[10.5px] text-red-600 font-semibold">
+                                {cpDiag || cpMismatchErr}
+                              </p>
+                            )}
                           </div>
+
+                          <div className="space-y-1">
+                            <label
+                              htmlFor="reg-estado-dom"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Estado (Catálogo) *
+                            </label>
+                            <select
+                              id="reg-estado-dom"
+                              value={estadoDomicilioCodigo}
+                              onChange={(e) => handleEstadoDomicilioChange(e.target.value)}
+                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                              {CATALOGO_ESTADOS_SEPOMEX.map((est) => (
+                                <option key={est.codigoRenapo} value={est.codigoRenapo}>
+                                  {est.nombre}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
                           <div className="space-y-1">
                             <label
                               htmlFor="reg-municipio"
@@ -1229,15 +1478,183 @@ export const LoginPage: React.FC = () => {
                             >
                               Municipio / Alcaldía *
                             </label>
-                            <input
+                            <select
                               id="reg-municipio"
-                              type="text"
-                              maxLength={80}
                               value={municipio}
                               onChange={(e) => setMunicipio(e.target.value)}
-                              placeholder="Cuauhtémoc"
-                              className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              onBlur={() => markTouched('municipio')}
+                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                              {municipiosDisponibles.map((mun) => (
+                                <option key={mun} value={mun}>
+                                  {mun}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                          <div className="sm:col-span-5 space-y-1">
+                            <label
+                              htmlFor="reg-colonia-select"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Colonia / Asentamiento *
+                            </label>
+                            <select
+                              id="reg-colonia-select"
+                              value={coloniaModoManual ? '__OTRA__' : colonia}
+                              onChange={(e) => {
+                                if (e.target.value === '__OTRA__') {
+                                  setColoniaModoManual(true);
+                                  setColonia('');
+                                } else {
+                                  setColoniaModoManual(false);
+                                  setColonia(e.target.value);
+                                }
+                              }}
+                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                              {coloniasDisponibles.map((col) => (
+                                <option key={col} value={col}>
+                                  {col}
+                                </option>
+                              ))}
+                              <option value="__OTRA__">Otra colonia (escribir manualmente)...</option>
+                            </select>
+                            {coloniaModoManual && (
+                              <input
+                                id="reg-colonia"
+                                type="text"
+                                maxLength={60}
+                                value={colonia}
+                                onChange={(e) => setColonia(e.target.value)}
+                                onBlur={() => markTouched('colonia')}
+                                placeholder="Escribe tu colonia o fraccionamiento"
+                                className={fieldInputClass(
+                                  showFieldError('colonia', coloniaErr),
+                                  Boolean(colonia.trim() && !coloniaErr),
+                                  'mt-1.5 py-2'
+                                )}
+                              />
+                            )}
+                            {showFieldError('colonia', coloniaErr) && (
+                              <p className="text-[10.5px] text-red-600 font-semibold">{coloniaErr}</p>
+                            )}
+                          </div>
+
+                          <div className="sm:col-span-3 space-y-1">
+                            <label
+                              htmlFor="reg-tipo-vialidad"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Vialidad *
+                            </label>
+                            <select
+                              id="reg-tipo-vialidad"
+                              value={tipoVialidad}
+                              onChange={(e) => setTipoVialidad(e.target.value)}
+                              className="w-full px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            >
+                              {TIPOS_VIALIDAD.map((v) => (
+                                <option key={v.clave} value={v.prefijo}>
+                                  {v.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="sm:col-span-4 space-y-1">
+                            <label
+                              htmlFor="reg-calle"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Nombre de Calle (3–80) *
+                            </label>
+                            <input
+                              id="reg-calle"
+                              type="text"
+                              maxLength={80}
+                              value={calle}
+                              onChange={(e) => setCalle(e.target.value)}
+                              onBlur={() => markTouched('calle')}
+                              placeholder="Paseo de la Reforma"
+                              className={fieldInputClass(
+                                showFieldError('calle', calleErr),
+                                Boolean(calle.trim() && !calleErr),
+                                'py-2'
+                              )}
                             />
+                            {showFieldError('calle', calleErr) && (
+                              <p className="text-[10.5px] text-red-600 font-semibold">{calleErr}</p>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2.5">
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <label
+                                htmlFor="reg-num-ext"
+                                className="text-[11px] font-bold text-slate-700"
+                              >
+                                Núm. Exterior *
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setNumeroExterior('S/N');
+                                  markTouched('numeroExterior');
+                                }}
+                                className="text-[10px] font-extrabold text-blue-700 hover:underline"
+                              >
+                                Usar S/N
+                              </button>
+                            </div>
+                            <input
+                              id="reg-num-ext"
+                              type="text"
+                              maxLength={10}
+                              value={numeroExterior}
+                              onChange={(e) => setNumeroExterior(e.target.value)}
+                              onBlur={() => markTouched('numeroExterior')}
+                              placeholder="222 o S/N"
+                              className={fieldInputClass(
+                                showFieldError('numeroExterior', numExtErr),
+                                Boolean(numeroExterior.trim() && !numExtErr),
+                                'py-2'
+                              )}
+                            />
+                            {showFieldError('numeroExterior', numExtErr) && (
+                              <p className="text-[10.5px] text-red-600 font-semibold">{numExtErr}</p>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <label
+                              htmlFor="reg-num-int"
+                              className="text-[11px] font-bold text-slate-700"
+                            >
+                              Núm. Interior (opcional)
+                            </label>
+                            <input
+                              id="reg-num-int"
+                              type="text"
+                              maxLength={10}
+                              value={numeroInterior}
+                              onChange={(e) => setNumeroInterior(e.target.value)}
+                              onBlur={() => markTouched('numeroInterior')}
+                              placeholder="Ej. 4B"
+                              className={fieldInputClass(
+                                showFieldError('numeroInterior', numIntErr),
+                                Boolean(numeroInterior.trim() && !numIntErr),
+                                'py-2'
+                              )}
+                            />
+                            {showFieldError('numeroInterior', numIntErr) && (
+                              <p className="text-[10.5px] text-red-600 font-semibold">{numIntErr}</p>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1279,11 +1696,19 @@ export const LoginPage: React.FC = () => {
                             type="email"
                             value={correo}
                             onChange={(e) => setCorreo(e.target.value)}
+                            onBlur={() => markTouched('correo')}
                             placeholder="tucorreo@gmail.com"
-                            className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError('correo', correoErr),
+                              Boolean(correoTrim && !correoErr),
+                              'pl-9 pr-3'
+                            )}
                             disabled={isLoading}
                           />
                         </div>
+                        {showFieldError('correo', correoErr) && (
+                          <p className="text-[11px] text-red-600 font-semibold">{correoErr}</p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1302,6 +1727,7 @@ export const LoginPage: React.FC = () => {
                               inputMode="numeric"
                               maxLength={10}
                               value={telefonoMovil}
+                              onBlur={() => markTouched('telefonoMovil')}
                               onChange={(e) =>
                                 setTelefonoMovil(e.target.value.replace(/\D/g, '').slice(0, 10))
                               }
@@ -1309,8 +1735,12 @@ export const LoginPage: React.FC = () => {
                               className={`w-full pl-9 pr-8 py-2.5 bg-slate-50 border rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 ${
                                 phoneOk
                                   ? 'border-emerald-400 focus:ring-emerald-500'
-                                  : telefonoMovil
-                                  ? 'border-red-300 focus:ring-red-400'
+                                  : showFieldError(
+                                      'telefonoMovil',
+                                      phoneDiag,
+                                      telefonoMovil.length === 10
+                                    )
+                                  ? 'border-red-400 focus:ring-red-400'
                                   : 'border-slate-200 focus:ring-blue-600'
                               }`}
                               disabled={isLoading}
@@ -1319,8 +1749,12 @@ export const LoginPage: React.FC = () => {
                               <CheckCircle2 className="w-4 h-4 text-emerald-600 absolute right-2.5 top-2.5" />
                             )}
                           </div>
-                          {telefonoMovil && phoneDiag && (
-                            <p className="text-[11px] text-red-600 font-medium">{phoneDiag}</p>
+                          {showFieldError(
+                            'telefonoMovil',
+                            phoneDiag,
+                            Boolean(telefonoMovil && telefonoMovil.length === 10)
+                          ) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{phoneDiag}</p>
                           )}
                         </div>
 
@@ -1337,19 +1771,27 @@ export const LoginPage: React.FC = () => {
                             inputMode="numeric"
                             maxLength={10}
                             value={telefonoAlternativo}
+                            onBlur={() => markTouched('telefonoAlternativo')}
                             onChange={(e) =>
                               setTelefonoAlternativo(e.target.value.replace(/\D/g, '').slice(0, 10))
                             }
                             placeholder="Opcional 10 dígitos"
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError('telefonoAlternativo', telAltErr),
+                              Boolean(telefonoAlternativo && !telAltErr),
+                              'font-mono'
+                            )}
                             disabled={isLoading}
                           />
+                          {showFieldError('telefonoAlternativo', telAltErr) && (
+                            <p className="text-[11px] text-red-600 font-semibold">{telAltErr}</p>
+                          )}
                         </div>
                       </div>
 
                       <div className="space-y-1">
                         <label htmlFor="reg-usuario" className="text-[11px] font-bold text-slate-700">
-                          Usuario *
+                          Usuario (4–50 caracteres) *
                         </label>
                         <input
                           id="reg-usuario"
@@ -1357,10 +1799,18 @@ export const LoginPage: React.FC = () => {
                           maxLength={50}
                           value={regUsuario}
                           onChange={(e) => setRegUsuario(e.target.value)}
+                          onBlur={() => markTouched('regUsuario')}
                           placeholder="min. 4 caracteres (letras, números, ._-)"
-                          className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                          className={fieldInputClass(
+                            showFieldError('regUsuario', regUsuarioErr),
+                            Boolean(regUsuario.trim() && !regUsuarioErr),
+                            'font-mono'
+                          )}
                           disabled={isLoading}
                         />
+                        {showFieldError('regUsuario', regUsuarioErr) && (
+                          <p className="text-[11px] text-red-600 font-semibold">{regUsuarioErr}</p>
+                        )}
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1377,8 +1827,13 @@ export const LoginPage: React.FC = () => {
                               type={showRegPassword ? 'text' : 'password'}
                               value={regContrasena}
                               onChange={(e) => setRegContrasena(e.target.value)}
+                              onBlur={() => markTouched('regContrasena')}
                               placeholder="Mayús, minús y número"
-                              className="w-full pl-3 pr-9 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                              className={fieldInputClass(
+                                showFieldError('regContrasena', regContrasenaErr),
+                                Boolean(regContrasena && !regContrasenaErr),
+                                'pl-3 pr-9'
+                              )}
                               disabled={isLoading}
                             />
                             <button
@@ -1395,6 +1850,9 @@ export const LoginPage: React.FC = () => {
                               )}
                             </button>
                           </div>
+                          {showFieldError('regContrasena', regContrasenaErr) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">{regContrasenaErr}</p>
+                          )}
                         </div>
                         <div className="space-y-1">
                           <label
@@ -1408,10 +1866,19 @@ export const LoginPage: React.FC = () => {
                             type={showRegPassword ? 'text' : 'password'}
                             value={confirmarContrasena}
                             onChange={(e) => setConfirmarContrasena(e.target.value)}
+                            onBlur={() => markTouched('confirmarContrasena')}
                             placeholder="Repite tu contraseña"
-                            className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                            className={fieldInputClass(
+                              showFieldError('confirmarContrasena', confirmarContrasenaErr),
+                              Boolean(confirmarContrasena && !confirmarContrasenaErr)
+                            )}
                             disabled={isLoading}
                           />
+                          {showFieldError('confirmarContrasena', confirmarContrasenaErr) && (
+                            <p className="text-[10.5px] text-red-600 font-semibold">
+                              {confirmarContrasenaErr}
+                            </p>
+                          )}
                         </div>
                       </div>
 

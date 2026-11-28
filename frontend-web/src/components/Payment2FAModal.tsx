@@ -59,11 +59,12 @@ const buildStructuredFailureResponse = (
 ): PagoServicioResponse | null => {
   const raw = err.data as (Partial<PagoServicioResponse> & { mensaje?: string }) | undefined;
   const estadoRaw = typeof raw?.estadoOperacion === 'string' ? raw.estadoOperacion.toUpperCase() : '';
-  const hasProviderCode = Boolean(raw?.codigoProveedor);
+  const hasProviderCode = Boolean(raw?.codigoProveedor) || Boolean(raw?.upc);
   const isPendingStatus = err.status === 504 || err.status === 202 || estadoRaw === 'PENDIENTE';
   const isRejectedStatus =
     estadoRaw === 'RECHAZADA' ||
-    ((err.status === 409 || err.status === 422) && (hasProviderCode || Boolean(raw?.folioTicket)));
+    hasProviderCode ||
+    ((err.status === 409 || err.status === 422) && Boolean(raw?.folioTicket));
 
   if (!isPendingStatus && !isRejectedStatus) {
     return null;

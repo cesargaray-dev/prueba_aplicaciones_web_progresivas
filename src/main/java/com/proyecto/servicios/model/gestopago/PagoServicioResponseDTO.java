@@ -29,6 +29,10 @@ public class PagoServicioResponseDTO extends GenericResponse {
     private String folioTicket;
     private String upc;
     private String codigoProveedor;
+    private String estadoOperacion;
+    private String mensajeOperacion;
+    private String servicio;
+    private String producto;
     private BigDecimal montoPagado;
     private BigDecimal comision;
     private BigDecimal saldoRestanteCuenta;

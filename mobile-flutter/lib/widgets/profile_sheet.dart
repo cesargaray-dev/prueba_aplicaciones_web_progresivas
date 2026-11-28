@@ -118,7 +118,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
     final correo = _correoController.text.trim();
     final tel = _telefonoController.text.trim();
 
-    final nombreErr = ValidationUtils.diagnosticarNombre(nombre, 'El nombre', maxLength: 80);
+    final nombreErr = ValidationUtils.diagnosticarNombre(nombre, 'El nombre', maxLength: 40);
     if (nombreErr != null) {
       setState(() {
         _statusIsError = true;
@@ -130,7 +130,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
       segundoNombre,
       'El segundo nombre',
       optional: true,
-      maxLength: 80,
+      maxLength: 40,
     );
     if (segundoErr != null) {
       setState(() {
@@ -139,10 +139,10 @@ class _ProfileSheetState extends State<ProfileSheet> {
       });
       return;
     }
-    final apPatErr = ValidationUtils.diagnosticarNombre(
+    final apPatErr = ValidationUtils.diagnosticarApellido(
       apellidoPaterno,
       'El apellido paterno',
-      maxLength: 80,
+      maxLength: 40,
     );
     if (apPatErr != null) {
       setState(() {
@@ -151,10 +151,10 @@ class _ProfileSheetState extends State<ProfileSheet> {
       });
       return;
     }
-    final apMatErr = ValidationUtils.diagnosticarNombre(
+    final apMatErr = ValidationUtils.diagnosticarApellido(
       apellidoMaterno,
       'El apellido materno',
-      maxLength: 80,
+      maxLength: 40,
       optional: true,
     );
     if (apMatErr != null) {

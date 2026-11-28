@@ -32,25 +32,25 @@ public class ActualizarContactoRequestDTO {
 
     @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$",
             message = "El nombre solo debe contener letras")
-    @Size(min = 2, max = 80, message = "El nombre debe tener entre 2 y 80 caracteres")
+    @Size(min = 2, max = 40, message = "El nombre debe tener entre 2 y 40 caracteres")
     @Schema(description = "Primer nombre del titular (opcional)", example = "César")
     private String nombre;
 
-    @Pattern(regexp = "^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]*$",
-            message = "El segundo nombre solo debe contener letras")
-    @Size(max = 80, message = "El segundo nombre no debe exceder 80 caracteres")
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,40}$",
+            message = "El segundo nombre debe tener entre 2 y 40 letras")
+    @Size(max = 40, message = "El segundo nombre no debe exceder 40 caracteres")
     @Schema(description = "Segundo nombre del titular (opcional)", example = "Enrique")
     private String segundoNombre;
 
     @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$",
             message = "El apellido paterno solo debe contener letras")
-    @Size(min = 2, max = 80, message = "El apellido paterno debe tener entre 2 y 80 caracteres")
+    @Size(min = 3, max = 40, message = "El apellido paterno debe tener entre 3 y 40 caracteres")
     @Schema(description = "Apellido paterno del titular (opcional)", example = "Garay")
     private String apellidoPaterno;
 
-    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,80}$",
-            message = "El apellido materno solo debe contener letras")
-    @Size(max = 80, message = "El apellido materno no debe exceder 80 caracteres")
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{3,40}$",
+            message = "El apellido materno debe tener entre 3 y 40 letras")
+    @Size(max = 40, message = "El apellido materno no debe exceder 40 caracteres")
     @Schema(description = "Apellido materno del titular (opcional)", example = "García")
     private String apellidoMaterno;
 

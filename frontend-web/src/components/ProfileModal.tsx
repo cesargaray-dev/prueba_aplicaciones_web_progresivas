@@ -23,11 +23,12 @@ import {
 import { useAuth } from '../context/useAuth';
 import type { LoginResponse } from '../types/auth';
 import {
+  diagnosticarApellido,
+  diagnosticarNombre,
   diagnosticarTelefono,
   esContrasenaSegura,
   esCorreoPlaceholder,
   esCorreoValido,
-  esNombreValido,
   esTelefonoMexicanoValido,
 } from '../utils/validation';
 
@@ -153,32 +154,24 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
     const correoClean = correo.trim();
     const telClean = telefono.trim();
 
-    if (!esNombreValido(nombreClean, true)) {
-      setFeedback({
-        type: 'error',
-        msg: 'El nombre debe tener entre 2 y 50 caracteres y contener solo letras y espacios.',
-      });
+    const nombreErr = diagnosticarNombre(nombreClean, 'El nombre', true);
+    if (nombreErr) {
+      setFeedback({ type: 'error', msg: nombreErr });
       return;
     }
-    if (!esNombreValido(segundoClean, false)) {
-      setFeedback({
-        type: 'error',
-        msg: 'El segundo nombre solo debe contener letras y espacios (máximo 50 caracteres).',
-      });
+    const segErr = diagnosticarNombre(segundoClean, 'El segundo nombre', false);
+    if (segErr) {
+      setFeedback({ type: 'error', msg: segErr });
       return;
     }
-    if (!esNombreValido(paternoClean, true)) {
-      setFeedback({
-        type: 'error',
-        msg: 'El apellido paterno debe tener entre 2 y 50 caracteres y contener solo letras y espacios.',
-      });
+    const patErr = diagnosticarApellido(paternoClean, 'El apellido paterno', true);
+    if (patErr) {
+      setFeedback({ type: 'error', msg: patErr });
       return;
     }
-    if (!esNombreValido(maternoClean, true)) {
-      setFeedback({
-        type: 'error',
-        msg: 'El apellido materno debe tener entre 2 y 50 caracteres y contener solo letras y espacios.',
-      });
+    const matErr = diagnosticarApellido(maternoClean, 'El apellido materno', true);
+    if (matErr) {
+      setFeedback({ type: 'error', msg: matErr });
       return;
     }
     if (!esCorreoValido(correoClean)) {

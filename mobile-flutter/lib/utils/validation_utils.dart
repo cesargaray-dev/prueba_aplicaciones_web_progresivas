@@ -1,3 +1,5 @@
+import 'mexico_catalogs.dart';
+
 /// Utilidades centralizadas de validación comercial y clasificación del catálogo GestoPago.
 /// Reglas sincronizadas exactamente con el backend (TelefonoUtil.java) y la app Web.
 class ValidationUtils {
@@ -136,28 +138,117 @@ class ValidationUtils {
     return _passwordSegura.hasMatch(password);
   }
 
-  static bool esNombreValido(String? raw, {bool optional = false, int maxLength = 50}) {
-    return diagnosticarNombre(raw, 'El campo', optional: optional, maxLength: maxLength) == null;
+  static bool esNombreValido(String? raw, {bool optional = false, int maxLength = 40}) {
+    return diagnosticarNombre(raw, 'El nombre', optional: optional, maxLength: maxLength) == null;
   }
 
   static String? diagnosticarNombre(
     String? raw,
     String campo, {
     bool optional = false,
-    int maxLength = 50,
+    int maxLength = 40,
   }) {
     final val = (raw ?? '').trim();
     if (val.isEmpty) {
-      return optional ? null : '$campo es obligatorio.';
+      return optional ? null : '$campo es obligatorio (2 a $maxLength letras).';
+    }
+    if (!_nombreLetrasPattern.hasMatch(val)) {
+      return '$campo solo debe contener letras y espacios (sin números ni símbolos).';
+    }
+    if (RegExp(r'\s{2,}').hasMatch(val)) {
+      return '$campo no debe contener espacios dobles.';
     }
     if (val.length < 2) {
-      return '$campo debe contener al menos 2 caracteres.';
+      return '$campo debe tener al menos 2 letras (máx. $maxLength).';
     }
     if (val.length > maxLength) {
       return '$campo no puede exceder $maxLength caracteres.';
     }
+    return null;
+  }
+
+  static bool esApellidoValido(String? raw, {bool optional = false, int maxLength = 40}) {
+    return diagnosticarApellido(raw, 'El apellido', optional: optional, maxLength: maxLength) == null;
+  }
+
+  static String? diagnosticarApellido(
+    String? raw,
+    String campo, {
+    bool optional = false,
+    int maxLength = 40,
+  }) {
+    final val = (raw ?? '').trim();
+    if (val.isEmpty) {
+      return optional ? null : '$campo es obligatorio (mín. 3 letras, máx. $maxLength).';
+    }
     if (!_nombreLetrasPattern.hasMatch(val)) {
-      return '$campo solo puede contener letras y espacios.';
+      return '$campo solo debe contener letras y espacios (sin números ni símbolos).';
+    }
+    if (RegExp(r'\s{2,}').hasMatch(val)) {
+      return '$campo no debe contener espacios dobles.';
+    }
+    if (val.length < 3) {
+      return '$campo debe tener al menos 3 letras (máx. $maxLength).';
+    }
+    if (val.length > maxLength) {
+      return '$campo no puede exceder $maxLength caracteres.';
+    }
+    return null;
+  }
+
+  static String? diagnosticarCalle(String? raw) {
+    final val = (raw ?? '').trim();
+    if (val.isEmpty) {
+      return 'El nombre de la calle es obligatorio.';
+    }
+    if (RegExp(r'[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9\s.,\-°/]').hasMatch(val)) {
+      return 'La calle contiene caracteres inválidos.';
+    }
+    if (val.length < 3) {
+      return 'La calle debe tener al menos 3 caracteres.';
+    }
+    if (val.length > 80) {
+      return 'La calle no debe exceder 80 caracteres.';
+    }
+    final letters = RegExp(r'[A-Za-zÁÉÍÓÚÜáéíóúüÑñ]').allMatches(val).length;
+    if (letters < 2) {
+      return 'Ingresa un nombre de calle descriptivo (ej. Reforma, 5 de Mayo).';
+    }
+    return null;
+  }
+
+  static String? diagnosticarNumeroDomicilio(
+    String? raw, {
+    bool optional = false,
+    String campo = 'El número exterior',
+  }) {
+    final val = (raw ?? '').trim();
+    if (val.isEmpty) {
+      return optional ? null : '$campo es obligatorio (usa S/N si no aplica).';
+    }
+    if (!RegExp(r'^[A-Za-z0-9\s/\-.]{1,10}$').hasMatch(val)) {
+      return '$campo debe tener entre 1 y 10 caracteres válidos.';
+    }
+    return null;
+  }
+
+  static String? diagnosticarColonia(String? raw) {
+    final val = (raw ?? '').trim();
+    if (val.isEmpty) return 'Selecciona o escribe tu colonia.';
+    if (val.length < 3 || val.length > 60) {
+      return 'La colonia debe tener entre 3 y 60 caracteres.';
+    }
+    if (RegExp(r'[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ0-9\s.,\-/]').hasMatch(val)) {
+      return 'La colonia contiene caracteres inválidos.';
+    }
+    return null;
+  }
+
+  static String? diagnosticarEmpresa(String? raw) {
+    final val = (raw ?? '').trim();
+    if (val.isEmpty) return 'Ingresa tu empresa, institución o actividad.';
+    if (val.length < 2 || val.length > 80) {
+      return 'Debe tener entre 2 y 80 caracteres.';
     }
     return null;
   }
@@ -275,7 +366,6 @@ class ValidationUtils {
 
   static final RegExp _curpPattern = RegExp(r'^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z\d]\d$');
   static final RegExp _rfcPattern = RegExp(r'^[A-ZÑ&]{3,4}\d{6}[A-Z\d]{3}$');
-  static final RegExp _cpPattern = RegExp(r'^(0[1-9]|[1-9][0-9])\d{3}$');
 
   static bool esCurpValida(String? raw) {
     if (raw == null) return false;
@@ -311,7 +401,12 @@ class ValidationUtils {
 
   static bool esCodigoPostalValido(String? raw) {
     if (raw == null) return false;
-    return _cpPattern.hasMatch(raw.trim());
+    return MexicoCatalogs.resolverCodigoPostalMexicano(raw).valido;
+  }
+
+  static String? diagnosticarCodigoPostal(String? raw) {
+    final res = MexicoCatalogs.resolverCodigoPostalMexicano(raw ?? '');
+    return res.valido ? null : (res.error ?? 'Código postal inválido.');
   }
 
   static String _limpiarTextoRenapo(String raw) {

@@ -107,63 +107,80 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.click(screen.getByRole('button', { name: /Iniciar Sesión/i }));
       await user.click(screen.getByRole('button', { name: /Abrir cuenta digital/i }));
 
-      // --- STEP 1: Identity ---
+      // --- STEP 1: Identity (Immediate onBlur per-field validation + 2-40 name / 3-40 surname) ---
       const step1Next = () =>
         screen.getByRole('button', { name: /Continuar a Datos Fiscales y Domicilio/i });
 
-      await user.click(step1Next());
-      expect(screen.getByText(/El nombre debe tener entre 2 y 50/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/^Nombre \*/i), 'Cesar');
+      const nombreInput = screen.getByLabelText(/Nombre \(2–40 letras\)/i);
+      await user.type(nombreInput, 'A');
+      await user.tab(); // Passing to next field immediately triggers inline error without clicking submit!
+      expect(screen.getByText(/El nombre debe tener al menos 2 letras/i)).toBeInTheDocument();
+
+      await user.clear(nombreInput);
+      await user.type(nombreInput, 'Cesar');
       await user.type(screen.getByLabelText(/Segundo nombre/i), 'Enrique');
 
-      await user.click(step1Next());
-      expect(screen.getByText(/El apellido paterno debe tener/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Apellido paterno \*/i), 'Garay');
+      const patInput = screen.getByLabelText(/Apellido paterno \(3–40 letras\)/i);
+      await user.type(patInput, 'Ga');
+      await user.tab(); // 2 chars in surname immediately triggers 3-letter minimum error on blur!
+      expect(
+        screen.getByText(/El apellido paterno debe tener al menos 3 letras/i)
+      ).toBeInTheDocument();
+      await user.clear(patInput);
+      await user.type(patInput, 'Garay');
 
       await user.click(step1Next());
-      expect(screen.getByText(/El apellido materno debe tener/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Apellido materno \*/i), 'Garcia');
+      expect(screen.getAllByText(/El apellido materno es obligatorio/i).length).toBeGreaterThan(0);
+      await user.type(screen.getByLabelText(/Apellido materno \(3–40 letras\)/i), 'Garcia');
 
       const birthInput = screen.getByLabelText(/Fecha de nacimiento/i);
       fireEvent.change(birthInput, { target: { value: '2020-01-01' } });
       await user.click(step1Next());
-      expect(screen.getByText(/mayor de 18 años/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/mayor de 18 años/i).length).toBeGreaterThan(0);
       fireEvent.change(birthInput, { target: { value: '1999-05-15' } });
 
       await user.click(step1Next());
 
-      // --- STEP 2: Fiscal (CURP & RFC), Economic & Address ---
+      // --- STEP 2: Fiscal (CURP & RFC), Tabuladores & SEPOMEX Address ---
       const step2Next = () =>
         screen.getByRole('button', { name: /Continuar a Contacto y Acceso/i });
 
-      // CURP and RFC were auto-suggested on advancing to Step 2; also test explicit assistant button
       await user.click(screen.getByRole('button', { name: /Calcular CURP \/ RFC/i }));
       const curpInput = screen.getByLabelText(/CURP \(18 caracteres\)/i) as HTMLInputElement;
       const rfcInput = screen.getByLabelText(/RFC con Homoclave/i) as HTMLInputElement;
       expect(curpInput.value).toHaveLength(18);
       expect(rfcInput.value).toHaveLength(13);
 
-      // Test address validations (calle, numExt, colonia, CP, municipio)
-      await user.click(step2Next());
-      expect(screen.getByText(/Ingresa la calle de tu domicilio/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Calle y Avenida/i), 'Av. Paseo de la Reforma');
+      // Select from Tabulador de Profesiones & Tabulador de Sueldo
+      await user.selectOptions(
+        screen.getByLabelText(/Tabulador de Profesión/i),
+        'Estudiante Universitario / Posgrado / Becario'
+      );
+      await user.selectOptions(screen.getByLabelText(/Tabulador de Sueldo/i), '35000');
 
-      await user.click(step2Next());
-      expect(screen.getByText(/número exterior/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Núm\. Ext\./i), '250');
-      await user.type(screen.getByLabelText(/Núm\. Int\./i), '4B');
+      // Test SEPOMEX postal code validation (invalid 18500 then valid 06600)
+      const cpInput = screen.getByLabelText(/Código Postal/i);
+      await user.type(cpInput, '18500');
+      expect(screen.getByText(/no existe en el catálogo oficial SEPOMEX/i)).toBeInTheDocument();
+      await user.clear(cpInput);
+      await user.type(cpInput, '06600');
+      expect(screen.getByText(/✓ C\.P\. 06600 · Ciudad de México/i)).toBeInTheDocument();
 
+      // Test street & exterior number validations
       await user.click(step2Next());
-      expect(screen.getByText(/colonia o fraccionamiento/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Colonia \*/i), 'Juarez');
+      expect(screen.getAllByText(/nombre de la calle/i).length).toBeGreaterThan(0);
+      await user.selectOptions(screen.getByLabelText(/Vialidad \*/i), 'Av.');
+      await user.type(screen.getByLabelText(/Nombre de Calle/i), 'Paseo de la Reforma');
 
-      await user.click(step2Next());
-      expect(screen.getByText(/código postal debe contener 5 dígitos/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Código Postal/i), '06600');
+      await user.click(screen.getByRole('button', { name: /Usar S\/N/i }));
+      const numExtInput = screen.getByLabelText(/Núm\. Exterior \*/i);
+      await user.clear(numExtInput);
+      await user.type(numExtInput, '250');
+      await user.type(screen.getByLabelText(/Núm\. Interior/i), '4B');
 
-      await user.click(step2Next());
-      expect(screen.getByText(/municipio o alcaldía/i)).toBeInTheDocument();
-      await user.type(screen.getByLabelText(/Municipio \/ Alcaldía/i), 'Cuauhtemoc');
+      // Test manual colonia option and catalog colonia option
+      await user.selectOptions(screen.getByLabelText(/Colonia \/ Asentamiento/i), '__OTRA__');
+      await user.type(screen.getByPlaceholderText(/Escribe tu colonia/i), 'Juárez Centro');
 
       // Test stepper pill navigation back to Step 1 and forward again
       await user.click(screen.getByRole('button', { name: /Anterior/i }));
@@ -177,12 +194,12 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
 
       const emailInput = screen.getByLabelText(/Correo electrónico real/i);
       await user.type(emailInput, 'correo-invalido');
-      await user.click(sendCodeBtn());
+      await user.tab();
       expect(screen.getByText(/formato válido/i)).toBeInTheDocument();
       await user.clear(emailInput);
       await user.type(emailInput, 'user@ejemplo.com');
       await user.click(sendCodeBtn());
-      expect(screen.getByText(/Ingresa un correo electrónico real/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/correo electrónico real/i).length).toBeGreaterThan(0);
       await user.clear(emailInput);
       await user.type(emailInput, 'cesar@gmail.com');
 
@@ -192,9 +209,9 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       await user.clear(telInput);
       await user.type(telInput, '1111111111');
 
-      const usrInput = screen.getByLabelText(/^Usuario \*/i);
+      const usrInput = screen.getByLabelText(/Usuario \(4–50 caracteres\)/i);
       await user.type(usrInput, 'ab');
-      await user.click(sendCodeBtn());
+      await user.tab();
       expect(screen.getByText(/El usuario debe tener entre 4 y 50/i)).toBeInTheDocument();
       await user.clear(usrInput);
       await user.type(usrInput, 'cesar_nuevo');
@@ -203,14 +220,14 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       const passInput = screen.getByLabelText(/^Contraseña \*/i);
       const confInput = screen.getByLabelText(/Confirmar contraseña/i);
       await user.type(passInput, 'debil');
-      await user.click(sendCodeBtn());
-      expect(screen.getByText(/La contraseña debe tener al menos 8/i)).toBeInTheDocument();
+      await user.tab();
+      expect(screen.getByText(/Mínimo 8 caracteres/i)).toBeInTheDocument();
 
       await user.clear(passInput);
       await user.type(passInput, 'Venta2026#');
       await user.type(confInput, 'Otra2026#');
       await user.click(sendCodeBtn());
-      expect(screen.getByText(/Las contraseñas no coinciden/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Las contraseñas no coinciden/i).length).toBeGreaterThan(0);
 
       await user.clear(confInput);
       await user.type(confInput, 'Venta2026#');

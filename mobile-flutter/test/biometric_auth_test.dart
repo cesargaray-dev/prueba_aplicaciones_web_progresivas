@@ -14,8 +14,10 @@ import 'package:mobile_flutter/screens/payment_flow_dialog.dart';
 import 'package:mobile_flutter/services/api_client.dart';
 import 'package:mobile_flutter/services/auth_service.dart';
 import 'package:mobile_flutter/services/biometric_service.dart';
+import 'package:mobile_flutter/services/payment_service.dart';
 import 'package:mobile_flutter/theme/app_theme.dart';
 import 'package:mobile_flutter/widgets/profile_sheet.dart';
+import 'package:mobile_flutter/widgets/receipt_dialog.dart';
 import 'package:provider/provider.dart';
 
 class _FakeBiometricService extends BiometricService {
@@ -795,7 +797,7 @@ void main() {
     });
 
     testWidgets(
-        'LoginScreen ejecuta registro KYC en 4 pasos (Identidad, CURP/RFC/Domicilio, Acceso, 2FA) y acepta 1111111111',
+        'LoginScreen ejecuta registro KYC en 4 pasos con validación inmediata, tabuladores, SEPOMEX y acepta 1111111111',
         (WidgetTester tester) async {
       final fakeBio = _FakeBiometricService(
         availability: const BiometricAvailability(
@@ -824,34 +826,58 @@ void main() {
       await tester.tap(find.text('Crear Cuenta'));
       await tester.pumpAndSettle();
 
-      // Paso 1: Identidad
+      // Paso 1: Validación inmediata al escribir 1 letra en nombre o 2 en apellido antes de llenar lo demás
+      await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'A');
+      await tester.pump();
+      expect(find.textContaining('al menos 2 letras'), findsOneWidget);
+
+      await tester.enterText(find.widgetWithText(TextFormField, 'Apellido paterno *'), 'Ga');
+      await tester.pump();
+      expect(find.textContaining('al menos 3 letras'), findsOneWidget);
+
+      // Corregir a nombres y apellidos mexicanos válidos
       await tester.enterText(find.widgetWithText(TextFormField, 'Nombre *'), 'Cesar');
       await tester.enterText(find.widgetWithText(TextFormField, 'Apellido paterno *'), 'Garay');
       await tester.enterText(find.widgetWithText(TextFormField, 'Apellido materno *'), 'Garcia');
+      await tester.pump();
+      expect(find.textContaining('al menos 2 letras'), findsNothing);
+      expect(find.textContaining('al menos 3 letras'), findsNothing);
 
       final next1 = find.text('Continuar a Datos Fiscales');
       await tester.ensureVisible(next1);
       await tester.tap(next1);
       await tester.pumpAndSettle();
 
-      // Paso 2: Fiscal (CURP y RFC autocalculados) + Domicilio
+      // Paso 2: Fiscal (CURP y RFC autocalculados), Tabuladores de Profesión/Sueldo y SEPOMEX
       expect(find.text('CURP (18 caracteres) *'), findsOneWidget);
       expect(find.text('RFC con Homoclave (13) *'), findsOneWidget);
+      expect(find.text('Profesión / Ocupación (Tabulador) *'), findsOneWidget);
+      expect(find.text('Tabulador de Sueldo Mensual *'), findsOneWidget);
 
       await tester.enterText(
-        find.widgetWithText(TextFormField, 'Calle y Avenida *'),
-        'Av. Paseo de la Reforma',
+        find.widgetWithText(TextFormField, 'Empresa / Institución *'),
+        'Universidad Nacional',
       );
-      await tester.enterText(find.widgetWithText(TextFormField, 'Núm. Ext. *'), '250');
-      await tester.enterText(find.widgetWithText(TextFormField, 'Colonia *'), 'Juarez');
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Código Postal (5 díg) *'),
-        '06600',
-      );
-      await tester.enterText(
-        find.widgetWithText(TextFormField, 'Municipio / Alcaldía *'),
-        'Cuauhtemoc',
-      );
+
+      // C.P. inexistente muestra error inmediato sin esperar al botón de avanzar
+      final cpField = find.widgetWithText(TextFormField, 'Código Postal (5 díg) *');
+      await tester.ensureVisible(cpField);
+      await tester.enterText(cpField, '18500');
+      await tester.pump();
+      expect(find.textContaining('no existe en el catálogo oficial SEPOMEX'), findsOneWidget);
+
+      // C.P. válido SEPOMEX resuelve Estado (CDMX), Alcaldía (Cuauhtémoc) y Colonia
+      await tester.enterText(cpField, '06600');
+      await tester.pumpAndSettle();
+      expect(find.textContaining('SEPOMEX verificado: Ciudad de México'), findsOneWidget);
+
+      final calleField = find.widgetWithText(TextFormField, 'Calle y Avenida *');
+      await tester.ensureVisible(calleField);
+      await tester.enterText(calleField, 'Paseo de la Reforma');
+
+      final numExtField = find.widgetWithText(TextFormField, 'Núm. Ext. *');
+      await tester.ensureVisible(numExtField);
+      await tester.enterText(numExtField, '250');
 
       final next2 = find.text('Continuar a Contacto y Acceso');
       await tester.ensureVisible(next2);
@@ -904,6 +930,152 @@ void main() {
       expect(auth.isAuthenticated, isTrue);
 
       await tester.pumpWidget(const SizedBox.shrink());
+      auth.dispose();
+    });
+
+    testWidgets(
+        'PaymentFlowDialog intenta el pago real a GestoPago y muestra en el ticket que no se pudo validar',
+        (WidgetTester tester) async {
+      final fakeBio = _FakeBiometricService(
+        availability: const BiometricAvailability(
+          isSupported: false,
+          hasEnrolledBiometrics: false,
+          hasFingerprint: false,
+          label: 'Huella Digital',
+        ),
+      );
+      final auth = AuthProvider(authService: _FakeAuthService(), biometricService: fakeBio);
+      await auth.initBiometrics();
+      await auth.login('cesar_app', 'Venta2026#');
+
+      final mockHttp = MockClient((req) async {
+        if (req.url.path == '/api/v1/pagos/validar-referencia') {
+          return http.Response(
+            jsonEncode({
+              'esValida': true,
+              'mensaje': 'Número válido',
+              'referenciaNormalizada': '1111111111',
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/pagos/2fa/generar') {
+          return http.Response(
+            jsonEncode({
+              'numeroCuenta': '5915019417993769',
+              'vigenciaSegundos': 300,
+              'correoEnviado': true,
+              'correoDestino': 'cesar@gmail.com',
+            }),
+            200,
+          );
+        }
+        if (req.url.path == '/api/v1/pagos/servicios') {
+          return http.Response(
+            jsonEncode({
+              'codigo': 1,
+              'estadoOperacion': 'RECHAZADA',
+              'mensaje':
+                  'Se intentó realizar el pago en GestoPago, pero no se pudo validar la operación (código 55): Origen Valido.',
+              'mensajeOperacion':
+                  'Se intentó realizar el pago en GestoPago, pero no se pudo validar la operación (código 55): Origen Valido.',
+              'folioTicket': 'GP-INTENTO-5501',
+              'numeroAutorizacion': 'SIN-VALIDAR',
+              'codigoProveedor': '55',
+              'upc': 'UPC-998877',
+              'montoPagado': 100.0,
+              'comision': 0.0,
+              'saldoRestanteCuenta': 500.0,
+              'fechaHoraOperacion': '2026-11-27T18:00:00',
+              'concepto': 'AT-T - Recarga \$100',
+              'servicio': 'AT-T',
+              'producto': 'Recarga \$100',
+            }),
+            400,
+          );
+        }
+        return http.Response('{}', 404);
+      });
+
+      final client = ApiClient.withClient(mockHttp, baseUrl: 'http://localhost:10000');
+      client.setAuthToken('jwt-pass-1');
+      final paymentProvider = PaymentProvider(paymentService: PaymentService(client: client));
+
+      final product = ProductItem(
+        id: '374',
+        name: 'Recarga \$100',
+        service: 'AT-T',
+        serviceId: '115',
+        price: 100,
+        referenceType: 'a',
+        frontType: '1',
+        hasVerificationDigit: false,
+        categoryId: '3',
+      );
+      paymentProvider.initForProduct(product);
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<AuthProvider>.value(value: auth),
+            ChangeNotifierProvider<PaymentProvider>.value(value: paymentProvider),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.lightTheme,
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: ElevatedButton(
+                  onPressed: () {
+                    PaymentFlowDialog.show(
+                      ctx,
+                      product: product,
+                      onViewHistory: () {},
+                    );
+                  },
+                  child: const Text('Intentar Pago GestoPago'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Intentar Pago GestoPago'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Número Celular (10 dígitos)'),
+        '1111111111',
+      );
+      await tester.tap(find.text('Validar Referencia'));
+      await tester.pumpAndSettle();
+
+      final step2Btn = find.text('Continuar a Confirmación');
+      await tester.ensureVisible(step2Btn);
+      await tester.tap(step2Btn);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '123456');
+      await tester.pump();
+      final checkbox = find.byType(Checkbox);
+      await tester.ensureVisible(checkbox);
+      await tester.tap(checkbox);
+      await tester.pump();
+
+      final payBtn = find.textContaining('Confirmar y Pagar');
+      await tester.ensureVisible(payBtn);
+      await tester.tap(payBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ReceiptDialog), findsOneWidget);
+      expect(find.text('NO SE PUDO VALIDAR EN GESTOPAGO'), findsOneWidget);
+      expect(find.text('No se pudo validar en GestoPago'), findsOneWidget);
+      expect(find.text('GP-INTENTO-5501'), findsOneWidget);
+      expect(auth.session?.saldo, 500.0);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      paymentProvider.dispose();
       auth.dispose();
     });
 

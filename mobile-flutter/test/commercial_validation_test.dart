@@ -3,6 +3,7 @@ import 'package:mobile_flutter/models/payment_response.dart';
 import 'package:mobile_flutter/models/product_item.dart';
 import 'package:mobile_flutter/providers/catalog_provider.dart';
 import 'package:mobile_flutter/services/catalog_service.dart';
+import 'package:mobile_flutter/utils/mexico_catalogs.dart';
 import 'package:mobile_flutter/utils/validation_utils.dart';
 
 class _FakeCatalogService extends CatalogService {
@@ -81,7 +82,16 @@ void main() {
       expect(provider.filteredProducts.first.isRecarga, isTrue);
     });
 
-    test('valida CURP, RFC, CP y genera claves oficiales RENAPO/SAT', () {
+    test('valida nombres (2-40), apellidos (3-40), catálogos SEPOMEX y tabuladores oficiales', () {
+      expect(ValidationUtils.diagnosticarNombre('A', 'El nombre'), isNotNull);
+      expect(ValidationUtils.diagnosticarNombre('Jo', 'El nombre'), isNull);
+      expect(ValidationUtils.diagnosticarNombre('A' * 41, 'El nombre'), isNotNull);
+      expect(ValidationUtils.diagnosticarNombre('César1', 'El nombre'), isNotNull);
+
+      expect(ValidationUtils.diagnosticarApellido('Ga', 'El apellido paterno'), isNotNull);
+      expect(ValidationUtils.diagnosticarApellido('Paz', 'El apellido paterno'), isNull);
+      expect(ValidationUtils.diagnosticarApellido('G' * 41, 'El apellido paterno'), isNotNull);
+
       expect(ValidationUtils.esCurpValida('GAGC990515HDFRRL01'), isTrue);
       expect(ValidationUtils.esCurpValida('INVALID'), isFalse);
       expect(ValidationUtils.diagnosticarCurp(''), isNotNull);
@@ -94,6 +104,17 @@ void main() {
 
       expect(ValidationUtils.esCodigoPostalValido('06600'), isTrue);
       expect(ValidationUtils.esCodigoPostalValido('00000'), isFalse);
+      expect(ValidationUtils.esCodigoPostalValido('18500'), isFalse);
+      expect(ValidationUtils.esCodigoPostalValido('99999'), isFalse);
+
+      final cpCdmx = MexicoCatalogs.resolverCodigoPostalMexicano('06600');
+      expect(cpCdmx.valido, isTrue);
+      expect(cpCdmx.codigoRenapo, 'DF');
+      expect(cpCdmx.municipioSugerido, 'Cuauhtémoc');
+      expect(MexicoCatalogs.tabuladorProfesiones.length, greaterThanOrEqualTo(15));
+      expect(MexicoCatalogs.tabuladorSueldos.length, greaterThanOrEqualTo(7));
+      expect(ValidationUtils.diagnosticarCalle('Av. Reforma'), isNull);
+      expect(ValidationUtils.diagnosticarCalle('12'), isNotNull);
 
       final gen = ValidationUtils.generarCurpYRfcSugeridos(
         nombre: 'José',

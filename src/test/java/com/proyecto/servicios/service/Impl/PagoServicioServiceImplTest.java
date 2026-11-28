@@ -1587,12 +1587,20 @@ class PagoServicioServiceImplTest {
                 .codigo2FA("123456")
                 .build();
 
-        PagoServicioResponseDTO resp = pagoServicioService.procesarPagoServicio(req);
-        assertNotNull(resp);
-        assertEquals(0, resp.getCodigo());
-        assertEquals("Operacion realizada con exito", resp.getMensaje());
-        assertNotNull(resp.getFolioTicket());
-        assertTrue(resp.getIdTransaccion() > 0);
-        assertNotEquals("-1", resp.getNumeroAutorizacion());
+        PagoServicioProveedorException ex = assertThrows(
+                PagoServicioProveedorException.class,
+                () -> pagoServicioService.procesarPagoServicio(req)
+        );
+        assertEquals("55", ex.getCodigoProveedor());
+        assertEquals(400, ex.getStatusCode());
+        assertNotNull(ex.getDetalleTicket());
+        assertEquals("RECHAZADA", ex.getDetalleTicket().getEstadoOperacion());
+        assertEquals("55", ex.getDetalleTicket().getCodigoProveedor());
+        assertEquals("-1", ex.getDetalleTicket().getNumeroAutorizacion());
+        assertNotNull(ex.getDetalleTicket().getFolioTicket());
+        assertNotNull(ex.getDetalleTicket().getUpc());
+        assertTrue(ex.getDetalleTicket().getMensajeOperacion().contains("no se pudo validar"));
+        assertEquals(new BigDecimal("1000.00"), saldoCuenta.getSaldo());
+        verifyNoInteractions(saldoRepository);
     }
 }

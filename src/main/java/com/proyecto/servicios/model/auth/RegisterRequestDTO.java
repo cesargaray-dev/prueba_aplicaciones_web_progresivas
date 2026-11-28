@@ -20,19 +20,19 @@ public class RegisterRequestDTO {
 
     @NotBlank(message = "El nombre es obligatorio")
     @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$", message = "El nombre solo debe contener letras")
-    @Size(min = 2, max = 50, message = "El nombre debe tener entre 2 y 50 caracteres")
+    @Size(min = 2, max = 40, message = "El nombre debe tener entre 2 y 40 caracteres")
     private String nombre;
 
-    @Pattern(regexp = "^[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]*$", message = "El segundo nombre solo debe contener letras")
-    @Size(max = 50, message = "El segundo nombre no debe exceder 50 caracteres")
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,40}$", message = "El segundo nombre debe tener entre 2 y 40 letras")
+    @Size(max = 40, message = "El segundo nombre no debe exceder 40 caracteres")
     private String segundoNombre;
 
     @NotBlank(message = "El apellido paterno es obligatorio")
     @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$", message = "El apellido paterno solo debe contener letras")
-    @Size(min = 2, max = 50, message = "El apellido paterno debe tener entre 2 y 50 caracteres")
+    @Size(min = 3, max = 40, message = "El apellido paterno debe tener entre 3 y 40 caracteres")
     private String apellidoPaterno;
 
-    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,50}$", message = "El apellido materno debe tener entre 2 y 50 letras")
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{3,40}$", message = "El apellido materno debe tener entre 3 y 40 letras")
     private String apellidoMaterno;
 
     @Pattern(regexp = "^$|^\\d{4}-\\d{2}-\\d{2}$", message = "La fecha de nacimiento debe tener formato yyyy-MM-dd")
@@ -105,7 +105,10 @@ public class RegisterRequestDTO {
     @Size(max = 100, message = "El estado no debe exceder 100 caracteres")
     private String estado;
 
-    @Pattern(regexp = "^$|^(0[1-9]|[1-9][0-9])[0-9]{3}$", message = "El código postal debe contener 5 dígitos válidos (01000 a 99999)")
+    @Pattern(
+            regexp = "^$|^(0[1-9]|1[0-6]|[2-8][0-9]|9[0-8])[0-9]{3}$|^99([0-8][0-9]{2}|9[0-8][0-9]|99[0-8])$",
+            message = "El código postal no corresponde a un rango SEPOMEX válido en México"
+    )
     private String codigoPostal;
 
     @Size(max = 60, message = "El país no debe exceder 60 caracteres")
