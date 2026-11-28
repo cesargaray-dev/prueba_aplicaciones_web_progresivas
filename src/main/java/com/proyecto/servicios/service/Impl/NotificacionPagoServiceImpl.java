@@ -179,7 +179,35 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
             throw new ValidacionException("Los datos de reenvío son obligatorios.");
         }
 
-        PagoServicio pago = pagoServicioRepository.findByFolioTicket(request.getFolioTicket().trim())
+        String folioClean = request.getFolioTicket().trim();
+        String override = request.getCorreoDestino() != null ? request.getCorreoDestino().trim() : null;
+        if (override != null && !override.isBlank()) {
+            if (!TelefonoUtil.esCorreoSintaxisValida(override) || TelefonoUtil.esCorreoPlaceholder(override)) {
+                throw new ValidacionException(
+                        "Ingresa un correo electrónico real y válido para recibir el comprobante.");
+            }
+        }
+
+        PagoServicioResponseDTO intentoMemoria = TICKETS_INTENTO_MEMORIA.get(folioClean);
+        if (intentoMemoria != null) {
+            if (intentoMemoria.getNumeroCuenta() != null
+                    && !request.getNumeroCuenta().trim().equals(intentoMemoria.getNumeroCuenta())) {
+                throw new AutenticacionException("El folio solicitado no pertenece a la cuenta autenticada.");
+            }
+            Cuenta cuentaIntento = cuentaRepository.findByNumeroCuenta(request.getNumeroCuenta().trim()).orElse(null);
+            Cliente clienteIntento = cuentaIntento != null ? cuentaIntento.getCliente() : null;
+            if (override == null || override.isBlank()) {
+                String correoCli = clienteIntento != null ? clienteIntento.getCorreo() : null;
+                if (correoCli == null || !TelefonoUtil.esCorreoSintaxisValida(correoCli)
+                        || TelefonoUtil.esCorreoPlaceholder(correoCli)) {
+                    throw new ValidacionException(
+                            "Tu cuenta no tiene un correo real configurado. Indícalo en el campo o actualízalo en Mi Perfil.");
+                }
+            }
+            return comprobanteEmailService.enviarTicketIntentoPago(cuentaIntento, clienteIntento, intentoMemoria, override);
+        }
+
+        PagoServicio pago = pagoServicioRepository.findByFolioTicket(folioClean)
                 .orElseThrow(() -> new ValidacionException(
                         "No se encontró ninguna operación con el folio " + request.getFolioTicket()));
 
@@ -191,13 +219,7 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
                 .orElse(pago.getCuenta());
         Cliente cliente = cuenta != null ? cuenta.getCliente() : null;
 
-        String override = request.getCorreoDestino() != null ? request.getCorreoDestino().trim() : null;
-        if (override != null && !override.isBlank()) {
-            if (!TelefonoUtil.esCorreoSintaxisValida(override) || TelefonoUtil.esCorreoPlaceholder(override)) {
-                throw new ValidacionException(
-                        "Ingresa un correo electrónico real y válido para recibir el comprobante.");
-            }
-        } else {
+        if (override == null || override.isBlank()) {
             String correoCliente = cliente != null ? cliente.getCorreo() : null;
             if (correoCliente == null || !TelefonoUtil.esCorreoSintaxisValida(correoCliente)
                     || TelefonoUtil.esCorreoPlaceholder(correoCliente)) {
@@ -343,7 +365,7 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
                 "0 -18 Td",
                 "(Motivo GestoPago: " + motivo + ") Tj",
                 "0 -18 Td",
-                "(Numero Respuesta GestoPago: " + numGestoPago + "  |  Codigo: " + codProv + ") Tj",
+                "(Numero Respuesta GestoPago: " + numGestoPago + ") Tj",
                 "0 -18 Td",
                 "(Folio UPC Peticion: " + upcVal + ") Tj",
                 "0 -18 Td",
@@ -364,7 +386,7 @@ public class NotificacionPagoServiceImpl implements NotificacionPagoService {
                 "0 -15 Td",
                 "(Operacion no aplicada: no se realizo ningun cargo a su cuenta. Linea de Aclaraciones 800-226-2600) Tj",
                 "0 -13 Td",
-                "(o aclaraciones@bancodigital.com mencionando Respuesta GestoPago: " + numGestoPago + " y Folio: " + folio + ") Tj",
+                "(o aclaraciones@bancodigital.com mencionando su Folio de Ticket: " + folio + ") Tj",
                 "ET");
 
         String pdf = "%PDF-1.4\n"

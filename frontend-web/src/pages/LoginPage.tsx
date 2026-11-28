@@ -1216,16 +1216,16 @@ export const LoginPage: React.FC = () => {
                               htmlFor="reg-nombre"
                               className="text-[11px] font-bold text-slate-700"
                             >
-                              Nombre (2–40 letras) *
+                              Nombre (2–60 letras) *
                             </label>
                             <span className="text-[10px] font-mono text-slate-400">
-                              {nombre.trim().length}/40
+                              {nombre.trim().length}/60
                             </span>
                           </div>
                           <input
                             id="reg-nombre"
                             type="text"
-                            maxLength={40}
+                            maxLength={60}
                             value={nombre}
                             onChange={(e) => setNombre(e.target.value)}
                             onBlur={() => markTouched('nombre')}
@@ -1263,14 +1263,14 @@ export const LoginPage: React.FC = () => {
                             </label>
                             {segundoNombre && (
                               <span className="text-[10px] font-mono text-slate-400">
-                                {segundoNombre.trim().length}/40
+                                {segundoNombre.trim().length}/60
                               </span>
                             )}
                           </div>
                           <input
                             id="reg-segundo-nombre"
                             type="text"
-                            maxLength={40}
+                            maxLength={60}
                             value={segundoNombre}
                             onChange={(e) => setSegundoNombre(e.target.value)}
                             onBlur={() => markTouched('segundoNombre')}

@@ -401,8 +401,8 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
         String paternoTrim = request.getApellidoPaterno() != null ? request.getApellidoPaterno().trim() : "";
         String maternoTrim = request.getApellidoMaterno() != null ? request.getApellidoMaterno().trim() : "";
 
-        if (nombreTrim.length() < 2 || nombreTrim.length() > 40) {
-            throw new ValidacionException("El nombre debe tener entre 2 y 40 letras.");
+        if (nombreTrim.length() < 2 || nombreTrim.length() > 60) {
+            throw new ValidacionException("El nombre debe tener entre 2 y 60 letras.");
         }
         if (paternoTrim.length() < 3 || paternoTrim.length() > 40) {
             throw new ValidacionException("El apellido paterno debe tener entre 3 y 40 letras.");
@@ -491,15 +491,15 @@ public class PortalCuentaServiceImpl implements PortalCuentaService {
 
         if (request.getNombre() != null) {
             String nombreClean = request.getNombre().trim();
-            if (nombreClean.length() < 2 || nombreClean.length() > 40) {
-                throw new ValidacionException("El nombre debe tener entre 2 y 40 letras.");
+            if (nombreClean.length() < 2 || nombreClean.length() > 60) {
+                throw new ValidacionException("El nombre debe tener entre 2 y 60 letras.");
             }
             cliente.setNombre(nombreClean);
         }
         if (request.getSegundoNombre() != null) {
             String segClean = request.getSegundoNombre().trim();
-            if (!segClean.isEmpty() && (segClean.length() < 2 || segClean.length() > 40)) {
-                throw new ValidacionException("El segundo nombre debe tener entre 2 y 40 letras.");
+            if (!segClean.isEmpty() && (segClean.length() < 2 || segClean.length() > 60)) {
+                throw new ValidacionException("El segundo nombre debe tener entre 2 y 60 letras.");
             }
             cliente.setSegundoNombre(segClean.isEmpty() ? null : segClean);
         }

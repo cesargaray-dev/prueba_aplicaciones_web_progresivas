@@ -45,7 +45,7 @@ class TotpAuthenticatorUtilTest {
                 "RECHAZADA", "<br>Abono inmediato</br>", "-1", "FT-20261127-ABCD");
         assertTrue(rechazada.contains("Abono inmediato"));
         assertTrue(rechazada.contains("no se realizó ningún cargo a su cuenta"));
-        assertTrue(rechazada.contains("-1"));
+        assertFalse(rechazada.contains("-1"));
         assertTrue(rechazada.contains("FT-20261127-ABCD"));
 
         String exitosa = TotpAuthenticatorUtil.construirLeyendaTicket(

@@ -138,7 +138,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
     final correo = _correoController.text.trim();
     final tel = _telefonoController.text.trim();
 
-    final nombreErr = ValidationUtils.diagnosticarNombre(nombre, 'El nombre', maxLength: 40);
+    final nombreErr = ValidationUtils.diagnosticarNombre(nombre, 'El nombre', maxLength: 60);
     if (nombreErr != null) {
       setState(() {
         _statusIsError = true;
@@ -150,7 +150,7 @@ class _ProfileSheetState extends State<ProfileSheet> {
       segundoNombre,
       'El segundo nombre',
       optional: true,
-      maxLength: 40,
+      maxLength: 60,
     );
     if (segundoErr != null) {
       setState(() {
@@ -619,9 +619,11 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         Expanded(
                           child: TextField(
                             controller: _nombreController,
+                            maxLength: 60,
                             textCapitalization: TextCapitalization.words,
                             decoration: const InputDecoration(
                               labelText: 'Nombre *',
+                              counterText: '',
                               prefixIcon: Icon(Icons.badge_outlined, size: 18),
                             ),
                           ),
@@ -630,10 +632,12 @@ class _ProfileSheetState extends State<ProfileSheet> {
                         Expanded(
                           child: TextField(
                             controller: _segundoNombreController,
+                            maxLength: 60,
                             textCapitalization: TextCapitalization.words,
                             decoration: const InputDecoration(
                               labelText: 'Segundo nombre',
                               hintText: 'Opcional',
+                              counterText: '',
                             ),
                           ),
                         ),

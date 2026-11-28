@@ -266,8 +266,8 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
         gradient: 'from-red-600 to-rose-700',
         subtextClass: 'text-red-100',
         icon: <XCircle className="w-10 h-10 text-white" />,
-        title: 'Operación rechazada',
-        subtitle: `${displayTicketProduct} · ${motivoRechazoGestoPago} (${numeroRespuestaGestoPago || '-1'})`,
+        title: 'Ticket de Operación',
+        subtitle: 'Sin cargo aplicado a tu cuenta bancaria',
       };
 
   return (
@@ -307,7 +307,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                   Folio: {receipt.folioTicket}
                 </div>
               )}
-              {receipt.upc && (
+              {!isRejected && receipt.upc && (
                 <div className="inline-block px-3 py-1.5 rounded-full bg-black/20 backdrop-blur-sm text-[11px] font-mono font-bold tracking-wider uppercase border border-white/10">
                   UPC: {receipt.upc}
                 </div>
@@ -325,7 +325,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
             <div className="text-3xl font-black text-slate-900 mt-1">
               {formatCurrency(receipt.montoPagado)}
             </div>
-            {(product || receipt.producto) && (
+            {!isRejected && (product || receipt.producto) && (
               <div className="inline-flex items-center gap-2 mt-2 px-3 py-1 bg-slate-50 rounded-full border border-slate-100">
                 <BrandLogo
                   serviceId={product?.serviceId}
@@ -353,22 +353,6 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
             </div>
           )}
 
-          {/* Rejected Advisory */}
-          {isRejected && (
-            <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 flex items-start gap-2.5 text-red-900 text-xs">
-              <XCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <p className="font-bold">
-                  {displayTicketProduct} — Operación rechazada ({motivoRechazoGestoPago})
-                </p>
-                <p className="text-[11px] leading-relaxed">
-                  Se generó y firmó el payload AES-256 hacia GestoPago, respondiendo{' '}
-                  <strong>{numeroRespuestaGestoPago || '-1'}</strong> ({motivoRechazoGestoPago}). No se realizó ningún cargo a tu cuenta.
-                </p>
-              </div>
-            </div>
-          )}
-
           {/* Official GestoPago Proof of Purchase OR Rejected Signed Request Ticket */}
           {(receipt.idTransaccion ||
             numeroRespuestaGestoPago ||
@@ -385,7 +369,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                 <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-300">
                   {isSuccess
                     ? '✓ Compra Confirmada por GestoPago'
-                    : '⚡ Respuesta GestoPago · Operación Rechazada'}
+                    : '⚡ Detalle de Respuesta GestoPago'}
                 </span>
                 <span
                   className={`px-2 py-0.5 rounded-full font-mono text-[10px] font-bold border ${
@@ -396,7 +380,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                 >
                   {isSuccess
                     ? `COD ${receipt.codigoProveedor || '01'}`
-                    : `GESTOPAGO: ${numeroRespuestaGestoPago || '-1'}`}
+                    : 'SIN CARGO'}
                 </span>
               </div>
               <div className="grid grid-cols-1 gap-1.5 text-xs">
@@ -474,7 +458,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
               </div>
             )}
 
-            {receipt.numeroAutorizacion && (
+            {!isRejected && receipt.numeroAutorizacion && (
               <div className="flex justify-between items-center gap-3 py-1 border-b border-slate-50">
                 <span className="text-slate-500 font-medium">No. Autorización Proveedor:</span>
                 <span className="font-mono font-black text-blue-900 bg-blue-50 px-2 py-0.5 rounded break-all">
@@ -483,7 +467,7 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
               </div>
             )}
 
-            {receipt.codigoProveedor && (
+            {!isRejected && receipt.codigoProveedor && (
               <div className="flex justify-between items-center gap-3 py-1 border-b border-slate-50">
                 <span className="text-slate-500 font-medium">Código Proveedor:</span>
                 <span className="font-mono font-bold text-slate-800">{receipt.codigoProveedor}</span>
@@ -531,8 +515,8 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
             <p className="text-[11px] leading-relaxed font-medium">{leyendaTexto}</p>
           </div>
 
-          {/* Real Email Delivery Status & Resend (ONLY on EXITOSA) */}
-          {isSuccess && (
+          {/* Real Email Delivery Status & Resend (EXITOSA and RECHAZADA) */}
+          {!isPending && (
             <div
               className={`no-print p-3.5 rounded-2xl border space-y-2.5 ${
                 efectivoEnviado
@@ -549,7 +533,9 @@ const ReceiptModalContent: React.FC<ReceiptModalContentProps> = ({
                 <div className="text-[11px] leading-relaxed flex-1">
                   <p className="font-bold">
                     {efectivoEnviado
-                      ? 'Comprobante enviado vía Brevo'
+                      ? isRejected
+                        ? 'Ticket enviado al correo vía Brevo'
+                        : 'Comprobante enviado vía Brevo'
                       : 'Entrega de correo pendiente'}
                   </p>
                   <p>{efectivoMensaje}</p>

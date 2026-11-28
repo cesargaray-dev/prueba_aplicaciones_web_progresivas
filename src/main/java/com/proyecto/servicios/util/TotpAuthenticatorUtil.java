@@ -180,7 +180,7 @@ public final class TotpAuthenticatorUtil {
                     + "Conserve este comprobante digital como constancia del intento de operación. "
                     + "Para cualquier duda o aclaración comuníquese a nuestra Línea de Aclaraciones al 800-226-2600 "
                     + "(sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com "
-                    + "mencionando la Respuesta GestoPago: " + auth + " y su Folio de Ticket: " + folio + ".";
+                    + "mencionando su Folio de Ticket: " + folio + ".";
         }
         if ("PENDIENTE".equalsIgnoreCase(estadoOperacion)) {
             return prefijoProveedor

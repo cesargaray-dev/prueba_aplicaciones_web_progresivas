@@ -138,20 +138,19 @@ describe('ReceiptModal 3-State Result View & Official Leyenda', () => {
       </MockAuthProvider>
     );
 
-    expect(screen.getAllByText(/Operación rechazada/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Recarga Telcel/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Origen no valido/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/-1/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Operación rechazada')).toHaveLength(1);
+    expect(screen.getAllByText(/Recarga Telcel/i)).toHaveLength(1);
+    expect(screen.getAllByText('Origen no valido')).toHaveLength(1);
+    expect(screen.getAllByText('-1')).toHaveLength(1);
     expect(screen.getByText('LEYENDA OFICIAL Y ACLARACIONES')).toBeInTheDocument();
     expect(
       screen.getByText(/Operación no aplicada: no se realizó ningún cargo a su cuenta/i)
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Descargar PDF/i })).toBeInTheDocument();
-    expect(screen.queryByText(/Comprobante enviado vía Brevo/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Copiar/i }));
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining('Respuesta GestoPago: -1 y su Folio de Ticket: FT-20261127-ABCD.')
+      expect.stringContaining('Folio de Ticket: FT-20261127-ABCD.')
     );
 
     fireEvent.keyDown(window, { key: 'Escape' });

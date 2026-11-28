@@ -139,7 +139,7 @@ export function diagnosticarNombre(
   const raw = value || '';
   const trimmed = raw.trim();
   if (!trimmed) {
-    return required ? `${etiqueta} es obligatorio (entre 2 y 40 letras).` : null;
+    return required ? `${etiqueta} es obligatorio (entre 2 y 60 letras).` : null;
   }
   if (/[^A-Za-zÁÉÍÓÚÜáéíóúüÑñ\s]/.test(trimmed)) {
     return `${etiqueta} solo debe contener letras y espacios (sin números ni símbolos).`;
@@ -148,10 +148,10 @@ export function diagnosticarNombre(
     return `${etiqueta} no debe contener espacios dobles consecutivos.`;
   }
   if (trimmed.length < 2) {
-    return `${etiqueta} debe tener al menos 2 letras (máximo 40 caracteres).`;
+    return `${etiqueta} debe tener al menos 2 letras (máximo 60 caracteres).`;
   }
-  if (trimmed.length > 40) {
-    return `${etiqueta} no debe exceder 40 caracteres.`;
+  if (trimmed.length > 60) {
+    return `${etiqueta} no debe exceder 60 caracteres.`;
   }
   return null;
 }
@@ -591,9 +591,7 @@ export function obtenerLeyendaComprobante(params: {
   const { esRechazada, numAuth, folio } = params;
   if (esRechazada) {
     return (
-      'Operación no aplicada: no se realizó ningún cargo a su cuenta. Conserve este comprobante digital como constancia del intento de operación. Para cualquier duda o aclaración comuníquese a nuestra Línea de Aclaraciones al 800-226-2600 (sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com mencionando la Respuesta GestoPago: ' +
-      (numAuth || '-1') +
-      ' y su Folio de Ticket: ' +
+      'Operación no aplicada: no se realizó ningún cargo a su cuenta. Conserve este comprobante digital como constancia del intento de operación. Para cualquier duda o aclaración comuníquese a nuestra Línea de Aclaraciones al 800-226-2600 (sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com mencionando su Folio de Ticket: ' +
       (folio || 'N/A') +
       '.'
     );

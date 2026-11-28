@@ -24,7 +24,7 @@ class OfficialLegendUtils {
           'Conserve este comprobante digital como constancia del intento de operación. '
           'Para cualquier duda o aclaración comuníquese a nuestra Línea de Aclaraciones al '
           '800-226-2600 (sin costo, las 24 horas) o envíe un correo a aclaraciones@bancodigital.com '
-          'mencionando la Respuesta GestoPago: $numAuth y su Folio de Ticket: $folio.';
+          'mencionando su Folio de Ticket: $folio.';
     }
 
     return 'Conserve este comprobante digital como constancia oficial de pago. '

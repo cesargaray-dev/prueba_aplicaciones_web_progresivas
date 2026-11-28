@@ -4,6 +4,7 @@ import com.proyecto.servicios.entity.clientes.Cliente;
 import com.proyecto.servicios.entity.clientes.Cuenta;
 import com.proyecto.servicios.entity.gestopago.PagoServicio;
 import com.proyecto.servicios.model.brevo.EmailEnvioResultadoDTO;
+import com.proyecto.servicios.model.gestopago.PagoServicioResponseDTO;
 
 import java.math.BigDecimal;
 
@@ -79,6 +80,21 @@ public interface ComprobanteEmailService {
                 .enviado(false)
                 .correoDestino(correoDestino)
                 .mensaje("Envío de código 2FA de registro por correo no habilitado")
+                .build();
+    }
+
+    /**
+     * Envía por correo vía Brevo el ticket oficial de un intento de operación (ej. rechazado -1 o pendiente).
+     */
+    default EmailEnvioResultadoDTO enviarTicketIntentoPago(
+            Cuenta cuenta, Cliente cliente, PagoServicioResponseDTO ticket, String correoDestinoOverride) {
+        String target = (correoDestinoOverride != null && !correoDestinoOverride.isBlank())
+                ? correoDestinoOverride.trim()
+                : (cliente != null ? cliente.getCorreo() : null);
+        return EmailEnvioResultadoDTO.builder()
+                .enviado(false)
+                .correoDestino(target)
+                .mensaje("Envío de ticket de intento por correo no habilitado")
                 .build();
     }
 }

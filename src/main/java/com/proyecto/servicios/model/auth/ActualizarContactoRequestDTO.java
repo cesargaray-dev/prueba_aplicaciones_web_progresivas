@@ -32,13 +32,13 @@ public class ActualizarContactoRequestDTO {
 
     @Pattern(regexp = "^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]+$",
             message = "El nombre solo debe contener letras")
-    @Size(min = 2, max = 40, message = "El nombre debe tener entre 2 y 40 caracteres")
+    @Size(min = 2, max = 60, message = "El nombre debe tener entre 2 y 60 caracteres")
     @Schema(description = "Primer nombre del titular (opcional)", example = "César")
     private String nombre;
 
-    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,40}$",
-            message = "El segundo nombre debe tener entre 2 y 40 letras")
-    @Size(max = 40, message = "El segundo nombre no debe exceder 40 caracteres")
+    @Pattern(regexp = "^$|^(?=.*[A-Za-zÁÉÍÓÚÜáéíóúüÑñ])[A-Za-zÁÉÍÓÚÜáéíóúüÑñ\\s]{2,60}$",
+            message = "El segundo nombre debe tener entre 2 y 60 letras")
+    @Size(max = 60, message = "El segundo nombre no debe exceder 60 caracteres")
     @Schema(description = "Segundo nombre del titular (opcional)", example = "Enrique")
     private String segundoNombre;
 

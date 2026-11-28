@@ -1380,11 +1380,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(ReceiptDialog), findsOneWidget);
-      expect(find.text('OPERACIÓN RECHAZADA'), findsOneWidget);
-      expect(find.text('Operación rechazada'), findsWidgets);
-      expect(find.textContaining('Recarga Telcel'), findsWidgets);
-      expect(find.text('Origen no valido'), findsWidgets);
-      expect(find.text('-1'), findsWidgets);
+      expect(find.text('Ticket de Operación'), findsOneWidget);
+      expect(find.text('Operación rechazada'), findsOneWidget);
+      expect(find.text('Recarga Telcel \$20'), findsOneWidget);
+      expect(find.text('Origen no valido'), findsOneWidget);
+      expect(find.text('-1'), findsOneWidget);
       expect(find.text('GP-INTENTO-5501'), findsOneWidget);
       expect(find.text('LEYENDA OFICIAL Y ACLARACIONES'), findsOneWidget);
       expect(

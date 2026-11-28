@@ -104,7 +104,8 @@ describe('Validation & Catalog Classification Suite', () => {
     expect(esNombreValido('', true)).toBe(false);
     expect(esNombreValido('', false)).toBe(true);
     expect(esNombreValido('Juan123', true)).toBe(false);
-    expect(esNombreValido('X'.repeat(41), false)).toBe(false);
+    expect(esNombreValido('X'.repeat(55), true)).toBe(true);
+    expect(esNombreValido('X'.repeat(61), false)).toBe(false);
     expect(diagnosticarNombre('A')).toContain('al menos 2 letras');
     expect(diagnosticarNombre('Juan  José')).toContain('espacios dobles');
 

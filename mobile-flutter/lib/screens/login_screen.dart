@@ -1704,7 +1704,7 @@ class _LoginScreenState extends State<LoginScreen> {
       'Autenticador de Google (TOTP 30s)',
     ];
     const subtitles = [
-      'Ingresa tu nombre (2 a 40 letras) y apellidos (mín. 3 letras, mayor de 18 años).',
+      'Ingresa tu nombre (2 a 60 letras) y apellidos (mín. 3 letras, mayor de 18 años).',
       'Verifica o calcula tu CURP (18 caracteres) y RFC con homoclave (13 caracteres).',
       'Selecciona tu ocupación del catálogo oficial, profesión, empresa y rango salarial.',
       'Ingresa tu Código Postal de 5 dígitos para autocompletar Estado, Municipio y colonias.',
@@ -1764,7 +1764,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     builder: (mode) => TextFormField(
                       controller: _nombreController,
                       autovalidateMode: mode,
-                      maxLength: 40,
+                      maxLength: 60,
                       textCapitalization: TextCapitalization.words,
                       validator: (v) => ValidationUtils.diagnosticarNombre(v, 'El nombre'),
                       onChanged: (_) {
@@ -1785,7 +1785,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     builder: (mode) => TextFormField(
                       controller: _segundoNombreController,
                       autovalidateMode: mode,
-                      maxLength: 40,
+                      maxLength: 60,
                       textCapitalization: TextCapitalization.words,
                       validator: (v) => ValidationUtils.diagnosticarNombre(
                         v,

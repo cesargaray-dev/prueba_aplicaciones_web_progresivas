@@ -176,12 +176,12 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
     } else {
       statusColor = AppTheme.errorRed;
       statusIcon = Icons.cancel_rounded;
-      statusBadgeText = 'OPERACIÓN RECHAZADA';
-      titleText = 'Operación rechazada';
+      statusBadgeText = 'COMPROBANTE DIGITAL';
+      titleText = 'Ticket de Operación';
     }
 
     final displayMsg = r.isRejected
-        ? '$displayProductTitle · $motivoRechazo ($numeroGestoPago)'
+        ? 'Sin cargo aplicado a tu cuenta bancaria.'
         : rawDisplayMsg;
 
     return Dialog(
@@ -237,34 +237,6 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                 style: TextStyle(fontSize: 13, color: AppTheme.textSecondary(context)),
               ),
               const SizedBox(height: 16),
-
-              if (r.isRejected)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorRed.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppTheme.errorRed.withValues(alpha: 0.35)),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.shield_outlined, color: AppTheme.errorRed, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'No se realizó ningún cargo a tu cuenta.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppTheme.errorRed,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
 
               if (r.isPending)
                 Container(
@@ -337,14 +309,29 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: AppTheme.borderCol(context)),
                   ),
-                  child: Text(
-                    displayProductTitle,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: AppTheme.textPrimary(context),
-                      fontSize: 13.5,
-                    ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'IMPORTE SOLICITADO (NO COBRADO)',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                          color: AppTheme.textSecondary(context),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${currencyFormatter.format(r.montoPagado)} MXN',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: AppTheme.textPrimary(context),
+                          fontSize: 22,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -383,7 +370,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                             child: Text(
                               r.isSuccess
                                   ? '✓ COMPRA VERIFICADA GESTOPAGO'
-                                  : '⚡ RESPUESTA GESTOPAGO · RECHAZADA',
+                                  : '⚡ DETALLE DE RESPUESTA GESTOPAGO',
                               style: const TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w900,
@@ -402,7 +389,7 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                             child: Text(
                               r.isSuccess
                                   ? 'COD ${r.codigoProveedor ?? '01'}'
-                                  : 'GESTOPAGO: $numeroGestoPago',
+                                  : 'SIN CARGO',
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
@@ -601,23 +588,11 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                 ),
               ],
 
-              if (r.idTransaccion != null) ...[
-                _buildDetailRow('ID TX GestoPago', '#${r.idTransaccion}', isMonospace: true, isBold: true),
-                Divider(height: 14, color: AppTheme.borderCol(context)),
-              ],
               if (r.folioTicket.isNotEmpty) ...[
                 _buildDetailRow('Folio Ticket', r.folioTicket, isMonospace: true),
                 Divider(height: 14, color: AppTheme.borderCol(context)),
               ],
-              if (r.numeroAutorizacion.isNotEmpty) ...[
-                _buildDetailRow('No. Autorización GestoPago', r.numeroAutorizacion, isMonospace: true),
-                Divider(height: 14, color: AppTheme.borderCol(context)),
-              ],
-              if (r.upc != null && r.upc!.isNotEmpty) ...[
-                _buildDetailRow('Folio UPC', r.upc!, isMonospace: true),
-                Divider(height: 14, color: AppTheme.borderCol(context)),
-              ],
-              if (r.codigoProveedor != null && r.codigoProveedor!.isNotEmpty) ...[
+              if (!r.isRejected && r.codigoProveedor != null && r.codigoProveedor!.isNotEmpty) ...[
                 _buildDetailRow('Código Proveedor', r.codigoProveedor!, isMonospace: true),
                 Divider(height: 14, color: AppTheme.borderCol(context)),
               ],
@@ -632,13 +607,15 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
               if (r.isSuccess) ...[
                 Divider(height: 14, color: AppTheme.borderCol(context)),
                 _buildDetailRow('Comisión Bancaria', currencyFormatter.format(r.comision)),
-                Divider(height: 14, color: AppTheme.borderCol(context)),
-                _buildDetailRow(
-                  'Saldo Restante',
-                  '${currencyFormatter.format(r.saldoRestanteCuenta)} MXN',
-                  isBold: true,
-                  valueColor: AppTheme.accentEmerald,
-                ),
+              ],
+              Divider(height: 14, color: AppTheme.borderCol(context)),
+              _buildDetailRow(
+                r.isRejected ? 'Saldo Intacto' : 'Saldo Restante',
+                '${currencyFormatter.format(r.saldoRestanteCuenta)} MXN',
+                isBold: true,
+                valueColor: AppTheme.accentEmerald,
+              ),
+              if (!r.isPending) ...[
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.all(12),
@@ -745,10 +722,11 @@ class _ReceiptDialogState extends State<ReceiptDialog> {
                     child: OutlinedButton.icon(
                       onPressed: () {
                         final text = r.isRejected
-                            ? 'Operación Rechazada - ${widget.product.name}\n'
-                                'Código: ${r.codigoProveedor ?? 'N/A'}\n'
+                            ? 'Ticket de Operación - $displayProductTitle\n'
+                                'Resultado: Operación rechazada\n'
+                                'Motivo GestoPago: $motivoRechazo\n'
+                                'Número GestoPago: $numeroGestoPago\n'
                                 'Folio Ticket: ${r.folioTicket}\n'
-                                'Detalle: $displayMsg\n'
                                 'Leyenda Oficial: ${r.leyendaEfectiva}'
                             : (r.isPending
                                 ? 'Operación Pendiente - ${widget.product.name}\n'

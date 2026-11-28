@@ -85,7 +85,8 @@ void main() {
     test('valida nombres (2-40), apellidos (3-40), catálogos SEPOMEX y tabuladores oficiales', () {
       expect(ValidationUtils.diagnosticarNombre('A', 'El nombre'), isNotNull);
       expect(ValidationUtils.diagnosticarNombre('Jo', 'El nombre'), isNull);
-      expect(ValidationUtils.diagnosticarNombre('A' * 41, 'El nombre'), isNotNull);
+      expect(ValidationUtils.diagnosticarNombre('A' * 55, 'El nombre'), isNull);
+      expect(ValidationUtils.diagnosticarNombre('A' * 61, 'El nombre'), isNotNull);
       expect(ValidationUtils.diagnosticarNombre('César1', 'El nombre'), isNotNull);
 
       expect(ValidationUtils.diagnosticarApellido('Ga', 'El apellido paterno'), isNotNull);

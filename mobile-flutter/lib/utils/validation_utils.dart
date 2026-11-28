@@ -138,7 +138,7 @@ class ValidationUtils {
     return _passwordSegura.hasMatch(password);
   }
 
-  static bool esNombreValido(String? raw, {bool optional = false, int maxLength = 40}) {
+  static bool esNombreValido(String? raw, {bool optional = false, int maxLength = 60}) {
     return diagnosticarNombre(raw, 'El nombre', optional: optional, maxLength: maxLength) == null;
   }
 
@@ -146,7 +146,7 @@ class ValidationUtils {
     String? raw,
     String campo, {
     bool optional = false,
-    int maxLength = 40,
+    int maxLength = 60,
   }) {
     final val = (raw ?? '').trim();
     if (val.isEmpty) {

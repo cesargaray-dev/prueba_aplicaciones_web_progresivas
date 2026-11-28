@@ -9,6 +9,7 @@ import com.proyecto.servicios.model.brevo.BrevoEmailResponseDTO;
 import com.proyecto.servicios.model.brevo.BrevoRecipientDTO;
 import com.proyecto.servicios.model.brevo.BrevoSenderDTO;
 import com.proyecto.servicios.model.brevo.EmailEnvioResultadoDTO;
+import com.proyecto.servicios.model.gestopago.PagoServicioResponseDTO;
 import com.proyecto.servicios.service.ComprobanteEmailService;
 import com.proyecto.servicios.util.TelefonoUtil;
 import lombok.extern.slf4j.Slf4j;
@@ -155,6 +156,38 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
         String htmlContent = construirHtmlCodigoRegistro(nombreDestinatario, codigo2FA, vigenciaSegundos);
 
         return enviarCorreoBrevo(correoDestino.trim(), nombreDestinatario, asunto, htmlContent, "código 2FA de registro");
+    }
+
+    @Override
+    public EmailEnvioResultadoDTO enviarTicketIntentoPago(
+            Cuenta cuenta, Cliente cliente, PagoServicioResponseDTO ticket, String correoDestinoOverride) {
+        String correoDestino = (correoDestinoOverride != null && !correoDestinoOverride.isBlank())
+                ? correoDestinoOverride.trim()
+                : (cliente != null ? cliente.getCorreo() : null);
+
+        EmailEnvioResultadoDTO resultado;
+        if (correoDestino == null || !TelefonoUtil.esCorreoSintaxisValida(correoDestino)) {
+            resultado = EmailEnvioResultadoDTO.builder()
+                    .enviado(false)
+                    .correoDestino(correoDestino)
+                    .mensaje("No existe un correo electrónico válido configurado para enviar el ticket.")
+                    .build();
+        } else {
+            String nombreCliente = construirNombreCompleto(cliente);
+            String folio = (ticket != null && ticket.getFolioTicket() != null) ? ticket.getFolioTicket() : "N/A";
+            String prod = (ticket != null && ticket.getProducto() != null) ? ticket.getProducto() : "Operación";
+            String asunto = "Ticket de Operación (" + prod + ") - Folio " + folio;
+            String htmlContent = construirHtmlTicketIntento(cuenta, nombreCliente, ticket);
+            resultado = enviarCorreoBrevo(correoDestino, nombreCliente, asunto, htmlContent, "ticket de operación");
+        }
+
+        if (ticket != null && ticket.getFolioTicket() != null && !ticket.getFolioTicket().isBlank()) {
+            if (resultadosPorFolio.size() >= MAX_RESULTADOS_CACHE) {
+                resultadosPorFolio.clear();
+            }
+            resultadosPorFolio.put(ticket.getFolioTicket(), resultado);
+        }
+        return resultado;
     }
 
     private EmailEnvioResultadoDTO enviarCorreoBrevo(
@@ -460,6 +493,97 @@ public class ComprobanteEmailServiceImpl implements ComprobanteEmailService {
                 saldoRestante.toPlainString(),
                 esc(numAuth),
                 esc(folio)
+        );
+    }
+
+    private String construirHtmlTicketIntento(Cuenta cuenta, String nombreCliente, PagoServicioResponseDTO t) {
+        String cuentaEnmascarada = enmascararCuenta(
+                cuenta != null ? cuenta.getNumeroCuenta() : (t != null ? t.getNumeroCuenta() : null));
+        LocalDateTime fechaOp = (t != null && t.getFechaHoraOperacion() != null)
+                ? t.getFechaHoraOperacion() : LocalDateTime.now();
+        String fechaFormateada = fechaOp.format(FORMATO_FECHA);
+
+        BigDecimal monto = (t != null && t.getMontoPagado() != null) ? t.getMontoPagado() : BigDecimal.ZERO;
+        BigDecimal saldoIntacto = (t != null && t.getSaldoRestanteCuenta() != null)
+                ? t.getSaldoRestanteCuenta() : BigDecimal.ZERO;
+        String producto = (t != null && t.getProducto() != null && !t.getProducto().isBlank())
+                ? t.getProducto() : "Operación GestoPago";
+        String resultadoTxt = (t != null && "PENDIENTE".equalsIgnoreCase(t.getEstadoOperacion()))
+                ? "Operación pendiente de confirmación"
+                : "Operación rechazada";
+        String motivo = (t != null && t.getMotivoProveedor() != null && !t.getMotivoProveedor().isBlank())
+                ? t.getMotivoProveedor() : "Origen no valido";
+        String numGestoPago = (t != null && t.getNumeroAutorizacion() != null && !t.getNumeroAutorizacion().isBlank())
+                ? t.getNumeroAutorizacion() : "-1";
+        String upc = (t != null && t.getUpc() != null && !t.getUpc().isBlank()) ? t.getUpc() : "N/A";
+        String firma = (t != null && t.getFirmaDigital() != null && !t.getFirmaDigital().isBlank())
+                ? t.getFirmaDigital() : "N/A";
+        String folio = (t != null && t.getFolioTicket() != null && !t.getFolioTicket().isBlank())
+                ? t.getFolioTicket() : "N/A";
+        String destino = (t != null && t.getReferenciaDestino() != null && !t.getReferenciaDestino().isBlank())
+                ? t.getReferenciaDestino() : "N/A";
+        String leyenda = (t != null && t.getLeyenda() != null && !t.getLeyenda().isBlank())
+                ? t.getLeyenda()
+                : com.proyecto.servicios.util.TotpAuthenticatorUtil.construirLeyendaTicket(
+                        "RECHAZADA", null, numGestoPago, folio);
+
+        return """
+            <!DOCTYPE html>
+            <html lang="es">
+            <head>
+              <meta charset="UTF-8">
+              <title>Ticket de Operación - Banco Digital</title>
+            </head>
+            <body style="margin:0;padding:0;background-color:#f4f6f9;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1e293b;">
+              <div style="width:100%%;padding:30px 10px;">
+                <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 15px rgba(0,0,0,0.08);">
+                  <div style="background:linear-gradient(135deg,#0f172a 0%%,#881337 100%%);padding:26px;text-align:center;color:#ffffff;">
+                    <div style="font-size:22px;font-weight:800;letter-spacing:1px;">&#127974; BANCO DIGITAL</div>
+                    <div style="font-size:12px;color:#fecdd3;margin-top:4px;text-transform:uppercase;letter-spacing:1.2px;">Ticket Digital de Operación</div>
+                  </div>
+                  <div style="padding:28px;">
+                    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:18px;text-align:center;margin-bottom:22px;">
+                      <div style="font-size:11px;color:#64748b;text-transform:uppercase;font-weight:700;letter-spacing:1px;">Importe Solicitado (Sin Cargo Aplicado)</div>
+                      <div style="font-size:32px;font-weight:800;color:#0f172a;margin:6px 0;">$%s <span style="font-size:15px;color:#64748b;">MXN</span></div>
+                    </div>
+                    <p style="font-size:14px;margin-bottom:18px;">Estimado(a) <strong>%s</strong>, te compartimos el ticket oficial del intento de operación procesado ante GestoPago:</p>
+                    <table style="width:100%%;border-collapse:collapse;margin-bottom:22px;">
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Operación / Producto:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-weight:700;text-align:right;font-size:14px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Resultado:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-weight:800;color:#be123c;text-align:right;font-size:14px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Motivo GestoPago:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-weight:700;font-family:monospace;text-align:right;font-size:14px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Número GestoPago:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-weight:800;font-family:monospace;text-align:right;font-size:14px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Folio UPC GestoPago:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-family:monospace;text-align:right;font-size:13px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Firma AES-256:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-family:monospace;text-align:right;font-size:12px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Folio de Ticket:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-weight:700;font-family:monospace;color:#1e40af;text-align:right;font-size:13px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Línea / Referencia:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-family:monospace;text-align:right;font-size:13px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Fecha y Hora:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;text-align:right;font-size:13px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;">Cuenta Asociada:</td><td style="padding:10px 6px;border-bottom:1px solid #f1f5f9;font-family:monospace;text-align:right;font-size:13px;">%s</td></tr>
+                      <tr><td style="padding:10px 6px;color:#64748b;font-size:13px;">Saldo Intacto Disponible:</td><td style="padding:10px 6px;font-weight:800;color:#059669;text-align:right;font-size:14px;">$%s MXN</td></tr>
+                    </table>
+                    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 16px;border-radius:0 8px 8px 0;font-size:12px;color:#78350f;line-height:1.5;">
+                      <div style="font-weight:700;margin-bottom:4px;color:#92400e;">&#9888;&#65039; LEYENDA OFICIAL Y ACLARACIONES</div>
+                      %s
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </body>
+            </html>
+            """.formatted(
+                monto.toPlainString(),
+                esc(nombreCliente),
+                esc(producto),
+                esc(resultadoTxt),
+                esc(motivo),
+                esc(numGestoPago),
+                esc(upc),
+                esc(firma),
+                esc(folio),
+                esc(destino),
+                esc(fechaFormateada),
+                esc(cuentaEnmascarada),
+                saldoIntacto.toPlainString(),
+                esc(leyenda)
         );
     }
 }

@@ -632,7 +632,7 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                     <input
                       id="perfil-nombre"
                       type="text"
-                      maxLength={80}
+                      maxLength={60}
                       value={nombre}
                       onChange={(e) => {
                         isDirtyRef.current = true;
@@ -652,7 +652,7 @@ const ProfileModalContent: React.FC<ProfileModalContentProps> = ({
                     <input
                       id="perfil-segundo-nombre"
                       type="text"
-                      maxLength={80}
+                      maxLength={60}
                       value={segundoNombre}
                       onChange={(e) => {
                         isDirtyRef.current = true;

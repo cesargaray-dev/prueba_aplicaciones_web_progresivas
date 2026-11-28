@@ -349,6 +349,23 @@ public class PagoServicioServiceImpl extends Soporte2FAService implements PagoSe
                 ticketRechazo.setCodigo(1);
                 ticketRechazo.setMensaje(mensajeTicket);
 
+                if (comprobanteEmailService != null) {
+                    try {
+                        var emailRes = comprobanteEmailService.enviarTicketIntentoPago(
+                                cuenta, cuenta.getCliente(), ticketRechazo, null);
+                        if (emailRes != null) {
+                            ticketRechazo.setCorreoEnviado(emailRes.isEnviado());
+                            ticketRechazo.setCorreoDestino(emailRes.getCorreoDestino() != null
+                                    ? com.proyecto.servicios.util.TelefonoUtil.enmascararCorreo(emailRes.getCorreoDestino())
+                                    : null);
+                            ticketRechazo.setMensajeCorreo(emailRes.getMensaje());
+                            ticketRechazo.setBrevoMessageId(emailRes.getMessageId());
+                        }
+                    } catch (Exception mailEx) {
+                        log.warn("No se pudo enviar por correo el ticket de intento {}: {}", folioIntento, mailEx.getMessage());
+                    }
+                }
+
                 NotificacionPagoServiceImpl.registrarTicketIntentoEnMemoria(ticketRechazo);
 
                 log.warn("Petición firmada enviada a GestoPago rechazada (NUM_AUT={}, CODIGO={}): {}. Saldo intacto en cuenta {}",

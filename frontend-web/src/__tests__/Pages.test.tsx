@@ -158,7 +158,7 @@ describe('Pages Suite (LoginPage, CatalogPage, HistoryPage)', () => {
       const step1Next = () =>
         screen.getByRole('button', { name: /Continuar a Datos Fiscales/i });
 
-      const nombreInput = screen.getByLabelText(/Nombre \(2–40 letras\)/i);
+      const nombreInput = screen.getByLabelText(/Nombre \(2–60 letras\)/i);
       await user.type(nombreInput, 'A');
       // Immediate inline error upon typing 1 letter even before blurring!
       expect(screen.getByText(/El nombre debe tener al menos 2 letras/i)).toBeInTheDocument();
