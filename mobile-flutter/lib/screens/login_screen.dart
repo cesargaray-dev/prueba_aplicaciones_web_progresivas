@@ -105,10 +105,12 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      unawaited(_warmUpRenderIfNeeded());
       final auth = Provider.of<AuthProvider>(context, listen: false);
       if (!auth.biometricsInitialized) {
         await auth.initBiometrics();
+      }
+      if (mounted) {
+        unawaited(_warmUpRenderIfNeeded());
       }
       if (mounted &&
           auth.storedBiometricProfile != null &&
@@ -857,7 +859,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     label: const Text('Wi-Fi Casa', style: TextStyle(fontSize: 11)),
                     onPressed: () {
                       setDialogState(() {
-                        _apiUrlController.text = 'http://10.21.51.77:10000';
+                        _apiUrlController.text = 'http://192.168.1.77:10000';
                         inlineError = null;
                       });
                     },

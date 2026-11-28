@@ -32,7 +32,9 @@ class ApiClient {
 
   static const String defaultBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:10000',
+    defaultValue: kReleaseMode
+        ? 'https://prueba-aplicaciones-web-progresivas.onrender.com'
+        : 'http://localhost:10000',
   );
 
   static const Set<String> _localDevHosts = {
@@ -230,7 +232,7 @@ class ApiClient {
   }
 
   Duration get _requestTimeout => baseUrl.toLowerCase().contains('onrender.com')
-      ? const Duration(seconds: 110)
+      ? const Duration(seconds: 120)
       : const Duration(seconds: 45);
 
   bool _shouldRetryCloudColdStart(String path, int statusCode) {
@@ -239,16 +241,41 @@ class ApiClient {
     return statusCode == 502 || statusCode == 503 || statusCode == 504;
   }
 
-  Future<bool> warmUpServer() async {
-    try {
-      final uri = Uri.parse('$baseUrl/actuator/health');
-      final response = await _httpClient
-          .get(uri, headers: const {'Accept': 'application/json'})
-          .timeout(_requestTimeout);
-      return response.statusCode >= 200 && response.statusCode < 400;
-    } catch (_) {
+  bool _shouldRetryCloudException(String path, Object error) {
+    if (!baseUrl.toLowerCase().contains('onrender.com')) return false;
+    if (path.contains('/pagos/servicios')) return false;
+    if (error is ApiException) return false;
+    final lower = error.toString().toLowerCase();
+    if (lower.contains('connection reset') || lower.contains('econnreset')) {
       return false;
     }
+    return lower.contains('timeout') ||
+        lower.contains('timed out') ||
+        lower.contains('before full header') ||
+        lower.contains('handshake');
+  }
+
+  Future<bool> warmUpServer() async {
+    final uri = Uri.parse('$baseUrl/actuator/health');
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final response = await _httpClient
+            .get(uri, headers: const {'Accept': 'application/json'})
+            .timeout(_requestTimeout);
+        if (response.statusCode >= 200 && response.statusCode < 400) {
+          return true;
+        }
+        if (!_shouldRetryCloudColdStart('/actuator/health', response.statusCode)) {
+          return false;
+        }
+      } catch (e) {
+        if (attempt == 1 || !_shouldRetryCloudException('/actuator/health', e)) {
+          return false;
+        }
+      }
+      await Future<void>.delayed(const Duration(seconds: 2));
+    }
+    return false;
   }
 
   Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
@@ -258,9 +285,18 @@ class ApiClient {
     }
 
     try {
-      var response = await _httpClient
-          .get(uri, headers: _buildHeaders())
-          .timeout(_requestTimeout);
+      http.Response response;
+      try {
+        response = await _httpClient
+            .get(uri, headers: _buildHeaders())
+            .timeout(_requestTimeout);
+      } catch (firstErr) {
+        if (!_shouldRetryCloudException(path, firstErr)) rethrow;
+        await Future<void>.delayed(const Duration(seconds: 2));
+        response = await _httpClient
+            .get(uri, headers: _buildHeaders())
+            .timeout(_requestTimeout);
+      }
       if (_shouldRetryCloudColdStart(path, response.statusCode)) {
         await Future<void>.delayed(const Duration(seconds: 2));
         response = await _httpClient
@@ -307,9 +343,18 @@ class ApiClient {
     final payload = body != null ? jsonEncode(body) : null;
 
     try {
-      var response = await _httpClient
-          .post(uri, headers: _buildHeaders(), body: payload)
-          .timeout(_requestTimeout);
+      http.Response response;
+      try {
+        response = await _httpClient
+            .post(uri, headers: _buildHeaders(), body: payload)
+            .timeout(_requestTimeout);
+      } catch (firstErr) {
+        if (!_shouldRetryCloudException(path, firstErr)) rethrow;
+        await Future<void>.delayed(const Duration(seconds: 2));
+        response = await _httpClient
+            .post(uri, headers: _buildHeaders(), body: payload)
+            .timeout(_requestTimeout);
+      }
       if (_shouldRetryCloudColdStart(path, response.statusCode)) {
         await Future<void>.delayed(const Duration(seconds: 2));
         response = await _httpClient

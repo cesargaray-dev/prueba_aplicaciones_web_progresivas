@@ -67,6 +67,7 @@ mobile-flutter/.flutter-plugins
 mobile-flutter/.flutter-plugins-dependencies
 mobile-flutter/coverage/
 frontend-web/public/*.apk
+/*.apk
 **/__pycache__/
 *.pyc
 
